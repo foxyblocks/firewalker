@@ -22,10 +22,9 @@ constexpr uint8_t  LED_PIN   = 6;
 // current scales with this count, so keep it honest. See docs/power-budget.md.
 constexpr uint16_t LED_COUNT = 39;
 
-// Conservative global brightness (0-255) for USB-powered testing. The strip
-// is powered from the Uno's USB 5V during bring-up, so this is capped low to
-// stay under the ~500 mA USB budget. See docs/power-budget.md for the math.
-constexpr uint8_t  LED_BRIGHTNESS = 60;   // ~12.5%
+// Global brightness (0-255). Total current scales with this, so raising it eats
+// into the USB budget fast — see docs/power-budget.md before pushing it up.
+constexpr uint8_t  LED_BRIGHTNESS = 100;   // 0-255
 
 // ── Button (stomp simulator) ────────────────────────────────────────────
 // Momentary button wired between pin 10 and GND, using the AVR internal
@@ -35,18 +34,26 @@ constexpr uint8_t  LED_BRIGHTNESS = 60;   // ~12.5%
 constexpr uint8_t       BUTTON_PIN  = 10;
 constexpr unsigned long DEBOUNCE_MS = 30;   // ignore contact bounce shorter than this
 
-// ── Fill color ──────────────────────────────────────────────────────────
-// Color the wipe paints, expressed pre-brightness as plain R/G/B (the GRB byte
-// order is handled by Adafruit_NeoPixel::Color in main.cpp). A warm amber with
-// one dominant channel keeps current below the white worst case — note the
-// wipe ends with ALL LED_COUNT pixels lit at once. See docs/power-budget.md.
-constexpr uint8_t  FILL_R = 255;
-constexpr uint8_t  FILL_G = 60;
-constexpr uint8_t  FILL_B = 0;
+// ── Trail color (fire gradient) ─────────────────────────────────────────────
+// Palette stops from the hot head to the cool tail, as plain R/G/B. main.cpp
+// interpolates these across the band length and caches the result. Edit / add /
+// remove stops to retune the flame — FIRE_STOPS updates automatically. Note the
+// white head draws more current than a single-color fill; worst case is still
+// the whole strip lit at once. See docs/power-budget.md.
+constexpr uint8_t FIRE[][3] = {
+  {255, 200, 0},  // head  — white-hot
+  {255, 150,   0},  // yellow
+  {255, 60,   0},  // orange
+  {255,   20,   0},  // tail  — red
+};
+constexpr uint8_t FIRE_STOPS = sizeof(FIRE) / sizeof(FIRE[0]);
 
-// ── Color-wipe animation ────────────────────────────────────────────────
-// On each press the fill color wipes on one pixel at a time, bottom -> top,
-// the lit region growing until the whole strip is on; it then holds briefly
-// and clears, leaving the strip dark and ready for the next press.
-constexpr unsigned long WIPE_STEP_MS = 10;   // interval between lighting each pixel (39 px ≈ 1 s)
-constexpr unsigned long HOLD_MS      = 400;  // hold the full strip before clearing
+// ── Trail animation ─────────────────────────────────────────────────────
+// Each button press spawns a TRAIL: a band of TRAIL_LEN lit pixels that travels
+// bottom -> top at one pixel per WIPE_STEP_MS. It "wipes in" as it emerges from
+// the bottom and "wipes out" as it slides off the top — no hold in between.
+// Presses stack: multiple trails run at once, each behind the previous, up to
+// MAX_TRAILS (further presses are ignored until a slot frees up).
+constexpr unsigned long WIPE_STEP_MS = 10;   // ms per one-pixel advance (timing you tuned)
+constexpr uint8_t       TRAIL_LEN    = 30;   // band length in pixels (the wipe-in/out width)
+constexpr uint8_t       MAX_TRAILS   = 12;   // max simultaneous trails on the strip

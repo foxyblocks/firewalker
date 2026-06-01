@@ -5,10 +5,11 @@ Firewalker guide. Built with **PlatformIO + Arduino framework** in VS Code (not
 the Arduino IDE).
 
 > **Status:** button-triggered animation on the test rig. The firmware drives
-> **39 pixels** of one WS2812B strip: a button press runs a color-wipe
-> animation (grows bottom→top, holds, clears) at a USB-safe brightness, with
-> status over serial. No accelerometer or wireless yet — the button is a
-> temporary stand-in for a foot stomp.
+> **39 pixels** of one WS2812B strip: each button press launches a **fire
+> trail** — a band that travels bottom→top with a hot head cooling through
+> orange to a deep-red tail, wiping in at the bottom and out at the top.
+> Presses stack into several trails at once. No accelerometer or wireless yet —
+> the button is a temporary stand-in for a foot stomp.
 
 ## Hardware (first test rig)
 
@@ -19,7 +20,7 @@ the Arduino IDE).
 | Data pin | Uno digital **6** → strip DIN |
 | Pixels driven | 39 (current strip length) |
 | Button | Uno digital **10** → GND (`INPUT_PULLUP`, stomp simulator) |
-| Power | USB 5V only — brightness capped (see [`docs/power-budget.md`](docs/power-budget.md)) |
+| Power | USB 5V only — current scales with brightness × pixels lit (see [`docs/power-budget.md`](docs/power-budget.md)) |
 
 See [`docs/wiring.md`](docs/wiring.md) for the wiring assumptions and
 [`docs/open-questions.md`](docs/open-questions.md) for unresolved hardware
@@ -43,20 +44,22 @@ Expected serial output:
 ```
 [firewalker] ready — press the button to stomp
 [firewalker] pixels=39 button pin=10
-[firewalker] stomp -> wipe start
-[firewalker] wipe done — cleared
+[firewalker] stomp -> trail (1 active)
+[firewalker] stomp -> trail (2 active)
 ...
 ```
 
-At rest the strip is dark. Each button press wipes a warm amber fill on
-bottom→top (~1 s), holds briefly, then clears. Pressing again restarts it.
+At rest the strip is dark. Each button press launches a fire trail that travels
+up the strip and slides off the top. Press again — even mid-trail — and a new
+trail starts behind it, so several can climb at once.
 
 ## ⚠️ Power safety
 
-The strip is powered from the Uno's USB 5V, which is why brightness is capped at
-`32/255` **and the fill is not white** — the wipe ends with all 39 pixels lit at
-once, and white at that point (~330 mA) is the worst case for the USB supply.
-Before raising brightness or driving more pixels, read
+The strip is powered from the Uno's USB 5V. Current scales with **brightness ×
+pixels lit**, and trails stack — so the worst case is the whole strip lit by
+overlapping trails. At the current `LED_BRIGHTNESS` that full-strip moment is
+near the ~450 mA USB budget, so heavy button-mashing can brown out or flicker.
+Before running brighter, longer, or with more pixels, read
 [`docs/power-budget.md`](docs/power-budget.md) and move the strip onto an
 external 5V supply.
 

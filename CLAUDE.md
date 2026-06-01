@@ -5,8 +5,8 @@ Wearable NeoPixel LED-shoe firmware. **PlatformIO + Arduino framework** (see
 Uno R3 (ATmega328P).
 
 **Current phase: button-triggered animation.** Drive 39 pixels of one WS2812B
-strip; a button (pin 10, stomp simulator) runs a non-blocking color-wipe at a
-USB-safe brightness, with status over serial. Out of scope: real accelerometer
+strip; a button (pin 10, stomp simulator) drives a non-blocking, stacking
+fire-trail animation, with status over serial. Out of scope: real accelerometer
 step-detect, multiple strips, wireless. Don't over-engineer ahead of working
 hardware.
 
