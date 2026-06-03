@@ -1,4 +1,4 @@
-// Firewalker Shoes — button-triggered fire trails (Arduino Uno R3).
+// Firewalker Shoes — button-triggered fire trails (Adafruit Feather RP2040).
 //
 // At rest the strip is dark. Each button "stomp" spawns a TRAIL: a band of
 // TRAIL_LEN pixels that travels from the bottom of the strip to the top. The
@@ -50,6 +50,15 @@ static uint32_t fireColor(uint8_t d, uint8_t span) {
 
 static uint32_t trailColor[TRAIL_LEN];  // gradient cache, filled in setup()
 
+static void showBootPixel() {
+  if (!BOOT_PIXEL_DEBUG || BOOT_PIXEL_INDEX >= LED_COUNT) return;
+
+  strip.setPixelColor(
+      BOOT_PIXEL_INDEX,
+      strip.Color(BOOT_PIXEL_R, BOOT_PIXEL_G, BOOT_PIXEL_B));
+  strip.show();
+}
+
 // ── Trails ──────────────────────────────────────────────────────────────────
 // `head` is the index of the band's leading (top) edge. A trail is "done" once
 // even its trailing pixel has climbed past the top of the strip.
@@ -76,6 +85,11 @@ static bool buttonPressed() {
   }
   if ((millis() - lastChangeMs) >= DEBOUNCE_MS && reading != stable) {
     stable = reading;                 // reading has settled into a new level
+    if (BUTTON_DEBUG) {               // verbose edge logging for bench testing
+      Serial.print(F("[firewalker] button "));
+      Serial.print(stable == LOW ? F("DOWN") : F("UP"));
+      Serial.print(F(" @")); Serial.print(millis()); Serial.println(F("ms"));
+    }
     if (stable == LOW) return true;   // settled into "pressed"
   }
   return false;
@@ -129,7 +143,7 @@ static void render() {
 
 void setup() {
   Serial.begin(SERIAL_BAUD);
-  delay(200);  // Uno resets when the serial port opens; let the first prints land.
+  delay(200);  // Let USB serial settle enough for most monitor sessions.
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
@@ -138,10 +152,12 @@ void setup() {
   strip.begin();
   strip.setBrightness(LED_BRIGHTNESS);
   strip.clear();
-  strip.show();                       // start dark
+  strip.show();
+  showBootPixel();                    // visible "firmware started" indicator
 
   Serial.println(F("[firewalker] ready — press the button to stomp"));
   Serial.print(F("[firewalker] pixels=")); Serial.print(LED_COUNT);
+  Serial.print(F(" led pin=")); Serial.print(LED_PIN);
   Serial.print(F(" button pin=")); Serial.println(BUTTON_PIN);
 }
 

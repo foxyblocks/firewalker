@@ -8,15 +8,15 @@
 This is a wearable NeoPixel shoe project. We want a modern, reproducible,
 VS Code-based workflow with real dependency management and CLI builds — not a
 one-off Arduino IDE sketch. The first test board is an Arduino Uno R3
-(ATmega328P / AVR), but the production controller is not yet chosen and may be a
-different MCU (e.g. a 3.3 V SAMD board such as Gemma M0 / Flora).
+(ATmega328P / AVR). The project later moved to an Adafruit Feather RP2040 as
+the active controller.
 
 ## Decision
 
 Use **PlatformIO** as the build/dependency/upload tool, targeting the
-**Arduino framework**. Configuration lives in `platformio.ini`, with a per-board
-environment (`[env:uno]` first). Libraries (e.g. Adafruit NeoPixel) are declared
-via `lib_deps` and version-pinned.
+**Arduino framework**. Configuration lives in `platformio.ini`, currently with
+one board environment (`[env:adafruit_feather]`). Libraries (e.g. Adafruit
+NeoPixel) are declared via `lib_deps` and version-pinned.
 
 ## Consequences
 
@@ -24,7 +24,7 @@ via `lib_deps` and version-pinned.
   monitoring (`pio device monitor`) — scriptable and CI-friendly.
 - Declarative, pinned dependencies instead of the IDE's global library mess.
 - Switching/adding boards is a new `[env:*]` block; the Arduino framework keeps
-  most application code portable across AVR and SAMD targets.
+  most application code portable across supported targets.
 - Slightly more upfront config than the Arduino IDE, and contributors must
   install PlatformIO. Acceptable for a deliberate, long-lived project.
 

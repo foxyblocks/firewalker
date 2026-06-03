@@ -1,11 +1,11 @@
 # Firewalker
 
 Wearable NeoPixel LED-shoe firmware. **PlatformIO + Arduino framework** (see
-`docs/adr/0001-use-platformio-arduino-framework.md`). First test board: Arduino
-Uno R3 (ATmega328P).
+`docs/adr/0001-use-platformio-arduino-framework.md`). Current board: Adafruit
+Feather RP2040.
 
 **Current phase: button-triggered animation.** Drive 39 pixels of one WS2812B
-strip; a button (pin 10, stomp simulator) drives a non-blocking, stacking
+strip; a button on Feather D6 (stomp simulator) drives a non-blocking, stacking
 fire-trail animation, with status over serial. Out of scope: real accelerometer
 step-detect, multiple strips, wireless. Don't over-engineer ahead of working
 hardware.
@@ -15,7 +15,8 @@ hardware.
 - `include/config.h` — all hardware knobs (pin, count, brightness, baud, color).
   Never hard-code these in `src/main.cpp`.
 - `CONTEXT.md` — domain glossary; reuse these terms.
-- `docs/wiring.md`, `docs/power-budget.md` — hardware assumptions + current math.
+- `docs/wiring.md`, `docs/wiring-extra-effort.html`, `docs/power-budget.md` —
+  current minimal wiring, protective reference wiring, and current math.
 - `docs/open-questions.md` — unresolved hardware facts (don't bury uncertainty
   in code comments; record it here).
 - `docs/adr/` — durable decisions.
@@ -23,9 +24,9 @@ hardware.
 ## Build / upload / monitor
 
 ```bash
-pio run -e uno              # build
-pio run -e uno -t upload    # flash a connected Uno
-pio device monitor -b 115200
+pio run                     # build default Feather env
+pio run -t upload           # flash a connected Feather RP2040
+pio device monitor -e adafruit_feather
 ```
 
 ## Working conventions

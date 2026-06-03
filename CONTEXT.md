@@ -12,7 +12,8 @@ code, issues, and docs rather than drifting to synonyms.
 - **Pixel** — one addressable RGB LED on the strip (a.k.a. NeoPixel). Each draws
   up to ~60 mA at full white and costs 3 bytes of controller SRAM.
 - **DIN** — the strip's data input line. Driven from the controller's data pin
-  (Uno pin 6) through a series resistor.
+  (Feather D5). The current minimal rig uses direct data wiring; the
+  extra-effort reference adds a resistor and level shifter.
 - **Bring-up** — the initial phase (now complete): prove build → upload → data
   line → lit pixels → serial status. "Boring and verifiable."
 - **Brightness** — the global `setBrightness` level (`LED_BRIGHTNESS`). Trades
@@ -22,7 +23,7 @@ code, issues, and docs rather than drifting to synonyms.
   Several run at once (`MAX_TRAILS`), each behind the previous.
 - **Fire gradient** — a trail's color ramp: a hot head cooling through the
   `FIRE[]` stops to a red tail, precomputed once per `TRAIL_LEN`.
-- **Stomp** — a trigger event. Currently simulated by a **button** on pin 10
+- **Stomp** — a trigger event. Currently simulated by a **button** on Feather D6
   (`INPUT_PULLUP`); later a real accelerometer step-detect.
 - **Debounce** — ignoring contact bounce so one physical press = one trigger
   (`DEBOUNCE_MS`); the read is edge-triggered on press-down.

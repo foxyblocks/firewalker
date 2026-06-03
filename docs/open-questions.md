@@ -11,16 +11,14 @@ get decided deliberately. Resolve → move the decision into `wiring.md`,
   brightness/animation envelope.
 - What is the **total** physical strip length vs. the 39 pixels currently
   driven? Worst-case current scales with the number actually lit.
-- Are the recommended **data-line series resistor** and **bulk capacitor**
-  actually installed on the rig, or assumed?
+- Current bench rig intentionally omits the data-line resistor, bulk capacitor,
+  and level shifter. At what brightness/length/use case do we upgrade to the
+  extra-effort wiring?
 
-## Controller / final board
+## Controller / logic level
 
-- Uno R3 is the *test* board. What is the **production** controller (Gemma M0,
-  Flora, QT Py, …)? A 3.3 V board changes logic-level handling and the framework
-  target in `platformio.ini`.
-- If 3.3 V: level shifter on the data line, or rely on the "first pixel as level
-  shifter" trick / a known-tolerant strip?
+- Current controller is the Adafruit Feather RP2040, with direct 3.3V data into
+  the strip. Does the final wearable need a 5V level shifter for reliability?
 
 ## Wearable constraints
 

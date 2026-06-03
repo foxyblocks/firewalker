@@ -9,9 +9,8 @@ fit under it.
   full white, plus ~1 mA quiescent.
 - The library applies the global brightness, so per-pixel current ≈
   `Σchannels × 20 mA × (channel / 255) × (LED_BRIGHTNESS / 255)`.
-- A USB 2.0 port supplies ~**500 mA**; the Uno + regulator eat ~30–50 mA,
-  leaving roughly **450 mA** for LEDs — and the Uno's 5V trace shouldn't be
-  pushed hard regardless.
+- A USB 2.0 port supplies ~**500 mA**. The current rig feeds the strip from the
+  Feather USB/VBUS pin, so the Feather and strip share that budget.
 
 ## Worst case = the whole strip lit
 
@@ -28,22 +27,20 @@ uses ~1–1.8 channels — cheaper than white. Rough per-pixel and 39-px totals:
 | `100` (current) | ~12 mA | **~470 mA** | ~950 mA |
 
 So at the current `LED_BRIGHTNESS = 100`, a strip full of fire pixels (~470 mA)
-sits **right at / just over the ~450 mA USB budget** — heavy button-mashing can
-brown out or flicker. A single `TRAIL_LEN = 30` band is ~360 mA (under, but not
-by much). White at this brightness is far over — which is why the palette avoids
-it.
+sits **right at the practical USB budget** — heavy button-mashing can brown out
+or flicker. A single `TRAIL_LEN = 30` band is ~360 mA (under, but not by much).
+White at this brightness is far over — which is why the palette avoids it.
 
 ## Levers to stay safe on USB
 
 - Lower `LED_BRIGHTNESS`, shorten `TRAIL_LEN`, or drop `MAX_TRAILS`.
 - Keep colors off pure white (the palette already does).
-- Estimate before bumping anything: `pixels_lit × per-pixel mA` under ~450 mA.
+- Estimate before bumping anything: `pixels_lit × per-pixel mA` under the
+  power source's real current budget.
 
 ## Before going brighter / longer
 
 Move the strip to a **dedicated 5V supply** sized for the real worst case
 (`pixels × 60 mA` for white), keep grounds common, and power it **directly** —
-never through the Arduino's 5V pin or barrel jack. The barrel-jack path runs
-through the onboard linear regulator, which tops out around a few hundred mA
-(thermally limited) before the diode's ~1 A hard ceiling even matters. This is
-an [open question](open-questions.md) for the final wearable.
+never through the Feather's 3V3 regulator. This is an
+[open question](open-questions.md) for the final wearable.
