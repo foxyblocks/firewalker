@@ -33,6 +33,23 @@ constexpr uint8_t BOOT_PIXEL_R     = 0;
 constexpr uint8_t BOOT_PIXEL_G     = 255;
 constexpr uint8_t BOOT_PIXEL_B     = 0;
 
+// ── Onboard status NeoPixel ──────────────────────────────────────────────
+// The Feather RP2040's built-in NeoPixel (PIN_NEOPIXEL -> GPIO 16; always
+// powered on this board — no enable pin). Lit a solid color in every mode by
+// setupCore() as a "powered / firmware running" indicator, independent of the
+// main strip and of having a serial monitor attached. It's a single bright
+// pixel right by the USB jack, so brightness is kept low.
+constexpr bool    ONBOARD_PIXEL_ENABLED = true;
+#if defined(PIN_NEOPIXEL)
+constexpr uint8_t ONBOARD_PIXEL_PIN     = PIN_NEOPIXEL;
+#else
+constexpr uint8_t ONBOARD_PIXEL_PIN     = 16;   // Feather RP2040 onboard NeoPixel
+#endif
+constexpr uint8_t ONBOARD_PIXEL_BRIGHTNESS = 40;   // 0-255; it's bright up close
+constexpr uint8_t ONBOARD_PIXEL_R = 255;           // warm amber, matching the fire theme
+constexpr uint8_t ONBOARD_PIXEL_G = 60;
+constexpr uint8_t ONBOARD_PIXEL_B = 0;
+
 // ── FSR stomp sensor ────────────────────────────────────────────────────
 // Force-sensitive resistor voltage divider on Feather analog A0:
 // Observed behavior: baseline is roughly 100-300, hard pressure rises toward
@@ -58,9 +75,37 @@ constexpr bool FSR_IDLE_VISUAL_DEBUG = true;
 #elif defined(FIREWALKER_MODE_FINAL_APP)
 constexpr bool FSR_DEBUG = false;
 constexpr bool FSR_IDLE_VISUAL_DEBUG = false;
+#elif defined(FIREWALKER_MODE_IMU_DEBUG)
+// imu_debug drives the strip from the MPU-6050, not the FSR. The FSR analog
+// path is left unused (and its debug logging off) in this mode.
+constexpr bool FSR_DEBUG = false;
+constexpr bool FSR_IDLE_VISUAL_DEBUG = false;
 #else
-#error "Define one Firewalker mode: FIREWALKER_MODE_FINAL_APP or FIREWALKER_MODE_FSR_DEBUG"
+#error "Define one Firewalker mode: FIREWALKER_MODE_FINAL_APP, FIREWALKER_MODE_FSR_DEBUG, or FIREWALKER_MODE_IMU_DEBUG"
 #endif
+
+// ── IMU stomp sensor (MPU-6050 / GY-521) ────────────────────────────────
+// GY-521 breakout (MPU-6050: 3-axis accel + 3-axis gyro) read over I2C on the
+// Feather's SDA/SCL pins. Candidate replacement for the FSR — only the
+// imu_debug mode uses it today (see docs/wiring-mpu6050.md). The Adafruit
+// MPU6050 library reports acceleration in m/s^2 *including* gravity, so at rest
+// the total magnitude sits near 9.81; a stomp/step is a spike well above it.
+constexpr uint8_t       IMU_I2C_ADDR = 0x68;   // AD0 low; 0x69 if AD0 tied high
+constexpr unsigned long IMU_SAMPLE_MS = 20;    // ~50 Hz accel/gyro poll
+constexpr unsigned long IMU_LOG_MS = 100;      // throttle verbose serial to ~10 Hz
+constexpr float         IMU_GRAVITY = 9.81f;   // rest |accel| baseline (m/s^2)
+
+// Stomp detect on total acceleration magnitude with hysteresis + a refractory
+// gap, mirroring the FSR's arm/release. Starting points to tune on a real foot.
+constexpr float         IMU_STOMP_ACCEL_THRESHOLD   = 18.0f;  // fire above this |accel|
+constexpr float         IMU_RELEASE_ACCEL_THRESHOLD = 12.0f;  // re-arm below this |accel|
+constexpr unsigned long IMU_REFRACTORY_MS = 250;              // min gap between stomps
+
+// Idle visual: map movement intensity (|accel| - gravity) to the idle yellow
+// brightness, reusing the FSR idle palette/brightness floor so the strip shows
+// how hard the IMU is being shaken while watching the serial monitor.
+constexpr float         IMU_ACCEL_DELTA_MIN = 0.5f;   // below this reads as "still"
+constexpr float         IMU_ACCEL_DELTA_MAX = 12.0f;  // saturates idle brightness here
 
 // ── Debug button ────────────────────────────────────────────────────────
 // Momentary button wired between Feather RP2040 silk D6 and GND, using the

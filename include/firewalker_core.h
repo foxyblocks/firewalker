@@ -13,6 +13,7 @@ bool debugButtonPressed();
 void spawnTrail();
 void renderTrails();
 void advanceTrailsIfDue();
+void renderIdleBrightness(uint8_t brightness);
 void renderFsrIdle();
 bool hasActiveTrails();
 

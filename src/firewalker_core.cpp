@@ -8,6 +8,10 @@ namespace Firewalker {
 
 Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
+// Single built-in status NeoPixel on the Feather (separate data pin from the
+// main strip). Lit solid by setupCore() in every mode.
+Adafruit_NeoPixel onboard(1, ONBOARD_PIXEL_PIN, NEO_GRB + NEO_KHZ800);
+
 static uint32_t trailColor[TRAIL_LEN];
 
 struct Trail {
@@ -57,6 +61,16 @@ void setupCore(const __FlashStringHelper* modeName) {
   Serial.begin(SERIAL_BAUD);
   delay(200);
 
+  // Solid onboard NeoPixel in every mode: a power/firmware-running indicator
+  // that doesn't depend on the main strip or a serial monitor.
+  if (ONBOARD_PIXEL_ENABLED) {
+    onboard.begin();
+    onboard.setBrightness(ONBOARD_PIXEL_BRIGHTNESS);
+    onboard.setPixelColor(
+        0, onboard.Color(ONBOARD_PIXEL_R, ONBOARD_PIXEL_G, ONBOARD_PIXEL_B));
+    onboard.show();
+  }
+
   pinMode(FSR_PIN, INPUT);
   if (DEBUG_BUTTON_ENABLED) pinMode(DEBUG_BUTTON_PIN, INPUT_PULLUP);
 
@@ -74,12 +88,15 @@ void setupCore(const __FlashStringHelper* modeName) {
   Serial.print(LED_COUNT);
   Serial.print(F(" led pin="));
   Serial.print(LED_PIN);
+#if !defined(FIREWALKER_MODE_IMU_DEBUG)
+  // imu_debug doesn't use the FSR; it prints its own IMU banner instead.
   Serial.print(F(" fsr pin="));
   Serial.print(FSR_PIN);
   Serial.print(F(" stomp threshold="));
   Serial.print(FSR_STOMP_THRESHOLD);
   Serial.print(F(" release threshold="));
   Serial.print(FSR_RELEASE_THRESHOLD);
+#endif
   Serial.print(F(" debug button="));
   Serial.println(DEBUG_BUTTON_ENABLED ? DEBUG_BUTTON_PIN : -1);
 }
@@ -198,10 +215,12 @@ void advanceTrailsIfDue() {
   renderTrails();
 }
 
-void renderFsrIdle() {
-  if (!FSR_IDLE_VISUAL_DEBUG) return;
-
-  uint8_t brightness = fsrBrightness(latestFsrReading);
+// Fill the whole strip with the idle yellow, scaled to `brightness` expressed on
+// a 0..LED_BRIGHTNESS scale (channels are scaled directly rather than via
+// setBrightness so a caller can pass a level it computed itself). Shared by the
+// FSR and IMU idle visualisations.
+void renderIdleBrightness(uint8_t brightness) {
+  if (brightness > LED_BRIGHTNESS) brightness = LED_BRIGHTNESS;
   strip.setBrightness(LED_BRIGHTNESS);
   uint32_t color = strip.Color(
       (uint16_t)FSR_IDLE_YELLOW_R * brightness / LED_BRIGHTNESS,
@@ -211,6 +230,11 @@ void renderFsrIdle() {
     strip.setPixelColor(i, color);
   }
   strip.show();
+}
+
+void renderFsrIdle() {
+  if (!FSR_IDLE_VISUAL_DEBUG) return;
+  renderIdleBrightness(fsrBrightness(latestFsrReading));
 }
 
 bool hasActiveTrails() {

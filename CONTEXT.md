@@ -23,23 +23,34 @@ code, issues, and docs rather than drifting to synonyms.
   Several run at once (`MAX_TRAILS`), each behind the previous.
 - **Fire gradient** — a trail's color ramp: a hot head cooling through the
   `FIRE[]` stops to a red tail, precomputed once per `TRAIL_LEN`.
-- **Stomp** — a trigger event. Currently produced by an **FSR** voltage divider
-  on Feather A0, with a D6 debug button kept for bench testing; later a real
-  accelerometer step-detect may replace it.
-- **Hysteresis** — separate press/release thresholds for the FSR so one physical
-  press = one trigger even when analog readings wiggle around the threshold.
+- **Stomp** — a trigger event. Produced by an **FSR** voltage divider on Feather
+  A0 (`final_app`/`fsr_debug`), with a D6 debug button kept for bench testing.
+  The `imu_debug` mode produces it instead from an **IMU** acceleration spike, as
+  a candidate replacement for the FSR.
+- **IMU** — the GY-521 / MPU-6050 6-DOF accelerometer + gyroscope read over I2C.
+  In `imu_debug` a stomp is a spike in total acceleration magnitude `|a|` above
+  the ~9.81 m/s² gravity baseline. See `docs/wiring-mpu6050.md`.
+- **Hysteresis** — separate arm/release thresholds so one physical event = one
+  trigger even when readings wiggle around the threshold. Used by both the FSR
+  (analog) and the IMU (acceleration magnitude).
+- **Onboard NeoPixel** — the Feather's built-in single NeoPixel (`PIN_NEOPIXEL`,
+  GP16), lit a solid color by `setupCore()` in every mode as a
+  power/firmware-running indicator, independent of the main strip and serial
+  monitor.
 - **Power budget** — the current ceiling imposed by the power source (USB vs
   external 5V). Governs the brightness cap and which colors are safe.
 
 ## Scope guardrails (current phase)
 
 In scope now: single strip, stomp-triggered fire trails (a small non-blocking
-multi-trail engine), serial status. Still explicitly **out** of scope: real
-accelerometer / step detection, multiple strips, Bluetooth / Wi-Fi, battery
-management, premature performance work.
+multi-trail engine), serial status, and **bench evaluation** of an IMU stomp
+trigger in `imu_debug`. Still explicitly **out** of scope: wiring the IMU into
+`final_app` / production step-detection tuning, multiple strips, Bluetooth /
+Wi-Fi, battery management, premature performance work.
 
 ## Conventions
 
-- Hardware constants live in `include/config.h`, never hard-coded in `main.cpp`.
+- Hardware constants live in `include/config.h`, never hard-coded in the mode or
+  core source files.
 - Hardware uncertainty is documented in `docs/`, not buried in code comments.
 - Durable decisions are recorded as ADRs under `docs/adr/`.

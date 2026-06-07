@@ -8,9 +8,10 @@ the Arduino IDE).
 > **39 pixels** of one WS2812B strip: each pressure stomp launches a **fire
 > trail** — a band that travels bottom→top with a hot head cooling through
 > orange to a deep-red tail, wiping in at the bottom and out at the top.
-> Presses stack into several trails at once. No accelerometer or wireless yet —
-> the FSR is the current stomp sensor, with a D6 debug button kept for bench
-> testing.
+> Presses stack into several trails at once. The FSR is the current stomp sensor,
+> with a D6 debug button kept for bench testing; an `imu_debug` mode evaluates a
+> GY-521 / MPU-6050 accelerometer+gyro over I2C as a candidate replacement. No
+> wireless yet. The onboard NeoPixel lights solid in every mode as a power indicator.
 
 ## Hardware
 
@@ -21,11 +22,14 @@ the Arduino IDE).
 | Data pin | Feather **D5** → strip DIN (direct, no level shifter on current rig) |
 | Pixels driven | 39 (current strip length) |
 | Stomp sensor | FSR voltage divider on Feather **A0** |
+| IMU (optional) | GY-521 / MPU-6050 over I2C (**SDA**/**SCL**, 3V3) — used by `imu_debug` |
 | Debug trigger | Momentary button from Feather **D6** → GND (`INPUT_PULLUP`) |
+| Status light | Onboard **NeoPixel** (GP16), lit solid in every mode |
 | Power | Feather **USB/VBUS** → strip 5V, common ground — current scales with brightness × pixels lit (see [`docs/power-budget.md`](docs/power-budget.md)) |
 
-See [`docs/wiring.md`](docs/wiring.md) for the current minimal wiring,
-[`docs/wiring-extra-effort.html`](docs/wiring-extra-effort.html) for the
+See [`docs/wiring.md`](docs/wiring.md) for the current minimal (FSR) wiring,
+[`docs/wiring-mpu6050.html`](docs/wiring-mpu6050.html) for the MPU-6050 IMU
+wiring, [`docs/wiring-extra-effort.html`](docs/wiring-extra-effort.html) for the
 level-shifter/resistor reference, and
 [`docs/open-questions.md`](docs/open-questions.md) for unresolved hardware
 decisions.
@@ -41,6 +45,9 @@ pio run -e final_app -t upload
 
 # Upload the FSR sensor debug mode
 pio run -e fsr_debug -t upload
+
+# Upload the MPU-6050 IMU debug mode
+pio run -e imu_debug -t upload
 
 # Watch serial output for the active mode (115200 baud)
 pio device monitor -e fsr_debug
@@ -76,6 +83,23 @@ When no trails are active, the whole strip lights yellow with brightness mapped
 from the current FSR reading. Baseline is roughly 100-300; hard pressure trends
 toward 700-1000, so a hard squeeze trends brighter. This makes FSR pressure
 visible while watching the serial monitor.
+
+In `imu_debug`, a GY-521 / MPU-6050 is read over I2C (see
+[`docs/wiring-mpu6050.html`](docs/wiring-mpu6050.html)). It logs raw accel/gyro,
+fires a fire trail when total acceleration spikes past the stomp threshold
+(re-arming with hysteresis), and otherwise maps movement intensity to idle
+brightness — so shaking the board lights the strip. The D6 button still spawns
+trails, so the animation works even if the IMU is absent.
+
+```
+[firewalker] mode=imu_debug
+[firewalker] pixels=39 led pin=7 debug button=8
+[firewalker] mpu6050 ready @0x68
+[firewalker] imu a=(0.12,-0.34,9.79) |a|=9.80 g=(0.01,0.00,-0.02) armed=true
+[firewalker] imu stomp @24.13
+[firewalker] stomp -> trail (1 active)
+...
+```
 
 ## ⚠️ Power safety
 

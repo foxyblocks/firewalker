@@ -32,6 +32,11 @@ get decided deliberately. Resolve → move the decision into `wiring.md`,
 
 - FSR calibration: what are the actual rest, walking, and stomp readings once
   the sensor is mounted in the shoe?
-- Step / impact detection source if FSR is not enough (accelerometer model,
-  mount point, threshold)?
+- FSR vs IMU: does the GY-521 / MPU-6050 (`imu_debug`) detect stomps more
+  reliably than the FSR? If so, wire it into `final_app` and retire the FSR path.
+- IMU calibration: what acceleration magnitude does a real foot stomp/step
+  produce when the board is shoe-mounted? Tune `IMU_STOMP_ACCEL_THRESHOLD` /
+  `IMU_RELEASE_ACCEL_THRESHOLD` / `IMU_REFRACTORY_MS` from that. Is bare
+  magnitude enough, or is gyro / a smarter step-detect needed to reject walking?
+- IMU mount orientation on the shoe (which axis sees the impact)?
 - Desired animations and their power profile once the above is settled?

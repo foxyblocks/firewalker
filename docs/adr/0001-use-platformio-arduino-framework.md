@@ -16,8 +16,10 @@ the active controller.
 Use **PlatformIO** as the build/dependency/upload tool, targeting the
 **Arduino framework**. Configuration lives in `platformio.ini`, currently with
 Adafruit Feather RP2040 environments for each runtime mode (`final_app`,
-`fsr_debug`). Libraries (e.g. Adafruit NeoPixel) are declared via `lib_deps`
-and version-pinned.
+`fsr_debug`, `imu_debug`). Shared libraries (e.g. Adafruit NeoPixel) are declared
+in the base `[env]`; mode-specific ones (e.g. Adafruit MPU6050 for `imu_debug`)
+are added per-env so they aren't linked into builds that don't need them. All are
+version-pinned via `lib_deps`.
 
 ## Consequences
 
