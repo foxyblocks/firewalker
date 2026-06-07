@@ -24,9 +24,14 @@ get decided deliberately. Resolve → move the decision into `wiring.md`,
 
 - Mounting: how/where does the strip attach to the shoe, and how is the
   controller + battery enclosed and strain-relieved?
+- FSR placement: heel, ball of foot, or another pressure point? This changes the
+  real rest/stomp readings and thresholds.
 - Connector strategy for removing electronics before washing?
 
 ## Behavior (later — out of current scope)
 
-- Step / impact detection source (accelerometer model, mount point, threshold)?
+- FSR calibration: what are the actual rest, walking, and stomp readings once
+  the sensor is mounted in the shoe?
+- Step / impact detection source if FSR is not enough (accelerometer model,
+  mount point, threshold)?
 - Desired animations and their power profile once the above is settled?

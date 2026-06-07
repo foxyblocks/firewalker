@@ -18,21 +18,22 @@ code, issues, and docs rather than drifting to synonyms.
   line → lit pixels → serial status. "Boring and verifiable."
 - **Brightness** — the global `setBrightness` level (`LED_BRIGHTNESS`). Trades
   visibility against current draw; see the power budget.
-- **Trail** — a band of `TRAIL_LEN` pixels spawned by a press that travels
+- **Trail** — a band of `TRAIL_LEN` pixels spawned by a stomp that travels
   bottom→top, **wiping in** at the bottom and **out** at the top (no hold).
   Several run at once (`MAX_TRAILS`), each behind the previous.
 - **Fire gradient** — a trail's color ramp: a hot head cooling through the
   `FIRE[]` stops to a red tail, precomputed once per `TRAIL_LEN`.
-- **Stomp** — a trigger event. Currently simulated by a **button** on Feather D6
-  (`INPUT_PULLUP`); later a real accelerometer step-detect.
-- **Debounce** — ignoring contact bounce so one physical press = one trigger
-  (`DEBOUNCE_MS`); the read is edge-triggered on press-down.
+- **Stomp** — a trigger event. Currently produced by an **FSR** voltage divider
+  on Feather A0, with a D6 debug button kept for bench testing; later a real
+  accelerometer step-detect may replace it.
+- **Hysteresis** — separate press/release thresholds for the FSR so one physical
+  press = one trigger even when analog readings wiggle around the threshold.
 - **Power budget** — the current ceiling imposed by the power source (USB vs
   external 5V). Governs the brightness cap and which colors are safe.
 
 ## Scope guardrails (current phase)
 
-In scope now: single strip, button-triggered fire trails (a small non-blocking
+In scope now: single strip, stomp-triggered fire trails (a small non-blocking
 multi-trail engine), serial status. Still explicitly **out** of scope: real
 accelerometer / step detection, multiple strips, Bluetooth / Wi-Fi, battery
 management, premature performance work.

@@ -4,7 +4,7 @@
 // brightness / baud here (not scattered through main.cpp) makes the hardware
 // assumptions explicit and easy to change as wiring is confirmed.
 //
-// Strip-type flags (NEO_GRB, NEO_KHZ800) intentionally live in main.cpp next
+// Strip-type flags (NEO_GRB, NEO_KHZ800) intentionally live in firewalker_core.cpp next
 // to the Adafruit_NeoPixel include.
 
 #include <Arduino.h>
@@ -33,20 +33,48 @@ constexpr uint8_t BOOT_PIXEL_R     = 0;
 constexpr uint8_t BOOT_PIXEL_G     = 255;
 constexpr uint8_t BOOT_PIXEL_B     = 0;
 
-// ── Button (stomp simulator) ────────────────────────────────────────────
+// ── FSR stomp sensor ────────────────────────────────────────────────────
+// Force-sensitive resistor voltage divider on Feather analog A0:
+// Observed behavior: baseline is roughly 100-300, hard pressure rises toward
+// 700-1000.
+constexpr uint8_t       FSR_PIN = A0;
+constexpr int           FSR_STOMP_THRESHOLD = 700;
+constexpr int           FSR_RELEASE_THRESHOLD = 400;
+constexpr unsigned long FSR_SAMPLE_MS = 50;
+
+// When no trails are active, show live FSR pressure as yellow strip brightness.
+// Map the observed FSR range to brightness: baseline/rest is roughly 100-300,
+// hard squeeze trends toward 700-1000.
+constexpr int           FSR_ANALOG_MIN = 100;
+constexpr int           FSR_ANALOG_MAX = 1000;
+constexpr uint8_t       FSR_IDLE_MIN_BRIGHTNESS = 3;
+constexpr uint8_t       FSR_IDLE_YELLOW_R = 255;
+constexpr uint8_t       FSR_IDLE_YELLOW_G = 200;
+constexpr uint8_t       FSR_IDLE_YELLOW_B = 0;
+
+#if defined(FIREWALKER_MODE_FSR_DEBUG)
+constexpr bool FSR_DEBUG = true;
+constexpr bool FSR_IDLE_VISUAL_DEBUG = true;
+#elif defined(FIREWALKER_MODE_FINAL_APP)
+constexpr bool FSR_DEBUG = false;
+constexpr bool FSR_IDLE_VISUAL_DEBUG = false;
+#else
+#error "Define one Firewalker mode: FIREWALKER_MODE_FINAL_APP or FIREWALKER_MODE_FSR_DEBUG"
+#endif
+
+// ── Debug button ────────────────────────────────────────────────────────
 // Momentary button wired between Feather RP2040 silk D6 and GND, using the
-// internal pull-up: the pin reads HIGH at rest and LOW when pressed.
-// The installed board variant maps D6 -> GPIO 8.
-constexpr uint8_t       BUTTON_PIN  = D6;
-constexpr unsigned long DEBOUNCE_MS = 30;   // ignore contact bounce shorter than this
-// Log each debounced button edge (DOWN/UP + millis) over serial while testing.
-// Set false for the wearable to quiet the log; compiles out entirely when false.
-constexpr bool          BUTTON_DEBUG = true;
+// internal pull-up. Kept alongside the FSR so trails can still be triggered
+// during bench testing without pressing the shoe sensor.
+constexpr bool          DEBUG_BUTTON_ENABLED = true;
+constexpr uint8_t       DEBUG_BUTTON_PIN = D6;
+constexpr unsigned long DEBUG_BUTTON_DEBOUNCE_MS = 30;
+constexpr bool          DEBUG_BUTTON_LOG = FSR_DEBUG;
 
 // ── Trail color (fire gradient) ─────────────────────────────────────────────
-// Palette stops from the hot head to the cool tail, as plain R/G/B. main.cpp
-// interpolates these across the band length and caches the result. Edit / add /
-// remove stops to retune the flame — FIRE_STOPS updates automatically. Note the
+// Palette stops from the hot head to the cool tail, as plain R/G/B. The shared
+// core interpolates these across the band length and caches the result. Edit /
+// add / remove stops to retune the flame — FIRE_STOPS updates automatically. Note the
 // white head draws more current than a single-color fill; worst case is still
 // the whole strip lit at once. See docs/power-budget.md.
 constexpr uint8_t FIRE[][3] = {
@@ -58,7 +86,7 @@ constexpr uint8_t FIRE[][3] = {
 constexpr uint8_t FIRE_STOPS = sizeof(FIRE) / sizeof(FIRE[0]);
 
 // ── Trail animation ─────────────────────────────────────────────────────
-// Each button press spawns a TRAIL: a band of TRAIL_LEN lit pixels that travels
+// Each stomp trigger spawns a TRAIL: a band of TRAIL_LEN lit pixels that travels
 // bottom -> top at one pixel per WIPE_STEP_MS. It "wipes in" as it emerges from
 // the bottom and "wipes out" as it slides off the top — no hold in between.
 // Presses stack: multiple trails run at once, each behind the previous, up to

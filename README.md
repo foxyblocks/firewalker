@@ -4,12 +4,13 @@ Wearable LED-shoe firmware, inspired by Adafruit's Gemma LED Sneakers /
 Firewalker guide. Built with **PlatformIO + Arduino framework** in VS Code (not
 the Arduino IDE).
 
-> **Status:** button-triggered animation on the Feather RP2040 rig. The firmware drives
-> **39 pixels** of one WS2812B strip: each button press launches a **fire
+> **Status:** FSR-triggered animation on the Feather RP2040 rig. The firmware drives
+> **39 pixels** of one WS2812B strip: each pressure stomp launches a **fire
 > trail** — a band that travels bottom→top with a hot head cooling through
 > orange to a deep-red tail, wiping in at the bottom and out at the top.
 > Presses stack into several trails at once. No accelerometer or wireless yet —
-> the button is a temporary stand-in for a foot stomp.
+> the FSR is the current stomp sensor, with a D6 debug button kept for bench
+> testing.
 
 ## Hardware
 
@@ -19,7 +20,8 @@ the Arduino IDE).
 | LED strip | WS2812B, `NEO_GRB` + 800 KHz |
 | Data pin | Feather **D5** → strip DIN (direct, no level shifter on current rig) |
 | Pixels driven | 39 (current strip length) |
-| Button | Feather **D6** → GND (`INPUT_PULLUP`, stomp simulator) |
+| Stomp sensor | FSR voltage divider on Feather **A0** |
+| Debug trigger | Momentary button from Feather **D6** → GND (`INPUT_PULLUP`) |
 | Power | Feather **USB/VBUS** → strip 5V, common ground — current scales with brightness × pixels lit (see [`docs/power-budget.md`](docs/power-budget.md)) |
 
 See [`docs/wiring.md`](docs/wiring.md) for the current minimal wiring,
@@ -31,29 +33,49 @@ decisions.
 ## Quick start
 
 ```bash
-# Build
+# Build the default final app mode
 pio run
 
-# Upload to a connected Feather RP2040 (auto-detects the port)
-pio run -t upload
+# Upload the final app mode to a connected Feather RP2040
+pio run -e final_app -t upload
 
-# Watch serial output (115200 baud)
-pio device monitor -e adafruit_feather
+# Upload the FSR sensor debug mode
+pio run -e fsr_debug -t upload
+
+# Watch serial output for the active mode (115200 baud)
+pio device monitor -e fsr_debug
 ```
 
-Expected serial output:
+Expected final app serial output:
 
 ```
-[firewalker] ready — press the button to stomp
-[firewalker] pixels=39 led pin=7 button pin=8
+[firewalker] mode=final_app
+[firewalker] pixels=39 led pin=7 fsr pin=26 stomp threshold=700 release threshold=400 debug button=8
+[firewalker] fsr stomp @728
 [firewalker] stomp -> trail (1 active)
-[firewalker] stomp -> trail (2 active)
 ...
 ```
 
-At rest the strip is dark. Each button press launches a fire trail that travels
-up the strip and slides off the top. Press again — even mid-trail — and a new
-trail starts behind it, so several can climb at once.
+Expected FSR debug serial output:
+
+```
+[firewalker] mode=fsr_debug
+[firewalker] pixels=39 led pin=7 fsr pin=26 stomp threshold=700 release threshold=400 debug button=8
+[firewalker] fsr raw=728 force=628 brightness=72 armed=true
+[firewalker] stomp -> trail (1 active)
+...
+```
+
+In `final_app`, the strip is dark except for the green boot pixel until the FSR
+or D6 debug button launches a fire trail.
+
+In `fsr_debug`, the FSR only controls the idle yellow brightness. The D6 debug
+button still launches fire trails for animation testing.
+
+When no trails are active, the whole strip lights yellow with brightness mapped
+from the current FSR reading. Baseline is roughly 100-300; hard pressure trends
+toward 700-1000, so a hard squeeze trends brighter. This makes FSR pressure
+visible while watching the serial monitor.
 
 ## ⚠️ Power safety
 

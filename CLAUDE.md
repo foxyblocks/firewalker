@@ -4,16 +4,21 @@ Wearable NeoPixel LED-shoe firmware. **PlatformIO + Arduino framework** (see
 `docs/adr/0001-use-platformio-arduino-framework.md`). Current board: Adafruit
 Feather RP2040.
 
-**Current phase: button-triggered animation.** Drive 39 pixels of one WS2812B
-strip; a button on Feather D6 (stomp simulator) drives a non-blocking, stacking
-fire-trail animation, with status over serial. Out of scope: real accelerometer
+**Current phase: FSR-triggered animation.** Drive 39 pixels of one WS2812B
+strip; an FSR voltage divider on Feather A0 drives a non-blocking, stacking
+fire-trail animation in `final_app`, with a D6 debug button kept for bench
+testing. `fsr_debug` maps live FSR pressure to idle yellow brightness and keeps
+the D6 button available for trail testing. Out of scope: real accelerometer
 step-detect, multiple strips, wireless. Don't over-engineer ahead of working
 hardware.
 
 ## Project map
 
 - `include/config.h` — all hardware knobs (pin, count, brightness, baud, color).
-  Never hard-code these in `src/main.cpp`.
+  Never hard-code these in mode files.
+- `src/main.cpp` — tiny Arduino dispatcher into the selected mode.
+- `src/modes/` — runtime modes (`final_app`, `fsr_debug`).
+- `src/firewalker_core.cpp` — shared strip, FSR, debug-button, and trail logic.
 - `CONTEXT.md` — domain glossary; reuse these terms.
 - `docs/wiring.md`, `docs/wiring-extra-effort.html`, `docs/power-budget.md` —
   current minimal wiring, protective reference wiring, and current math.
@@ -24,9 +29,10 @@ hardware.
 ## Build / upload / monitor
 
 ```bash
-pio run                     # build default Feather env
-pio run -t upload           # flash a connected Feather RP2040
-pio device monitor -e adafruit_feather
+pio run                              # build default final_app mode
+pio run -e final_app -t upload       # flash finalized behavior
+pio run -e fsr_debug -t upload       # flash FSR sensor debug behavior
+pio device monitor -e fsr_debug      # watch debug logs at 115200 baud
 ```
 
 ## Working conventions

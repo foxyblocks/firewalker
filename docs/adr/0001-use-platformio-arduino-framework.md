@@ -15,8 +15,9 @@ the active controller.
 
 Use **PlatformIO** as the build/dependency/upload tool, targeting the
 **Arduino framework**. Configuration lives in `platformio.ini`, currently with
-one board environment (`[env:adafruit_feather]`). Libraries (e.g. Adafruit
-NeoPixel) are declared via `lib_deps` and version-pinned.
+Adafruit Feather RP2040 environments for each runtime mode (`final_app`,
+`fsr_debug`). Libraries (e.g. Adafruit NeoPixel) are declared via `lib_deps`
+and version-pinned.
 
 ## Consequences
 

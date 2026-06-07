@@ -27,7 +27,7 @@ uses ~1–1.8 channels — cheaper than white. Rough per-pixel and 39-px totals:
 | `100` (current) | ~12 mA | **~470 mA** | ~950 mA |
 
 So at the current `LED_BRIGHTNESS = 100`, a strip full of fire pixels (~470 mA)
-sits **right at the practical USB budget** — heavy button-mashing can brown out
+sits **right at the practical USB budget** — heavy trigger-mashing can brown out
 or flicker. A single `TRAIL_LEN = 30` band is ~360 mA (under, but not by much).
 White at this brightness is far over — which is why the palette avoids it.
 

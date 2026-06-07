@@ -41,7 +41,7 @@
 <body>
 <div class="wrap">
   <h1>Firewalker — Feather RP2040 extra-effort wiring</h1>
-  <p class="sub">Reference wiring for a more protective build: Adafruit Feather RP2040 (3.3&nbsp;V) driving a 5&nbsp;V NeoPixel strip through a level shifter and data resistor, with a button "stomp". The current minimal rig in <code>docs/wiring.md</code> omits these extras because it is working on the bench.</p>
+  <p class="sub">Reference wiring for a more protective build: Adafruit Feather RP2040 (3.3&nbsp;V) driving a 5&nbsp;V NeoPixel strip through a level shifter and data resistor, with an A0 FSR "stomp" sensor and D6 debug button. The current minimal rig in <code>docs/wiring.md</code> omits the level-shifter extras because it is working on the bench.</p>
 
   <div class="card">
     <svg viewBox="0 0 1160 680" role="img" aria-label="Feather RP2040 NeoPixel wiring diagram">
@@ -68,8 +68,8 @@
       <text class="pin" x="300" y="244" text-anchor="end">GP7 · D5</text>
       <text class="compSub" x="300" y="258" text-anchor="end">data out</text>
       <circle class="dot" cx="310" cy="250" r="5" fill="#e0972b"/>
-      <text class="pin" x="300" y="304" text-anchor="end">GP8 · D6</text>
-      <text class="compSub" x="300" y="318" text-anchor="end">button</text>
+      <text class="pin" x="300" y="304" text-anchor="end">GP26 · A0</text>
+      <text class="compSub" x="300" y="318" text-anchor="end">FSR sense</text>
       <circle class="dot" cx="310" cy="310" r="5" fill="#2f9e6b"/>
       <text class="pin" x="300" y="434" text-anchor="end">GND</text>
       <circle class="dot" cx="310" cy="430" r="5" fill="#374151"/>
@@ -117,11 +117,11 @@
       <circle class="dot" cx="650" cy="515" r="5" fill="#e23b3b"/><text class="pin" x="640" y="500" text-anchor="end">+5&nbsp;V</text>
       <circle class="dot" cx="545" cy="560" r="5" fill="#374151"/>
 
-      <!-- ===== Button ===== -->
+      <!-- ===== FSR ===== -->
       <rect x="110" y="470" width="160" height="90" rx="10" fill="#ecfdf5" stroke="#bbf7d0"/>
-      <text class="compTitle" x="190" y="500" text-anchor="middle">Button (stomp)</text>
-      <text class="compSub"  x="190" y="518" text-anchor="middle">momentary</text>
-      <text class="compSub"  x="190" y="534" text-anchor="middle">INPUT_PULLUP</text>
+      <text class="compTitle" x="190" y="500" text-anchor="middle">FSR (stomp)</text>
+      <text class="compSub"  x="190" y="518" text-anchor="middle">voltage divider</text>
+      <text class="compSub"  x="190" y="534" text-anchor="middle">A0 + 10k to GND</text>
       <circle class="dot" cx="270" cy="490" r="5" fill="#2f9e6b"/>
       <circle class="dot" cx="150" cy="560" r="5" fill="#374151"/>
 
@@ -141,7 +141,7 @@
       <polyline class="wire w-gnd" points="545,560 545,610"/>
       <polyline class="wire w-gnd" points="820,400 820,610"/>
       <polyline class="wire w-gnd" points="150,560 150,610"/>
-      <!-- button -> GP8/D6, and button -> GND -->
+      <!-- FSR divider sense -> GP26/A0, and fixed resistor -> GND -->
       <polyline class="wire w-btn" points="270,490 360,490 360,310 310,310"/>
       <!-- rail junction dots -->
       <circle cx="210" cy="70" r="4" fill="#e23b3b"/><circle cx="515" cy="70" r="4" fill="#e23b3b"/>
@@ -155,7 +155,7 @@
       <span><i class="swatch" style="border-color:#e23b3b"></i> +5&nbsp;V (red)</span>
       <span><i class="swatch" style="border-color:#374151"></i> GND (common)</span>
       <span><i class="swatch" style="border-color:#e0972b"></i> Data — 3.3&nbsp;V in, 5&nbsp;V out of shifter</span>
-      <span><i class="swatch" style="border-color:#2f9e6b"></i> Button</span>
+      <span><i class="swatch" style="border-color:#2f9e6b"></i> FSR sense</span>
       <span><i class="swatch dashed" style="border-color:#e23b3b;border-top-style:dashed"></i> 5&nbsp;V test option (Feather USB pin)</span>
     </div>
   </div>
@@ -168,7 +168,8 @@
   <table>
     <tr><th>Signal</th><th>Feather pin</th><th><code>config.h</code></th><th>Notes</th></tr>
     <tr><td>Strip data</td><td>D5</td><td><code>LED_PIN = D5</code> (GP7)</td><td>→ shifter A; shifter Y → 330&nbsp;Ω → strip DIN</td></tr>
-    <tr><td>Button</td><td>D6</td><td><code>BUTTON_PIN = D6</code> (GP8)</td><td>other leg → GND; uses internal pull-up</td></tr>
+    <tr><td>FSR sense</td><td>A0</td><td><code>FSR_PIN = A0</code> (GP26)</td><td>3V3 → FSR → A0 → 10k → GND</td></tr>
+    <tr><td>Debug button</td><td>D6</td><td><code>DEBUG_BUTTON_PIN = D6</code> (GP8)</td><td>other leg → GND; uses internal pull-up</td></tr>
     <tr><td>Ground</td><td>GND</td><td>—</td><td>common to shifter, 5&nbsp;V source, strip</td></tr>
     <tr><td>5&nbsp;V (test)</td><td>USB</td><td>—</td><td>VBUS, ~USB-limited; fine for a short low-brightness test</td></tr>
     <tr><td>Battery</td><td>BAT / JST</td><td>—</td><td>LiPo powers the Feather (wearable)</td></tr>
