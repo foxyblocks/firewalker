@@ -12,6 +12,7 @@ Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 // main strip). Lit solid by setupCore() in every mode.
 Adafruit_NeoPixel onboard(1, ONBOARD_PIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
+// ── Fire-trail engine ─────────────────────────────────────────────────────
 static uint32_t trailColor[TRAIL_LEN];
 
 struct Trail {
@@ -22,8 +23,6 @@ struct Trail {
 static Trail         trails[MAX_TRAILS];
 static uint8_t       activeCount = 0;
 static unsigned long lastStepMs  = 0;
-static int           latestFsrReading = 0;
-static bool          fsrArmed = true;
 
 static uint32_t fireColor(uint8_t d, uint8_t span) {
   if (span <= 1) return strip.Color(FIRE[0][0], FIRE[0][1], FIRE[0][2]);
@@ -51,12 +50,6 @@ static void showBootPixel() {
   strip.show();
 }
 
-static uint8_t fsrBrightness(int reading) {
-  int clamped = constrain(reading, FSR_ANALOG_MIN, FSR_ANALOG_MAX);
-  if (clamped <= FSR_ANALOG_MIN) return FSR_IDLE_MIN_BRIGHTNESS;
-  return map(clamped, FSR_ANALOG_MIN, FSR_ANALOG_MAX, FSR_IDLE_MIN_BRIGHTNESS, LED_BRIGHTNESS);
-}
-
 void setupCore(const __FlashStringHelper* modeName) {
   Serial.begin(SERIAL_BAUD);
   delay(200);
@@ -71,7 +64,6 @@ void setupCore(const __FlashStringHelper* modeName) {
     onboard.show();
   }
 
-  pinMode(FSR_PIN, INPUT);
   if (DEBUG_BUTTON_ENABLED) pinMode(DEBUG_BUTTON_PIN, INPUT_PULLUP);
 
   for (uint8_t d = 0; d < TRAIL_LEN; d++) trailColor[d] = fireColor(d, TRAIL_LEN);
@@ -88,56 +80,8 @@ void setupCore(const __FlashStringHelper* modeName) {
   Serial.print(LED_COUNT);
   Serial.print(F(" led pin="));
   Serial.print(LED_PIN);
-#if !defined(FIREWALKER_MODE_IMU_DEBUG)
-  // imu_debug doesn't use the FSR; it prints its own IMU banner instead.
-  Serial.print(F(" fsr pin="));
-  Serial.print(FSR_PIN);
-  Serial.print(F(" stomp threshold="));
-  Serial.print(FSR_STOMP_THRESHOLD);
-  Serial.print(F(" release threshold="));
-  Serial.print(FSR_RELEASE_THRESHOLD);
-#endif
-  Serial.print(F(" debug button="));
+  Serial.print(F(" button pin="));
   Serial.println(DEBUG_BUTTON_ENABLED ? DEBUG_BUTTON_PIN : -1);
-}
-
-bool sampleFsr() {
-  static unsigned long lastSampleMs = 0;
-
-  unsigned long now = millis();
-  if ((now - lastSampleMs) < FSR_SAMPLE_MS) return false;
-  lastSampleMs = now;
-
-  latestFsrReading = analogRead(FSR_PIN);
-  if (FSR_DEBUG) {
-    Serial.print(F("[firewalker] fsr raw="));
-    Serial.print(latestFsrReading);
-    Serial.print(F(" force="));
-    Serial.print(constrain(latestFsrReading, FSR_ANALOG_MIN, FSR_ANALOG_MAX) - FSR_ANALOG_MIN);
-    Serial.print(F(" brightness="));
-    Serial.print(fsrBrightness(latestFsrReading));
-    Serial.print(F(" armed="));
-    Serial.println(fsrArmed ? F("true") : F("false"));
-  }
-
-  return true;
-}
-
-bool fsrPressed() {
-  if (fsrArmed && latestFsrReading >= FSR_STOMP_THRESHOLD) {
-    fsrArmed = false;
-    Serial.print(F("[firewalker] fsr stomp @"));
-    Serial.println(latestFsrReading);
-    return true;
-  }
-
-  if (!fsrArmed && latestFsrReading <= FSR_RELEASE_THRESHOLD) {
-    fsrArmed = true;
-    Serial.print(F("[firewalker] fsr release @"));
-    Serial.println(latestFsrReading);
-  }
-
-  return false;
 }
 
 bool debugButtonPressed() {
@@ -156,7 +100,7 @@ bool debugButtonPressed() {
   if ((millis() - lastChangeMs) >= DEBUG_BUTTON_DEBOUNCE_MS && reading != stable) {
     stable = reading;
     if (DEBUG_BUTTON_LOG) {
-      Serial.print(F("[firewalker] debug button "));
+      Serial.print(F("[firewalker] button "));
       Serial.print(stable == LOW ? F("DOWN") : F("UP"));
       Serial.print(F(" @"));
       Serial.print(millis());
@@ -215,30 +159,29 @@ void advanceTrailsIfDue() {
   renderTrails();
 }
 
-// Fill the whole strip with the idle yellow, scaled to `brightness` expressed on
-// a 0..LED_BRIGHTNESS scale (channels are scaled directly rather than via
-// setBrightness so a caller can pass a level it computed itself). Shared by the
-// FSR and IMU idle visualisations.
+void resetTrails() {
+  for (uint8_t i = 0; i < MAX_TRAILS; i++) trails[i].active = false;
+  activeCount = 0;
+  strip.clear();
+  strip.show();
+}
+
+bool hasActiveTrails() { return activeCount > 0; }
+
+// Fill the whole strip with the idle color, scaled to `brightness` on a
+// 0..LED_BRIGHTNESS scale (channels scaled directly so a caller can pass a level
+// it computed itself). The imu_debug motion visual.
 void renderIdleBrightness(uint8_t brightness) {
   if (brightness > LED_BRIGHTNESS) brightness = LED_BRIGHTNESS;
   strip.setBrightness(LED_BRIGHTNESS);
   uint32_t color = strip.Color(
-      (uint16_t)FSR_IDLE_YELLOW_R * brightness / LED_BRIGHTNESS,
-      (uint16_t)FSR_IDLE_YELLOW_G * brightness / LED_BRIGHTNESS,
-      (uint16_t)FSR_IDLE_YELLOW_B * brightness / LED_BRIGHTNESS);
+      (uint16_t)IDLE_FILL_R * brightness / LED_BRIGHTNESS,
+      (uint16_t)IDLE_FILL_G * brightness / LED_BRIGHTNESS,
+      (uint16_t)IDLE_FILL_B * brightness / LED_BRIGHTNESS);
   for (uint16_t i = 0; i < LED_COUNT; i++) {
     strip.setPixelColor(i, color);
   }
   strip.show();
-}
-
-void renderFsrIdle() {
-  if (!FSR_IDLE_VISUAL_DEBUG) return;
-  renderIdleBrightness(fsrBrightness(latestFsrReading));
-}
-
-bool hasActiveTrails() {
-  return activeCount > 0;
 }
 
 }  // namespace Firewalker

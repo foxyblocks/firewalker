@@ -50,71 +50,75 @@ constexpr uint8_t ONBOARD_PIXEL_R = 255;           // warm amber, matching the f
 constexpr uint8_t ONBOARD_PIXEL_G = 60;
 constexpr uint8_t ONBOARD_PIXEL_B = 0;
 
-// ── FSR stomp sensor ────────────────────────────────────────────────────
-// Force-sensitive resistor voltage divider on Feather analog A0:
-// Observed behavior: baseline is roughly 100-300, hard pressure rises toward
-// 700-1000.
-constexpr uint8_t       FSR_PIN = A0;
-constexpr int           FSR_STOMP_THRESHOLD = 700;
-constexpr int           FSR_RELEASE_THRESHOLD = 400;
-constexpr unsigned long FSR_SAMPLE_MS = 50;
-
-// When no trails are active, show live FSR pressure as yellow strip brightness.
-// Map the observed FSR range to brightness: baseline/rest is roughly 100-300,
-// hard squeeze trends toward 700-1000.
-constexpr int           FSR_ANALOG_MIN = 100;
-constexpr int           FSR_ANALOG_MAX = 1000;
-constexpr uint8_t       FSR_IDLE_MIN_BRIGHTNESS = 3;
-constexpr uint8_t       FSR_IDLE_YELLOW_R = 255;
-constexpr uint8_t       FSR_IDLE_YELLOW_G = 200;
-constexpr uint8_t       FSR_IDLE_YELLOW_B = 0;
-
-#if defined(FIREWALKER_MODE_FSR_DEBUG)
-constexpr bool FSR_DEBUG = true;
-constexpr bool FSR_IDLE_VISUAL_DEBUG = true;
-#elif defined(FIREWALKER_MODE_FINAL_APP)
-constexpr bool FSR_DEBUG = false;
-constexpr bool FSR_IDLE_VISUAL_DEBUG = false;
-#elif defined(FIREWALKER_MODE_IMU_DEBUG)
-// imu_debug drives the strip from the MPU-6050, not the FSR. The FSR analog
-// path is left unused (and its debug logging off) in this mode.
-constexpr bool FSR_DEBUG = false;
-constexpr bool FSR_IDLE_VISUAL_DEBUG = false;
-#else
-#error "Define one Firewalker mode: FIREWALKER_MODE_FINAL_APP, FIREWALKER_MODE_FSR_DEBUG, or FIREWALKER_MODE_IMU_DEBUG"
-#endif
-
-// ── IMU stomp sensor (MPU-6050 / GY-521) ────────────────────────────────
+// ── IMU motion sensor (MPU-6050 / GY-521) ───────────────────────────────
 // GY-521 breakout (MPU-6050: 3-axis accel + 3-axis gyro) read over I2C on the
-// Feather's SDA/SCL pins. Candidate replacement for the FSR — only the
-// imu_debug mode uses it today (see docs/wiring-mpu6050.md). The Adafruit
-// MPU6050 library reports acceleration in m/s^2 *including* gravity, so at rest
-// the total magnitude sits near 9.81; a stomp/step is a spike well above it.
+// Feather's SDA/SCL pins — the shoe's motion sensor, used by the app
+// (final_app) and imu_debug (see docs/wiring-mpu6050.md). The Adafruit MPU6050
+// library reports acceleration in m/s^2 *including* gravity, so at rest the
+// total magnitude sits near 9.81; a stomp/step is a spike well above it.
 constexpr uint8_t       IMU_I2C_ADDR = 0x68;   // AD0 low; 0x69 if AD0 tied high
 constexpr unsigned long IMU_SAMPLE_MS = 20;    // ~50 Hz accel/gyro poll
 constexpr unsigned long IMU_LOG_MS = 100;      // throttle verbose serial to ~10 Hz
 constexpr float         IMU_GRAVITY = 9.81f;   // rest |accel| baseline (m/s^2)
 
 // Stomp detect on total acceleration magnitude with hysteresis + a refractory
-// gap, mirroring the FSR's arm/release. Starting points to tune on a real foot.
+// gap. Starting points to tune on a real foot (see open-questions.md).
 constexpr float         IMU_STOMP_ACCEL_THRESHOLD   = 18.0f;  // fire above this |accel|
 constexpr float         IMU_RELEASE_ACCEL_THRESHOLD = 12.0f;  // re-arm below this |accel|
 constexpr unsigned long IMU_REFRACTORY_MS = 250;              // min gap between stomps
 
-// Idle visual: map movement intensity (|accel| - gravity) to the idle yellow
-// brightness, reusing the FSR idle palette/brightness floor so the strip shows
-// how hard the IMU is being shaken while watching the serial monitor.
+// imu_debug motion visual: map movement intensity (|accel| - gravity) to the
+// idle fill brightness so the strip shows how hard the IMU is being shaken.
 constexpr float         IMU_ACCEL_DELTA_MIN = 0.5f;   // below this reads as "still"
 constexpr float         IMU_ACCEL_DELTA_MAX = 12.0f;  // saturates idle brightness here
 
-// ── Debug button ────────────────────────────────────────────────────────
-// Momentary button wired between Feather RP2040 silk D6 and GND, using the
-// internal pull-up. Kept alongside the FSR so trails can still be triggered
-// during bench testing without pressing the shoe sensor.
+// ── Idle fill (imu_debug visual) ─────────────────────────────────────────
+// imu_debug fills the strip a solid color scaled by motion (the app uses the
+// flow / fire-trail patterns instead).
+constexpr uint8_t IDLE_MIN_BRIGHTNESS = 3;   // floor so a still IMU still glows faintly
+constexpr uint8_t IDLE_FILL_R = 255;         // warm yellow
+constexpr uint8_t IDLE_FILL_G = 200;
+constexpr uint8_t IDLE_FILL_B = 0;
+
+// ── Flow pattern (orientation-driven magenta pooling) ────────────────────
+// All pixels magenta at a half baseline; tilt redistributes brightness toward
+// the down-end; a stomp doubles brightness then eases back. See ADR-0002/0003.
+constexpr uint8_t FLOW_COLOR_R = 255;        // magenta
+constexpr uint8_t FLOW_COLOR_G = 0;
+constexpr uint8_t FLOW_COLOR_B = 255;
+constexpr float   FLOW_BASELINE = 0.5f;      // resting per-pixel level (0..1); half so a stomp can double
+constexpr float   FLOW_GAIN     = 1.0f;      // how strongly tilt redistributes brightness
+constexpr float   FLOW_STOMP_PEAK   = 2.0f;  // stomp multiplies current brightness by this
+constexpr float   FLOW_STOMP_TAU_MS = 120.0f;// ease-out time constant (~3·tau ≈ 360 ms settle)
+
+// Strip-as-loop geometry: heel→toe→heel, so the toe is mid-strip and the heel is
+// at both ends. The apex index is a measured constant (count it on the bench;
+// the two sides may not have equal pixel counts). See CONTEXT.md (Strip).
+constexpr uint8_t FLOW_TOE_INDEX = (LED_COUNT - 1) / 2;  // ~19 — confirm on hardware
+
+// Orientation → fore-aft tilt. Mount: Feather on its side on the outer ankle,
+// USB→heel, GY-521 co-mounted. At rest (board on its side) one in-plane accel
+// axis reads ~gravity (the "up" axis) and the heel↔toe axis reads ~0; pitching
+// the foot is rotation about the board normal, so the gyro's normal axis is the
+// pitch rate. These axis indices/signs (0=X,1=Y,2=Z) are a GUESS — confirm with
+// imu_debug (watch which axis tracks heel↔toe) and flip a sign if flow runs
+// backward. See open-questions.md.
+constexpr uint8_t FLOW_FOREAFT_AXIS   = 0;     // accel axis along heel↔toe
+constexpr float   FLOW_FOREAFT_SIGN   = 1.0f;  // + so toe-down pools toward the toe
+constexpr uint8_t FLOW_VERTICAL_AXIS  = 1;     // accel axis ~vertical at rest
+constexpr float   FLOW_VERTICAL_SIGN  = 1.0f;
+constexpr uint8_t FLOW_PITCH_GYRO_AXIS = 2;    // gyro axis = pitch rate (board normal)
+constexpr float   FLOW_PITCH_GYRO_SIGN = 1.0f;
+constexpr float   FLOW_FILTER_ALPHA  = 0.96f;  // complementary-filter weight on the gyro term
+constexpr float   FLOW_TILT_FULL_DEG = 35.0f;  // tilt angle that saturates the gradient
+
+// ── D6 button ────────────────────────────────────────────────────────────
+// Momentary button between Feather silk D6 and GND, internal pull-up. In the
+// app it cycles patterns; in imu_debug it's a bench input.
 constexpr bool          DEBUG_BUTTON_ENABLED = true;
 constexpr uint8_t       DEBUG_BUTTON_PIN = D6;
 constexpr unsigned long DEBUG_BUTTON_DEBOUNCE_MS = 30;
-constexpr bool          DEBUG_BUTTON_LOG = FSR_DEBUG;
+constexpr bool          DEBUG_BUTTON_LOG = false;
 
 // ── Trail color (fire gradient) ─────────────────────────────────────────────
 // Palette stops from the hot head to the cool tail, as plain R/G/B. The shared

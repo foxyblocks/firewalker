@@ -4,43 +4,44 @@ Wearable NeoPixel LED-shoe firmware. **PlatformIO + Arduino framework** (see
 `docs/adr/0001-use-platformio-arduino-framework.md`). Current board: Adafruit
 Feather RP2040.
 
-**Current phase: FSR-triggered animation, evaluating an IMU trigger.** Drive 39
-pixels of one WS2812B strip; an FSR voltage divider on Feather A0 drives a
-non-blocking, stacking fire-trail animation in `final_app`, with a D6 debug
-button kept for bench testing. `fsr_debug` maps live FSR pressure to idle yellow
-brightness and keeps the D6 button available for trail testing. `imu_debug`
-exercises a GY-521 / MPU-6050 accelerometer+gyro over I2C as a candidate stomp
-trigger to replace the FSR: it logs motion, fires trails from acceleration
-spikes, and shows movement intensity as idle brightness. The onboard NeoPixel
-lights solid in every mode as a power/running indicator. Out of scope (still): wiring
-the IMU into `final_app`, multiple strips, wireless. Don't over-engineer ahead
-of working hardware.
+**Current phase: IMU-driven, runtime light patterns.** Drive 39 pixels of one
+WS2812B strip from a GY-521 / MPU-6050 IMU (I2C). The app (`final_app`) runs
+runtime-switchable **patterns** — `flow` (magenta pooling gradient driven by
+fused fore-aft tilt; a stomp doubles brightness then eases back) and `fire-trail`
+(stomp-spawned fire bands). **D6 cycles patterns**; it boots into `flow`. A stomp
+is an IMU acceleration spike. `imu_debug` logs accel/gyro + fused tilt and mirrors
+tilt as strip brightness for bench calibration. The onboard NeoPixel lights solid
+in every mode. The FSR is retired (see `docs/adr/0002`). Out of scope (still):
+the 2-D "perimeter bubble" flow, multiple strips, wireless. Don't over-engineer
+ahead of working hardware.
 
 ## Project map
 
-- `include/config.h` — all hardware knobs (pin, count, brightness, baud, color).
-  Never hard-code these in mode files.
+- `include/config.h` — all hardware/behavior knobs (pin, count, brightness, IMU,
+  flow, fusion axes). Never hard-code these in source files.
 - `src/main.cpp` — tiny Arduino dispatcher into the selected mode.
-- `src/modes/` — runtime modes (`final_app`, `fsr_debug`, `imu_debug`). The
-  MPU-6050 driver is only linked into `imu_debug`; its `.cpp` body is `#if`-gated
-  on the mode so the other envs don't compile it.
-- `src/firewalker_core.cpp` — shared strip, FSR, debug-button, onboard-LED, and
-  trail logic (sensor-agnostic; the IMU code lives in the `imu_debug` mode).
+- `src/modes/` — compile-time builds (`final_app`, `imu_debug`), chosen by
+  `platformio.ini` build flags via `include/modes/mode_select.h`.
+- `src/patterns/` — runtime visual behaviors (`flow`, `fire_trail`) behind the
+  `Pattern` interface (`include/patterns/pattern.h`).
+- `src/firewalker_imu.cpp` — shared IMU service: read, complementary-filter tilt,
+  stomp detect. Used by the app and `imu_debug`.
+- `src/firewalker_core.cpp` — shared strip, onboard pixel, D6 button, fire-trail
+  engine, idle fill.
 - `CONTEXT.md` — domain glossary; reuse these terms.
-- `docs/wiring.md`, `docs/wiring-mpu6050.html`, `docs/wiring-extra-effort.html`,
-  `docs/power-budget.md` — current minimal (FSR) wiring, the MPU-6050 IMU wiring,
-  protective reference wiring, and current math.
-- `docs/open-questions.md` — unresolved hardware facts (don't bury uncertainty
-  in code comments; record it here).
+- `docs/wiring-mpu6050.html`, `docs/wiring.md`, `docs/wiring-extra-effort.html`,
+  `docs/power-budget.md` — IMU wiring, legacy minimal wiring, protective
+  reference wiring, current math.
+- `docs/open-questions.md` — unresolved hardware facts + the bench-calibration
+  checklist (axes/signs, toe-apex index, thresholds).
 - `docs/adr/` — durable decisions.
 
 ## Build / upload / monitor
 
 ```bash
 pio run                              # build default final_app mode
-pio run -e final_app -t upload       # flash finalized behavior
-pio run -e fsr_debug -t upload       # flash FSR sensor debug behavior
-pio run -e imu_debug -t upload       # flash MPU-6050 IMU debug behavior
+pio run -e final_app -t upload       # flash the app (flow + fire-trail patterns)
+pio run -e imu_debug -t upload       # flash the IMU bench/calibration build
 pio device monitor -e imu_debug      # watch debug logs at 115200 baud
 ```
 

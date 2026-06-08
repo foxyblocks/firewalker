@@ -4,14 +4,21 @@ Wearable LED-shoe firmware, inspired by Adafruit's Gemma LED Sneakers /
 Firewalker guide. Built with **PlatformIO + Arduino framework** in VS Code (not
 the Arduino IDE).
 
-> **Status:** FSR-triggered animation on the Feather RP2040 rig. The firmware drives
-> **39 pixels** of one WS2812B strip: each pressure stomp launches a **fire
-> trail** — a band that travels bottom→top with a hot head cooling through
-> orange to a deep-red tail, wiping in at the bottom and out at the top.
-> Presses stack into several trails at once. The FSR is the current stomp sensor,
-> with a D6 debug button kept for bench testing; an `imu_debug` mode evaluates a
-> GY-521 / MPU-6050 accelerometer+gyro over I2C as a candidate replacement. No
-> wireless yet. The onboard NeoPixel lights solid in every mode as a power indicator.
+> **Status:** IMU-driven, runtime light **patterns** on the Feather RP2040 rig,
+> across **39 pixels** of one WS2812B strip. A GY-521 / MPU-6050 (accel + gyro,
+> I2C) is the motion sensor. The app runs two patterns and **D6 cycles** between
+> them (boots into `flow`):
+>
+> - **flow** — the strip glows magenta and "pools": brightness ramps toward
+>   whichever end of the foot tilts down (the strip loops heel→toe→heel, so the
+>   toe is mid-strip). A **stomp** (acceleration spike) doubles brightness, then
+>   eases back.
+> - **fire-trail** — each stomp launches a fire-gradient band that climbs the
+>   strip; several stack at once.
+>
+> The onboard NeoPixel lights solid in every mode as a power indicator. The FSR
+> is retired ([ADR-0002](docs/adr/0002-runtime-patterns-imu-default.md)); no
+> wireless yet.
 
 ## Hardware
 
@@ -20,92 +27,75 @@ the Arduino IDE).
 | Board | Adafruit Feather RP2040 |
 | LED strip | WS2812B, `NEO_GRB` + 800 KHz |
 | Data pin | Feather **D5** → strip DIN (direct, no level shifter on current rig) |
-| Pixels driven | 39 (current strip length) |
-| Stomp sensor | FSR voltage divider on Feather **A0** |
-| IMU (optional) | GY-521 / MPU-6050 over I2C (**SDA**/**SCL**, 3V3) — used by `imu_debug` |
-| Debug trigger | Momentary button from Feather **D6** → GND (`INPUT_PULLUP`) |
+| Pixels driven | 39 (strip loops heel→toe→heel) |
+| Motion sensor | GY-521 / MPU-6050 over I2C (**SDA**/**SCL**, 3V3) |
+| Pattern cycle | Momentary button from Feather **D6** → GND (`INPUT_PULLUP`) |
 | Status light | Onboard **NeoPixel** (GP16), lit solid in every mode |
 | Power | Feather **USB/VBUS** → strip 5V, common ground — current scales with brightness × pixels lit (see [`docs/power-budget.md`](docs/power-budget.md)) |
 
-See [`docs/wiring.md`](docs/wiring.md) for the current minimal (FSR) wiring,
-[`docs/wiring-mpu6050.html`](docs/wiring-mpu6050.html) for the MPU-6050 IMU
-wiring, [`docs/wiring-extra-effort.html`](docs/wiring-extra-effort.html) for the
+See [`docs/wiring-mpu6050.html`](docs/wiring-mpu6050.html) for the IMU wiring,
+[`docs/wiring.md`](docs/wiring.md) for the base strip/button wiring,
+[`docs/wiring-extra-effort.html`](docs/wiring-extra-effort.html) for the
 level-shifter/resistor reference, and
 [`docs/open-questions.md`](docs/open-questions.md) for unresolved hardware
-decisions.
+decisions and the bench-calibration checklist.
 
 ## Quick start
 
 ```bash
-# Build the default final app mode
+# Build the default app (flow + fire-trail patterns)
 pio run
 
-# Upload the final app mode to a connected Feather RP2040
+# Upload the app to a connected Feather RP2040
 pio run -e final_app -t upload
 
-# Upload the FSR sensor debug mode
-pio run -e fsr_debug -t upload
-
-# Upload the MPU-6050 IMU debug mode
+# Upload the IMU bench/calibration build
 pio run -e imu_debug -t upload
 
-# Watch serial output for the active mode (115200 baud)
-pio device monitor -e fsr_debug
+# Watch serial output for the active build (115200 baud)
+pio device monitor -e imu_debug
 ```
 
-Expected final app serial output:
+Expected app serial output (boots into `flow`; D6 cycles patterns):
 
 ```
 [firewalker] mode=final_app
-[firewalker] pixels=39 led pin=7 fsr pin=26 stomp threshold=700 release threshold=400 debug button=8
-[firewalker] fsr stomp @728
-[firewalker] stomp -> trail (1 active)
-...
+[firewalker] pixels=39 led pin=7 button pin=8
+[firewalker] mpu6050 ready @0x68
+[firewalker] imu stomp |a|>=18.00 release<=12.00 tilt axis(accel fwd=0 up=1 gyro=2)
+[firewalker] pattern -> flow
+[firewalker] pattern -> fire-trail
 ```
 
-Expected FSR debug serial output:
+In the app, `flow` fills the strip magenta and pools toward the down-end as you
+tilt the shoe; a stomp (a sharp acceleration spike) flashes the strip and eases
+back. Press **D6** to switch to `fire-trail`, where each stomp launches a climbing
+fire band. With no IMU connected the strip still shows `flow`'s flat magenta
+baseline (no tilt, no stomps).
 
-```
-[firewalker] mode=fsr_debug
-[firewalker] pixels=39 led pin=7 fsr pin=26 stomp threshold=700 release threshold=400 debug button=8
-[firewalker] fsr raw=728 force=628 brightness=72 armed=true
-[firewalker] stomp -> trail (1 active)
-...
-```
+### Calibrating with `imu_debug`
 
-In `final_app`, the strip is dark except for the green boot pixel until the FSR
-or D6 debug button launches a fire trail.
-
-In `fsr_debug`, the FSR only controls the idle yellow brightness. The D6 debug
-button still launches fire trails for animation testing.
-
-When no trails are active, the whole strip lights yellow with brightness mapped
-from the current FSR reading. Baseline is roughly 100-300; hard pressure trends
-toward 700-1000, so a hard squeeze trends brighter. This makes FSR pressure
-visible while watching the serial monitor.
-
-In `imu_debug`, a GY-521 / MPU-6050 is read over I2C (see
-[`docs/wiring-mpu6050.html`](docs/wiring-mpu6050.html)). It logs raw accel/gyro,
-fires a fire trail when total acceleration spikes past the stomp threshold
-(re-arming with hysteresis), and otherwise maps movement intensity to idle
-brightness — so shaking the board lights the strip. The D6 button still spawns
-trails, so the animation works even if the IMU is absent.
+`imu_debug` logs the raw accel/gyro, the fused tilt, and stomp events, and mirrors
+tilt as strip brightness — so you can confirm the axis mapping by eye and set the
+`FLOW_*` axes/signs and stomp thresholds in `include/config.h` (see the checklist
+in [`docs/open-questions.md`](docs/open-questions.md)).
 
 ```
 [firewalker] mode=imu_debug
-[firewalker] pixels=39 led pin=7 debug button=8
+[firewalker] pixels=39 led pin=7 button pin=8
 [firewalker] mpu6050 ready @0x68
-[firewalker] imu a=(0.12,-0.34,9.79) |a|=9.80 g=(0.01,0.00,-0.02) armed=true
-[firewalker] imu stomp @24.13
-[firewalker] stomp -> trail (1 active)
+[firewalker] imu stomp |a|>=18.00 release<=12.00 tilt axis(accel fwd=0 up=1 gyro=2)
+[firewalker] imu a=(0.12,-0.34,9.79) |a|=9.80 g=(0.01,0.00,-0.02) tilt=0.04 armed=true
+[firewalker] imu stomp
 ...
 ```
 
 ## ⚠️ Power safety
 
-Current scales with **brightness × pixels lit**, and trails stack — so the
-worst case is the whole strip lit by overlapping trails. Before running
-brighter, longer, or with more pixels, read
+Current scales with **brightness × pixels lit**. `flow` is magenta (a 2-channel
+color), so at `LED_BRIGHTNESS = 100` a near-level stomp can momentarily light the
+whole strip ~612 mA — over the USB budget (a known, accepted brownout risk for
+the bench demo). Before running brighter/longer, read
 [`docs/power-budget.md`](docs/power-budget.md) and use a dedicated 5V strip
 supply with grounds tied together.
 
