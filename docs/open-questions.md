@@ -24,19 +24,32 @@ get decided deliberately. Resolve → move the decision into `wiring.md`,
 
 - Mounting: how/where does the strip attach to the shoe, and how is the
   controller + battery enclosed and strain-relieved?
-- FSR placement: heel, ball of foot, or another pressure point? This changes the
-  real rest/stomp readings and thresholds.
 - Connector strategy for removing electronics before washing?
 
-## Behavior (later — out of current scope)
+## IMU calibration (bench — Feather is connected)
 
-- FSR calibration: what are the actual rest, walking, and stomp readings once
-  the sensor is mounted in the shoe?
-- FSR vs IMU: does the GY-521 / MPU-6050 (`imu_debug`) detect stomps more
-  reliably than the FSR? If so, wire it into `final_app` and retire the FSR path.
-- IMU calibration: what acceleration magnitude does a real foot stomp/step
-  produce when the board is shoe-mounted? Tune `IMU_STOMP_ACCEL_THRESHOLD` /
-  `IMU_RELEASE_ACCEL_THRESHOLD` / `IMU_REFRACTORY_MS` from that. Is bare
-  magnitude enough, or is gyro / a smarter step-detect needed to reject walking?
-- IMU mount orientation on the shoe (which axis sees the impact)?
-- Desired animations and their power profile once the above is settled?
+The IMU is the stomp sensor (the FSR is retired). These constants are baked in
+`config.h` from a known mount (Feather on its side on the outer ankle, USB toward
+the heel; GY-521 co-mounted), but the exact axis/sign/values need a bench pass
+with `imu_debug`:
+
+- **Stomp thresholds**: what `|a|` does a real foot stomp/step produce when
+  shoe-mounted? Tune `IMU_STOMP_ACCEL_THRESHOLD` / `IMU_RELEASE_ACCEL_THRESHOLD`
+  / `IMU_REFRACTORY_MS`. Is bare magnitude enough, or is a smarter step-detect
+  needed to reject ordinary walking?
+- **Flow tilt axis + sign**: which accel axis runs heel↔toe (drives pooling),
+  which gyro axis is the pitch rate for the complementary filter, and the signs.
+  Confirm/flip from a resting `imu_debug` capture.
+- **Toe-apex pixel index**: the strip loops heel→toe→heel, so the toe is mid-strip.
+  Count the exact apex index (and whether the two sides have equal pixel counts)
+  for the fore-aft position map.
+- **Complementary-filter constant** and **max-tilt angle** that saturates the
+  flow gradient — feel-tuned on the bench.
+
+## Power / behavior
+
+- The **flow** pattern is magenta (2 channels). At `LED_BRIGHTNESS = 100` a
+  near-level stomp can momentarily light the whole strip full magenta (~612 mA),
+  over the USB budget — accepted risk for the bench demo; revisit (brightness cap
+  or external 5 V) if it browns out. See `power-budget.md`.
+- Desired animations and their power profile once the wearable power plan is set.

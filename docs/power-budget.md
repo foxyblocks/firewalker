@@ -31,6 +31,14 @@ sits **right at the practical USB budget** — heavy trigger-mashing can brown o
 or flicker. A single `TRAIL_LEN = 30` band is ~360 mA (under, but not by much).
 White at this brightness is far over — which is why the palette avoids it.
 
+The **flow** pattern is magenta — a **2-channel** color (R + B), pricier than
+the fire palette. At brightness `100`, a magenta pixel is ~15.7 mA, so a full
+strip is **~612 mA** — *over* USB. Flow rests at a half-brightness baseline
+(~305 mA, fine), but a stomp near level momentarily drives the whole strip to
+full magenta (~612 mA). On USB that's an accepted brownout risk for the bench
+demo; cap brightness (~64 keeps the worst case ~390 mA) or move to a dedicated
+5 V supply to run it bright and safe.
+
 ## Levers to stay safe on USB
 
 - Lower `LED_BRIGHTNESS`, shorten `TRAIL_LEN`, or drop `MAX_TRAILS`.
