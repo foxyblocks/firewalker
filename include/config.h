@@ -89,7 +89,7 @@ constexpr uint8_t FLOW_COLOR_B = 255;
 constexpr float   FLOW_BASELINE = 0.5f;      // resting per-pixel level (0..1); half so a stomp can double
 constexpr float   FLOW_GAIN     = 1.0f;      // how strongly tilt redistributes brightness
 constexpr float   FLOW_STOMP_PEAK   = 2.0f;  // stomp multiplies current brightness by this
-constexpr float   FLOW_STOMP_TAU_MS = 120.0f;// ease-out time constant (~3·tau ≈ 360 ms settle)
+constexpr float   FLOW_STOMP_TAU_MS = 270.0f;// ease-out time constant (~3·tau ≈ 800 ms fade)
 
 // Strip-as-loop geometry: heel→toe→heel, so the toe is mid-strip and the heel is
 // at both ends. The apex index is a measured constant (count it on the bench;
@@ -115,6 +115,9 @@ constexpr uint8_t FLOW_PITCH_GYRO_AXIS = 2;     // gyro Z = pitch rate (board no
 constexpr float   FLOW_PITCH_GYRO_SIGN = 1.0f;
 constexpr float   FLOW_FILTER_ALPHA  = 0.96f;  // complementary-filter weight on the gyro term
 constexpr float   FLOW_TILT_FULL_DEG = 35.0f;  // tilt angle that saturates the gradient
+// Ignore tiny tilts near level (mount offset / wobble) so the strip rests flat;
+// past the deadzone the remaining range is rescaled to still reach full pooling.
+constexpr float   FLOW_TILT_DEADZONE = 0.12f;  // normalized tilt (0..1)
 
 // ── D6 button ────────────────────────────────────────────────────────────
 // Momentary button between Feather silk D6 and GND, internal pull-up. In the

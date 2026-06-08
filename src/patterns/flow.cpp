@@ -44,9 +44,19 @@ void FlowPattern::update(const PatternInput& in) {
     if (stompEnv_ < 1.001f) stompEnv_ = 1.0f;
   }
 
+  // Deadzone: ignore tiny tilts near level (mount offset / wobble) so the strip
+  // rests flat, then rescale the remainder so full tilt still reaches full pooling.
+  float tilt = in.tiltFwd;
+  float at = fabsf(tilt);
+  if (at <= FLOW_TILT_DEADZONE) {
+    tilt = 0.0f;
+  } else {
+    float scaled = (at - FLOW_TILT_DEADZONE) / (1.0f - FLOW_TILT_DEADZONE);
+    tilt = (tilt < 0.0f) ? -scaled : scaled;
+  }
+
   // Pooling gradient: baseline magenta everywhere; tilt redistributes brightness
   // toward the down-end. At level (tilt=0) every pixel sits at the baseline.
-  float tilt = in.tiltFwd;
   for (uint16_t i = 0; i < LED_COUNT; i++) {
     float b = FLOW_BASELINE + tilt * FLOW_GAIN * (pos_[i] - 0.5f);
     b *= stompEnv_;
