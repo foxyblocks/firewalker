@@ -103,11 +103,15 @@ constexpr uint8_t FLOW_TOE_INDEX = (LED_COUNT - 1) / 2;  // ~19 — confirm on h
 // pitch rate. These axis indices/signs (0=X,1=Y,2=Z) are a GUESS — confirm with
 // imu_debug (watch which axis tracks heel↔toe) and flip a sign if flow runs
 // backward. See open-questions.md.
-constexpr uint8_t FLOW_FOREAFT_AXIS   = 0;     // accel axis along heel↔toe
-constexpr float   FLOW_FOREAFT_SIGN   = 1.0f;  // + so toe-down pools toward the toe
-constexpr uint8_t FLOW_VERTICAL_AXIS  = 1;     // accel axis ~vertical at rest
+// Confirmed on the bench (imu_debug) for the ankle mount, Feather long-axis
+// vertical / USB up, chip side out: at rest gravity sits on +Y (~9.84); pitching
+// toe-down swings ax to ~-5.8 (X = heel↔toe) while Z (~0) is the lateral board
+// normal. Fore-aft sign is negative so toe-down → +tilt → pools toward the toe.
+constexpr uint8_t FLOW_FOREAFT_AXIS   = 0;      // accel X = heel↔toe
+constexpr float   FLOW_FOREAFT_SIGN   = -1.0f;  // toe-down → +tilt (pools toward the toe)
+constexpr uint8_t FLOW_VERTICAL_AXIS  = 1;      // accel Y = vertical at rest
 constexpr float   FLOW_VERTICAL_SIGN  = 1.0f;
-constexpr uint8_t FLOW_PITCH_GYRO_AXIS = 2;    // gyro axis = pitch rate (board normal)
+constexpr uint8_t FLOW_PITCH_GYRO_AXIS = 2;     // gyro Z = pitch rate (board normal)
 constexpr float   FLOW_PITCH_GYRO_SIGN = 1.0f;
 constexpr float   FLOW_FILTER_ALPHA  = 0.96f;  // complementary-filter weight on the gyro term
 constexpr float   FLOW_TILT_FULL_DEG = 35.0f;  // tilt angle that saturates the gradient
