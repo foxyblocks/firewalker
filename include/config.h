@@ -80,16 +80,24 @@ constexpr uint8_t IDLE_FILL_R = 255;         // warm yellow
 constexpr uint8_t IDLE_FILL_G = 200;
 constexpr uint8_t IDLE_FILL_B = 0;
 
-// ── Flow pattern (orientation-driven magenta pooling) ────────────────────
-// All pixels magenta at a half baseline; tilt redistributes brightness toward
-// the down-end; a stomp doubles brightness then eases back. See ADR-0002/0003.
-constexpr uint8_t FLOW_COLOR_R = 255;        // magenta
-constexpr uint8_t FLOW_COLOR_G = 0;
-constexpr uint8_t FLOW_COLOR_B = 255;
-constexpr float   FLOW_BASELINE = 0.30f;     // resting per-pixel level (0..1) — dim magenta at level
-constexpr float   FLOW_GAIN     = 2.0f;      // tilt redistribution strength — higher = more drastic on/off
-constexpr float   FLOW_STOMP_LEVEL  = 1.0f;  // stomp flashes every pixel to this absolute level (1.0 = full)
-constexpr float   FLOW_STOMP_TAU_MS = 400.0f;// ease-out time constant (~3·tau ≈ 1.2 s fade)
+// ── Flow pattern (pooling + spectrum cycle + stomp trails) ───────────────
+// The whole strip shares one hue that slowly rotates through the spectrum; tilt
+// pools brightness toward the down-end (dim baseline + drastic gain → strong
+// on/off). A stomp launches trails from the tilt-derived "down" point. See
+// ADR-0002/0003 and CONTEXT.md (Flow).
+constexpr float   FLOW_BASELINE = 0.30f;  // resting per-pixel brightness (0..1) — dim at level
+constexpr float   FLOW_GAIN     = 2.0f;   // tilt redistribution strength — higher = more drastic on/off
+
+constexpr unsigned long FLOW_HUE_CYCLE_MS = 45000;  // ms for one full spectrum rotation
+
+// Stomp trails: each stomp launches up to 4 fronts from the tilt-derived "down"
+// point (toe-down→toe, heel-down→heels, flat→mid-foot ~25%/75%), each diverging
+// along its side to the heel and toe ends. Band gradient: white head → current
+// hue (full) → the previous hue in the rotation.
+constexpr float    FLOW_TRAIL_SPEED_PXPS = 45.0f;  // front travel speed (pixels/sec)
+constexpr uint8_t  FLOW_TRAIL_LEN        = 12;     // band length (pixels)
+constexpr uint16_t FLOW_TRAIL_PREV_HUE   = 7300;   // tail hue step back (~40° on the 0..65535 wheel)
+constexpr uint8_t  FLOW_MAX_FRONTS       = 16;     // 4 per stomp; supports ~4 concurrent stomps
 
 // Strip-as-loop geometry: heel→toe→heel, so the toe is mid-strip and the heel is
 // at both ends. The apex index is a measured constant (count it on the bench;

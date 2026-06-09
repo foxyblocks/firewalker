@@ -18,10 +18,12 @@ code, issues, and docs rather than drifting to synonyms.
   "animation mode".
 - **Fire-trail** — the Pattern where each **stomp** spawns a **trail** (a fire
   gradient band) that climbs the strip; several stack at once.
-- **Flow** — the Pattern where the strip glows uniform magenta and "pools":
-  brightness ramps toward whichever end tilts down, tracking the shoe's
-  **orientation**. A **stomp** briefly flashes the strip brighter, then fades
-  back.
+- **Flow** — the Pattern where the strip shares one hue that slowly rotates
+  through the spectrum and "pools": brightness ramps toward whichever end tilts
+  down, tracking the shoe's **orientation**. A **stomp** launches **trail**
+  fronts from the tilt-derived "down" point — up to 4 bands (2 per side)
+  diverging to the heel and toe ends, each a white head → current hue → previous
+  hue.
 - **Strip** — one addressable WS2812B LED strip (39 pixels, single data pin).
   Routed as a **loop** around the foot: it starts at the heel, runs to the toe up
   one side, wraps the toe, and returns to the heel down the other side — so the

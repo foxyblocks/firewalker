@@ -6,9 +6,10 @@ Feather RP2040.
 
 **Current phase: IMU-driven, runtime light patterns.** Drive 39 pixels of one
 WS2812B strip from a GY-521 / MPU-6050 IMU (I2C). The app (`final_app`) runs
-runtime-switchable **patterns** — `flow` (magenta pooling gradient driven by
-fused fore-aft tilt; a stomp doubles brightness then eases back) and `fire-trail`
-(stomp-spawned fire bands). **D6 cycles patterns**; it boots into `flow`. A stomp
+runtime-switchable **patterns** — `flow` (a slowly spectrum-cycling hue pooled
+toward the down-end by fused fore-aft tilt; a stomp launches 4 diverging trail
+fronts from the down-point) and `fire-trail` (stomp-spawned fire bands).
+**D6 cycles patterns**; it boots into `flow`. A stomp
 is an IMU acceleration spike. `imu_debug` logs accel/gyro + fused tilt and mirrors
 tilt as strip brightness for bench calibration. The onboard NeoPixel lights solid
 in every mode. The FSR is retired (see `docs/adr/0002`). Out of scope (still):

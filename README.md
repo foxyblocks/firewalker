@@ -9,10 +9,12 @@ the Arduino IDE).
 > I2C) is the motion sensor. The app runs two patterns and **D6 cycles** between
 > them (boots into `flow`):
 >
-> - **flow** — the strip glows magenta and "pools": brightness ramps toward
->   whichever end of the foot tilts down (the strip loops heel→toe→heel, so the
->   toe is mid-strip). A **stomp** (acceleration spike) doubles brightness, then
->   eases back.
+> - **flow** — the strip shares one hue that slowly rotates through the spectrum
+>   and "pools": brightness ramps toward whichever end of the foot tilts down
+>   (the strip loops heel→toe→heel, so the toe is mid-strip). A **stomp**
+>   (acceleration spike) launches trail fronts from the down-point — up to 4
+>   bands diverging around each side to the heel and toe, a white head fading
+>   through the current hue to the previous one.
 > - **fire-trail** — each stomp launches a fire-gradient band that climbs the
 >   strip; several stack at once.
 >
@@ -67,11 +69,11 @@ Expected app serial output (boots into `flow`; D6 cycles patterns):
 [firewalker] pattern -> fire-trail
 ```
 
-In the app, `flow` fills the strip magenta and pools toward the down-end as you
-tilt the shoe; a stomp (a sharp acceleration spike) flashes the strip and eases
-back. Press **D6** to switch to `fire-trail`, where each stomp launches a climbing
-fire band. With no IMU connected the strip still shows `flow`'s flat magenta
-baseline (no tilt, no stomps).
+In the app, `flow` cycles one hue slowly through the spectrum and pools brightness
+toward the down-end as you tilt the shoe; a stomp (a sharp acceleration spike)
+launches diverging trail fronts from the down-point. Press **D6** to switch to
+`fire-trail`, where each stomp launches a climbing fire band. With no IMU
+connected the strip still shows `flow`'s flat baseline (no tilt, no stomps).
 
 ### Calibrating with `imu_debug`
 
