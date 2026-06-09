@@ -29,19 +29,19 @@ const __FlashStringHelper* FlowPattern::name() const { return F("flow"); }
 
 void FlowPattern::enter() {
   if (!built_) buildPositions();
-  stompEnv_ = 1.0f;
+  flashEnv_ = 0.0f;
   strip.setBrightness(LED_BRIGHTNESS);
 }
 
 void FlowPattern::update(const PatternInput& in) {
   if (!built_) buildPositions();
 
-  // Stomp envelope: jump to the peak multiplier, then ease back to 1 (exponential
-  // decay, snappy — ~3·tau settle). Pooling keeps updating underneath.
-  if (in.stomp) stompEnv_ = FLOW_STOMP_PEAK;
-  if (stompEnv_ > 1.0f) {
-    stompEnv_ = 1.0f + (stompEnv_ - 1.0f) * expf(-(float)in.dt / FLOW_STOMP_TAU_MS);
-    if (stompEnv_ < 1.001f) stompEnv_ = 1.0f;
+  // Stomp flash: jump to full, then ease back toward 0 so pixels settle to their
+  // pooled value. Pooling keeps updating underneath during the fade.
+  if (in.stomp) flashEnv_ = 1.0f;
+  if (flashEnv_ > 0.0f) {
+    flashEnv_ *= expf(-(float)in.dt / FLOW_STOMP_TAU_MS);
+    if (flashEnv_ < 0.001f) flashEnv_ = 0.0f;
   }
 
   // Deadzone: ignore tiny tilts near level (mount offset / wobble) so the strip
@@ -59,8 +59,10 @@ void FlowPattern::update(const PatternInput& in) {
   // toward the down-end. At level (tilt=0) every pixel sits at the baseline.
   for (uint16_t i = 0; i < LED_COUNT; i++) {
     float b = FLOW_BASELINE + tilt * FLOW_GAIN * (pos_[i] - 0.5f);
-    b *= stompEnv_;
     if (b < 0.0f) b = 0.0f;
+    if (b > 1.0f) b = 1.0f;
+    // Stomp lifts every pixel toward full, easing back to its pooled value.
+    b += (FLOW_STOMP_LEVEL - b) * flashEnv_;
     if (b > 1.0f) b = 1.0f;
     strip.setPixelColor(i, strip.Color((uint8_t)(FLOW_COLOR_R * b),
                                         (uint8_t)(FLOW_COLOR_G * b),

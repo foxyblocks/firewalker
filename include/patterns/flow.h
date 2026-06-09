@@ -18,7 +18,7 @@ class FlowPattern : public Pattern {
 
  private:
   float pos_[LED_COUNT];   // fore-aft foot position per pixel (toe=1, heel ends=0)
-  float stompEnv_ = 1.0f;  // stomp brightness multiplier, decays toward 1
+  float flashEnv_ = 0.0f;  // stomp flash: 1 = full flash, decays toward 0
   bool  built_ = false;
 
   void buildPositions();

@@ -48,8 +48,8 @@ with `imu_debug`:
 
 ## Power / behavior
 
-- The **flow** pattern is magenta (2 channels). At `LED_BRIGHTNESS = 100` a
-  near-level stomp can momentarily light the whole strip full magenta (~612 mA),
-  over the USB budget — accepted risk for the bench demo; revisit (brightness cap
-  or external 5 V) if it browns out. See `power-budget.md`.
+- The **flow** pattern is magenta (2 channels). At `LED_BRIGHTNESS = 100` every
+  stomp flashes the whole strip to full magenta (~612 mA, ~1.2 s fade), over the
+  USB budget — accepted risk for the bench demo; revisit (brightness cap or
+  external 5 V) if it browns out. See `power-budget.md`.
 - Desired animations and their power profile once the wearable power plan is set.

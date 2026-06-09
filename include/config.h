@@ -86,10 +86,10 @@ constexpr uint8_t IDLE_FILL_B = 0;
 constexpr uint8_t FLOW_COLOR_R = 255;        // magenta
 constexpr uint8_t FLOW_COLOR_G = 0;
 constexpr uint8_t FLOW_COLOR_B = 255;
-constexpr float   FLOW_BASELINE = 0.5f;      // resting per-pixel level (0..1); half so a stomp can double
-constexpr float   FLOW_GAIN     = 1.0f;      // how strongly tilt redistributes brightness
-constexpr float   FLOW_STOMP_PEAK   = 2.0f;  // stomp multiplies current brightness by this
-constexpr float   FLOW_STOMP_TAU_MS = 270.0f;// ease-out time constant (~3·tau ≈ 800 ms fade)
+constexpr float   FLOW_BASELINE = 0.30f;     // resting per-pixel level (0..1) — dim magenta at level
+constexpr float   FLOW_GAIN     = 2.0f;      // tilt redistribution strength — higher = more drastic on/off
+constexpr float   FLOW_STOMP_LEVEL  = 1.0f;  // stomp flashes every pixel to this absolute level (1.0 = full)
+constexpr float   FLOW_STOMP_TAU_MS = 400.0f;// ease-out time constant (~3·tau ≈ 1.2 s fade)
 
 // Strip-as-loop geometry: heel→toe→heel, so the toe is mid-strip and the heel is
 // at both ends. The apex index is a measured constant (count it on the bench;
