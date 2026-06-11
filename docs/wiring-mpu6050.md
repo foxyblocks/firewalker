@@ -57,7 +57,7 @@ Expected serial output:
 
 ```
 [firewalker] mode=imu_debug
-[firewalker] pixels=39 led pin=7 debug button=8
+[firewalker] pixels=40 led pin=7 button pin=8 foot=right
 [firewalker] mpu6050 ready @0x68
 [firewalker] imu stomp |a|>=18.00 release<=12.00 refractory=250ms
 [firewalker] imu a=(0.12,-0.34,9.79) |a|=9.80 g=(0.01,0.00,-0.02) armed=true

@@ -15,11 +15,42 @@ constexpr unsigned long SERIAL_BAUD = 115200;
 
 // ── NeoPixel strip ──────────────────────────────────────────────────────
 // Feather RP2040 silk D5. The installed board variant maps D5 -> GPIO 7.
-constexpr uint8_t  LED_PIN = D5;
+constexpr uint8_t  LED_PIN = D11;
 
-// Number of pixels driven — set to the current strip length (39). Total
-// current scales with this count, so keep it honest. See docs/power-budget.md.
-constexpr uint16_t LED_COUNT = 39;
+// Number of pixels driven — the full strip (exactly 40). Total current scales
+// with this count, so keep it honest. See docs/power-budget.md.
+constexpr uint16_t LED_COUNT = 40;
+
+// Strip ring geometry (measured on the FOX-183 mount). The strip is a closed
+// loop around the foot perimeter: pixel 0 starts at the inner ankle directly
+// under the controller, runs forward along the medial side to the toe apex,
+// back along the lateral side to the heel, then returns to the start. Both
+// arcs between toe and heel are exactly 20 steps. The pure index→fore-aft
+// math lives in include/firewalker_strip_map.h (tested in test/test_strip_map).
+constexpr uint16_t STRIP_TOE_INDEX  = 13;
+constexpr uint16_t STRIP_HEEL_INDEX = 33;
+
+// ── Foot side ────────────────────────────────────────────────────────────
+// Both shoes carry an identical hardware build (controller on the inner ankle,
+// USB up the leg), but the two GY-521 IMUs ended up mounted inverted about the
+// heel↔toe axis from each other: the RIGHT boot sits VCC-down, the LEFT boot
+// VCC-up (USB-port side up, SDA/SCL toward the ground). That 180° flip about
+// the fore-aft axis reverses the vertical and board-normal axes while leaving
+// the heel↔toe axis aligned with travel — so the vertical and pitch-gyro signs
+// differ per foot, while the fore-aft sign is the same on both. The per-foot
+// signs are set in the IMU mount section below. Select per shoe with the
+// final_app_left / final_app_right PlatformIO envs (-DFIREWALKER_FOOT_LEFT /
+// -DFIREWALKER_FOOT_RIGHT); plain final_app and imu_debug default to RIGHT. The
+// boot log prints which foot is running. Both boots are bench-confirmed
+// (imu_debug, 2026-06-11).
+#if defined(FIREWALKER_FOOT_LEFT) && defined(FIREWALKER_FOOT_RIGHT)
+#error "Define at most one of FIREWALKER_FOOT_LEFT / FIREWALKER_FOOT_RIGHT"
+#endif
+#if defined(FIREWALKER_FOOT_LEFT)
+constexpr bool  FOOT_IS_LEFT = true;
+#else
+constexpr bool  FOOT_IS_LEFT = false;   // default: right foot
+#endif
 
 // Global brightness (0-255). Total current scales with this, so raising it eats
 // into the USB budget fast — see docs/power-budget.md before pushing it up.
@@ -67,10 +98,52 @@ constexpr float         IMU_STOMP_ACCEL_THRESHOLD   = 18.0f;  // fire above this
 constexpr float         IMU_RELEASE_ACCEL_THRESHOLD = 12.0f;  // re-arm below this |accel|
 constexpr unsigned long IMU_REFRACTORY_MS = 250;              // min gap between stomps
 
+// Stomp "force" → trail brightness. imuStompStrength() normalizes the |accel| at
+// the trigger sample from the threshold (0) up to IMU_STOMP_FORCE_FULL (1); a
+// firm stomp spikes higher than a gentle step, so harder steps drive brighter
+// trails. The trigger itself is unchanged — this only reads how hard it hit.
+constexpr float         IMU_STOMP_FORCE_FULL = 40.0f;  // |accel| (m/s^2) → full-brightness trail
+
 // imu_debug motion visual: map movement intensity (|accel| - gravity) to the
 // idle fill brightness so the strip shows how hard the IMU is being shaken.
 constexpr float         IMU_ACCEL_DELTA_MIN = 0.5f;   // below this reads as "still"
 constexpr float         IMU_ACCEL_DELTA_MAX = 12.0f;  // saturates idle brightness here
+
+// ── IMU mount + orientation fusion ───────────────────────────────────────
+// Orientation → fore-aft tilt. Mount (FOX-183 carrier): board ~vertical on the
+// inner ankle, USB up the leg. At rest one in-plane accel axis reads ~gravity
+// (the "up" axis, Y) and the heel↔toe axis (X) reads small; pitching the foot
+// is rotation about the board normal (Z), so gyro Z is the pitch rate. Axis
+// indices/signs are 0=X,1=Y,2=Z. The heel↔toe axis (X) points the same way on
+// both boots, so its sign is foot-independent; the vertical (Y) and board-normal
+// (Z) axes are reversed between boots by the VCC-up/down mount inversion (see
+// "Foot side"), so their signs are set per foot below.
+//
+// Bench-confirmed (imu_debug, 2026-06-11):
+//   RIGHT: rest a=(+0.6,-9.4,-3.6) → gravity on -Y; toe-down swings ax to ~-4.4;
+//          tilt reads +0.83 toe-down.            Signs V=-1, FA=-1, P=+1.
+//   LEFT:  rest a=(+2.9,+9.5,+0.9) → gravity on +Y (VCC-up); toe-down ax +2.9→-1.6,
+//          heel-down ax→+6.7; pitch corr(gyroZ,dTilt)=-0.96. Signs V=+1, FA=-1, P=-1.
+//   Sole-flat fore-aft cant (trimmed via IMU_MOUNT_FOREAFT_REST_DEG below): LEFT
+//   -12.5° (measured), RIGHT -3.7° — so a flat foot reads level, not heel-down.
+constexpr uint8_t IMU_MOUNT_FOREAFT_AXIS    = 0;      // accel X = heel↔toe
+constexpr float   IMU_MOUNT_FOREAFT_SIGN    = -1.0f;  // toe-down → ax<0 → +tilt (both boots)
+constexpr uint8_t IMU_MOUNT_VERTICAL_AXIS   = 1;      // accel Y = vertical at rest
+constexpr uint8_t IMU_MOUNT_PITCH_GYRO_AXIS = 2;      // gyro Z = pitch rate (board normal)
+#if defined(FIREWALKER_FOOT_LEFT)
+constexpr float   IMU_MOUNT_VERTICAL_SIGN    = +1.0f;  // left: VCC-up mount, +Y points up
+constexpr float   IMU_MOUNT_PITCH_GYRO_SIGN  = -1.0f;  // left: board normal flipped
+constexpr float   IMU_MOUNT_FOREAFT_REST_DEG = -12.5f; // measured sole-flat fore-aft cant
+#else
+constexpr float   IMU_MOUNT_VERTICAL_SIGN    = -1.0f;  // right: VCC-down mount, -Y points up
+constexpr float   IMU_MOUNT_PITCH_GYRO_SIGN  = +1.0f;  // right: matches toe-down rate
+constexpr float   IMU_MOUNT_FOREAFT_REST_DEG = -3.7f;  // sole-flat fore-aft cant (from bench rest)
+#endif
+constexpr float   IMU_FILTER_ALPHA  = 0.96f;  // complementary-filter weight on the gyro term
+// imuTiltFwd() subtracts IMU_MOUNT_FOREAFT_REST_DEG (so a sole-flat foot reads
+// level despite the mount's cant), then saturates at ±1 at IMU_TILT_FULL_DEG of
+// tilt *from flat* — i.e. the pool fully pours at ~30° toe-down or heel-down.
+constexpr float   IMU_TILT_FULL_DEG = 30.0f;
 
 // ── Idle fill (imu_debug visual) ─────────────────────────────────────────
 // imu_debug fills the strip a solid color scaled by motion (the app uses the
@@ -80,15 +153,22 @@ constexpr uint8_t IDLE_FILL_R = 255;         // warm yellow
 constexpr uint8_t IDLE_FILL_G = 200;
 constexpr uint8_t IDLE_FILL_B = 0;
 
-// ── Flow pattern (pooling + spectrum cycle + stomp trails) ───────────────
+// ── Flow pattern (fill gauge + spectrum cycle + stomp trails) ────────────
 // The whole strip shares one hue that slowly rotates through the spectrum; tilt
-// pools brightness toward the down-end (dim baseline + drastic gain → strong
-// on/off). A stomp launches trails from the tilt-derived "down" point. See
-// ADR-0002/0003 and CONTEXT.md (Flow).
-constexpr float   FLOW_BASELINE = 0.30f;  // resting per-pixel brightness (0..1) — dim at level
-constexpr float   FLOW_GAIN     = 2.0f;   // tilt redistribution strength — higher = more drastic on/off
+// drives a fill gauge. At level every pixel is lit at FLOW_BASELINE. As the foot
+// tilts, pixels extinguish one-by-one from the up-end (each fades across its own
+// ~1-pixel span of tilt) so the lit band shrinks toward the down-most end, while
+// the surviving pixels brighten toward full. At full tilt (IMU_TILT_FULL_DEG,
+// 30°) a single pixel remains lit at the down-most end. A tilted stomp launches
+// directional trails from the down-point; a flat stomp instead flashes the strip
+// white (FLOW_FLASH_MS). See ADR-0002/0003 and CONTEXT.md (Flow).
+constexpr float   FLOW_BASELINE = 0.80f;  // flat per-pixel brightness (0..1); surviving end → 100% at full tilt
 
-constexpr unsigned long FLOW_HUE_CYCLE_MS = 45000;  // ms for one full spectrum rotation
+// A flat stomp has no tilt direction to pour toward, so instead of a trail it
+// flashes the whole strip white and fades back to the flow color over this span.
+constexpr unsigned long FLOW_FLASH_MS = 800;
+
+constexpr unsigned long FLOW_HUE_CYCLE_MS = 15000;  // ms for one full spectrum rotation
 
 // Stomp trails: each stomp launches up to 4 fronts from the tilt-derived "down"
 // point (toe-down→toe, heel-down→heels, flat→mid-foot ~25%/75%), each diverging
@@ -98,34 +178,16 @@ constexpr float    FLOW_TRAIL_SPEED_PXPS = 45.0f;  // front travel speed (pixels
 constexpr uint8_t  FLOW_TRAIL_LEN        = 12;     // band length (pixels)
 constexpr uint16_t FLOW_TRAIL_PREV_HUE   = 7300;   // tail hue step back (~40° on the 0..65535 wheel)
 constexpr uint8_t  FLOW_MAX_FRONTS       = 16;     // 4 per stomp; supports ~4 concurrent stomps
+constexpr float    FLOW_TRAIL_BRIGHT_MIN = 0.30f;  // trail brightness at a threshold-force stomp (→1.0 at IMU_STOMP_FORCE_FULL)
 
-// Strip-as-loop geometry: heel→toe→heel, so the toe is mid-strip and the heel is
-// at both ends. The apex index is a measured constant (count it on the bench;
-// the two sides may not have equal pixel counts). See CONTEXT.md (Strip).
-constexpr uint8_t FLOW_TOE_INDEX = (LED_COUNT - 1) / 2;  // ~19 — confirm on hardware
+// Strip geometry (ring, toe/heel indices) lives in the NeoPixel section above
+// (STRIP_TOE_INDEX / STRIP_HEEL_INDEX) — it's a hardware fact, not a flow knob.
 
-// Orientation → fore-aft tilt. Mount: Feather on its side on the outer ankle,
-// USB→heel, GY-521 co-mounted. At rest (board on its side) one in-plane accel
-// axis reads ~gravity (the "up" axis) and the heel↔toe axis reads ~0; pitching
-// the foot is rotation about the board normal, so the gyro's normal axis is the
-// pitch rate. These axis indices/signs (0=X,1=Y,2=Z) are a GUESS — confirm with
-// imu_debug (watch which axis tracks heel↔toe) and flip a sign if flow runs
-// backward. See open-questions.md.
-// Confirmed on the bench (imu_debug) for the ankle mount, Feather long-axis
-// vertical / USB up, chip side out: at rest gravity sits on +Y (~9.84); pitching
-// toe-down swings ax to ~-5.8 (X = heel↔toe) while Z (~0) is the lateral board
-// normal. Fore-aft sign is negative so toe-down → +tilt → pools toward the toe.
-constexpr uint8_t FLOW_FOREAFT_AXIS   = 0;      // accel X = heel↔toe
-constexpr float   FLOW_FOREAFT_SIGN   = -1.0f;  // toe-down → +tilt (pools toward the toe)
-constexpr uint8_t FLOW_VERTICAL_AXIS  = 1;      // accel Y = vertical at rest
-constexpr float   FLOW_VERTICAL_SIGN  = 1.0f;
-constexpr uint8_t FLOW_PITCH_GYRO_AXIS = 2;     // gyro Z = pitch rate (board normal)
-constexpr float   FLOW_PITCH_GYRO_SIGN = 1.0f;
-constexpr float   FLOW_FILTER_ALPHA  = 0.96f;  // complementary-filter weight on the gyro term
-constexpr float   FLOW_TILT_FULL_DEG = 35.0f;  // tilt angle that saturates the gradient
-// Ignore tiny tilts near level (mount offset / wobble) so the strip rests flat;
-// past the deadzone the remaining range is rescaled to still reach full pooling.
-constexpr float   FLOW_TILT_DEADZONE = 0.12f;  // normalized tilt (0..1)
+// Ignore tiny tilts near level (residual mount cant / wobble) so the strip rests
+// flat; past the deadzone the remaining range is rescaled to still reach full
+// pooling. The bulk of the mount cant is already removed by the per-foot
+// IMU_MOUNT_FOREAFT_REST_DEG trim; this is the small flat band on top of that.
+constexpr float   FLOW_TILT_DEADZONE = 0.10f;  // normalized tilt (0..1) ≈ 3° at 30° full
 
 // ── D6 button ────────────────────────────────────────────────────────────
 // Momentary button between Feather silk D6 and GND, internal pull-up. In the
@@ -135,12 +197,12 @@ constexpr uint8_t       DEBUG_BUTTON_PIN = D6;
 constexpr unsigned long DEBUG_BUTTON_DEBOUNCE_MS = 30;
 constexpr bool          DEBUG_BUTTON_LOG = false;
 
-// ── Trail color (fire gradient) ─────────────────────────────────────────────
-// Palette stops from the hot head to the cool tail, as plain R/G/B. The shared
-// core interpolates these across the band length and caches the result. Edit /
-// add / remove stops to retune the flame — FIRE_STOPS updates automatically. Note the
-// white head draws more current than a single-color fill; worst case is still
-// the whole strip lit at once. See docs/power-budget.md.
+// ── Fire-trail pattern: gradient palette ─────────────────────────────────
+// Palette stops from the hot head to the cool tail, as plain R/G/B. The
+// fire-trail pattern interpolates these across the band length and caches the
+// result. Edit / add / remove stops to retune the flame — FIRE_STOPS updates
+// automatically. Note the white head draws more current than a single-color
+// fill; worst case is still the whole strip lit at once. See docs/power-budget.md.
 constexpr uint8_t FIRE[][3] = {
   {255, 200, 0},  // head  — white-hot
   {255, 150,   0},  // yellow
@@ -149,12 +211,12 @@ constexpr uint8_t FIRE[][3] = {
 };
 constexpr uint8_t FIRE_STOPS = sizeof(FIRE) / sizeof(FIRE[0]);
 
-// ── Trail animation ─────────────────────────────────────────────────────
-// Each stomp trigger spawns a TRAIL: a band of TRAIL_LEN lit pixels that travels
-// bottom -> top at one pixel per WIPE_STEP_MS. It "wipes in" as it emerges from
-// the bottom and "wipes out" as it slides off the top — no hold in between.
-// Presses stack: multiple trails run at once, each behind the previous, up to
-// MAX_TRAILS (further presses are ignored until a slot frees up).
-constexpr unsigned long WIPE_STEP_MS = 10;   // ms per one-pixel advance (timing you tuned)
-constexpr uint8_t       TRAIL_LEN    = 30;   // band length in pixels (the wipe-in/out width)
-constexpr uint8_t       MAX_TRAILS   = 12;   // max simultaneous trails on the strip
+// ── Fire-trail pattern: band animation ───────────────────────────────────
+// Each stomp spawns a trail: a band of FIRE_TRAIL_LEN lit pixels that travels
+// bottom -> top at one pixel per FIRE_TRAIL_STEP_MS. It "wipes in" as it emerges
+// from the bottom and "wipes out" as it slides off the top — no hold in between.
+// Stomps stack: multiple trails run at once, each behind the previous, up to
+// FIRE_TRAIL_MAX (further stomps are ignored until a slot frees up).
+constexpr unsigned long FIRE_TRAIL_STEP_MS = 10;  // ms per one-pixel advance
+constexpr uint8_t       FIRE_TRAIL_LEN     = 30;  // band length in pixels (the wipe-in/out width)
+constexpr uint8_t       FIRE_TRAIL_MAX     = 12;  // max simultaneous trails on the strip

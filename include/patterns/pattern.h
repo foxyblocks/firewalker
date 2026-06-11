@@ -11,9 +11,10 @@
 namespace Firewalker {
 
 struct PatternInput {
-  float         tiltFwd;  // fused fore-aft tilt, ~[-1,+1], + = toe-down
-  bool          stomp;    // true on the tick a stomp fires
-  unsigned long dt;       // ms since the previous update
+  float         tiltFwd;       // fused fore-aft tilt, ~[-1,+1], + = toe-down
+  bool          stomp;         // true on the tick a stomp fires
+  float         stompStrength; // 0..1 force of that stomp (valid when stomp is true)
+  unsigned long dt;            // ms since the previous update
 };
 
 class Pattern {
