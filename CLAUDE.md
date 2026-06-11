@@ -60,7 +60,15 @@ pio run -e final_app -t upload       # bench default (= right foot)
 pio run -e imu_debug -t upload       # flash the IMU bench/calibration build
 pio device monitor -e imu_debug      # watch debug logs at 115200 baud
 pio test -e native                   # host-native tests of the pure IMU math
+
+tools/flash-all.py                   # flash every connected boot with its own foot's app
+tools/flash-all.py --list            # list connected boots (serial -> foot) without flashing
 ```
+
+`tools/flash-all.py` identifies each boot by its USB serial number (stable per
+board — the floating `/dev/cu.usbmodem*` port name is not) and flashes the
+matching foot env. Add a new boot by plugging it in, running `--list` to read
+its serial, and adding it to the `BOOTS` map in the script.
 
 ## Working conventions
 
