@@ -1,6 +1,5 @@
 #include "patterns/flow.h"
 
-#include <Adafruit_NeoPixel.h>
 #include <math.h>
 
 #include "config.h"
@@ -25,7 +24,6 @@ const __FlashStringHelper* FlowPattern::name() const { return F("flow"); }
 void FlowPattern::enter() {
   if (!built_) buildPositions();
   for (uint8_t k = 0; k < FLOW_MAX_FRONTS; k++) fronts_[k].active = false;
-  strip.setBrightness(LED_BRIGHTNESS);
 }
 
 // Launch up to 4 diverging fronts from the tilt-derived fore-aft source: one
@@ -87,7 +85,7 @@ static uint32_t bandColor(uint8_t d, uint16_t hue, float bright) {
     h = (uint16_t)(hue - (uint16_t)(seg * (float)FLOW_TRAIL_PREV_HUE));
     s = 255;
   }
-  return Adafruit_NeoPixel::ColorHSV(h, s, (uint8_t)(bright * 255.0f));
+  return LedStrip::ColorHSV(h, s, (uint8_t)(bright * 255.0f));
 }
 
 // Blend a packed RGB color toward white by amt (0 = unchanged, 1 = full white).
@@ -96,7 +94,7 @@ static uint32_t whiten(uint32_t c, float amt) {
   r = (uint8_t)(r + (255 - r) * amt);
   g = (uint8_t)(g + (255 - g) * amt);
   b = (uint8_t)(b + (255 - b) * amt);
-  return Adafruit_NeoPixel::Color(r, g, b);
+  return LedStrip::Color(r, g, b);
 }
 
 void FlowPattern::update(const PatternInput& in) {
@@ -153,7 +151,7 @@ void FlowPattern::update(const PatternInput& in) {
     if (litFrac < 0.0f) litFrac = 0.0f;
     if (litFrac > 1.0f) litFrac = 1.0f;
     float b = litFrac * litBright;
-    uint32_t c = Adafruit_NeoPixel::ColorHSV(hueU, 255, (uint8_t)(b * 255.0f));
+    uint32_t c = LedStrip::ColorHSV(hueU, 255, (uint8_t)(b * 255.0f));
     if (flash > 0.0f) c = whiten(c, flash);
     strip.setPixelColor(i, c);
   }

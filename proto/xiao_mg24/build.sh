@@ -33,7 +33,7 @@ FQBN="SiliconLabs:silabs:xiao_mg24:protocol_stack=none"
 # Reused repo headers/sources resolve through these include dirs; the sketch's
 # own dir provides the Adafruit_NeoPixel compat shim. compiler.cpp.extra_flags is
 # empty by default in the silabs platform; add include paths and strip settings.
-INCLUDES="-I${REPO_ROOT}/include -I${REPO_ROOT}/src -I${SKETCH_DIR}"
+INCLUDES="-I${REPO_ROOT}/include -I${REPO_ROOT}/src -I${SKETCH_DIR} -DFIREWALKER_ADAFRUIT_STRIP_API"
 
 # Spread the ring-based flow demo over the full 160-pixel bench strip. These
 # virtual toe/heel positions scale the 40-pixel layout by four, giving two

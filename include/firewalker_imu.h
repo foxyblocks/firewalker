@@ -2,17 +2,16 @@
 
 #include <Arduino.h>
 
-// Shared motion-service contract used by the app, diagnostics, and patterns.
-// The Feather implementation reads an external MPU-6050; the MG24 prototype's
-// imu_xiao.cpp reads its onboard LSM6DS3. Each build includes one implementation,
-// exposing the same units and behavior. The service owns three things:
+// Shared motion service used by the app and diagnostics. src/firewalker_imu.cpp
+// reads the MG24 Sense's onboard LSM6DS3TR-C and owns:
 //   * the raw accel/gyro sample,
 //   * a fused fore-aft tilt (complementary filter of accel "down" + gyro rate),
+//   * this controller's neutral offset, which sets where tilt reads zero,
 //   * stomp detection (acceleration-magnitude spike with hysteresis).
-// Thresholds and filter settings live in config.h. The Feather mount uses its
-// IMU_MOUNT_* settings; the MG24 mount uses firewalker_mg24_mount.h, shared with
-// the native fast-rotation tests. The pure filter/hysteresis math lives in
-// firewalker_fusion.h (tested natively: `pio test -e native`). See ADR-0003.
+// Thresholds and filter settings live in config.h. The mount's axes live in
+// firewalker_mg24_mount.h, shared with the native fast-rotation tests. The pure
+// filter/hysteresis math lives in firewalker_fusion.h (tested natively:
+// `pio test -e native`). See ADR-0003.
 
 namespace Firewalker {
 
@@ -22,8 +21,9 @@ struct ImuSample {
   float mag;         // |acceleration|, m/s^2
 };
 
-// Start the build's configured I2C motion sensor and print its status banner.
-// Returns true if it is available; imuUpdate() does nothing when unavailable.
+// Start the onboard motion sensor and print its status banner. Returns true if it
+// is available. When it isn't, imuUpdate() does nothing, tilt reads level, and no
+// stomps fire, so patterns still run on a flat baseline.
 bool imuBegin();
 bool imuReady();
 
@@ -33,9 +33,21 @@ bool imuUpdate();
 
 const ImuSample& imuLatest();
 
-// Fused fore-aft tilt, normalized to ~[-1, +1] (+ = toe-down), saturating at
-// IMU_TILT_FULL_DEG. Drives the flow pattern.
+// Fused fore-aft tilt relative to the neutral offset, normalized to ~[-1, +1]
+// (+ = toe-down), saturating at IMU_TILT_FULL_DEG. Drives the flow pattern.
 float imuTiltFwd();
+
+// Fused fore-aft angle in degrees with no neutral offset applied, which is what a
+// neutral capture averages.
+float imuRawAngleDeg();
+
+// Angular rate magnitude of the latest sample, rad/s. Zero when no motion.
+float imuGyroMagnitude();
+
+// The resting angle to treat as level, in degrees. Starts at zero. The caller owns
+// saving it; see firewalker_settings.h.
+void imuSetNeutralOffsetDeg(float degrees);
+float imuNeutralOffsetDeg();
 
 // True exactly once per detected stomp (consume-on-read).
 bool imuTakeStomp();

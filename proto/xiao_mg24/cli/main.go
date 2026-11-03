@@ -270,7 +270,7 @@ func runTest(ctx context.Context, cmd *cobra.Command, o *options, c *testConfig)
 	repo := filepath.Clean(filepath.Join(protoDir, "..", ".."))
 	// These include flags are passed through Arduino CLI as one build property,
 	// without a shell. Its dependency scanner expects unquoted include paths.
-	flags := []string{"-I" + sketch, "-I" + filepath.Join(repo, "include"), "-I" + filepath.Join(repo, "src")}
+	flags := []string{"-I" + sketch, "-I" + filepath.Join(repo, "include"), "-I" + filepath.Join(repo, "src"), "-DFIREWALKER_ADAFRUIT_STRIP_API"}
 	if c.mode <= 1 {
 		flags = append(flags, fmt.Sprintf("-DFIREWALKER_LED_COUNT=%d", o.pixels), fmt.Sprintf("-DFIREWALKER_LED_BRIGHTNESS=%d", o.brightness), fmt.Sprintf("-DFIREWALKER_STRIP_TOE_INDEX=%d", c.toe), fmt.Sprintf("-DFIREWALKER_STRIP_HEEL_INDEX=%d", c.heel))
 	}

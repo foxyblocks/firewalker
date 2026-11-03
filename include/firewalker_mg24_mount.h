@@ -4,14 +4,16 @@
 
 /**
  * Maps the MG24 Sense's sensor coordinates into the shoe's fore-aft tilt plane.
- * imu_xiao.cpp converts sensor readings to m/s² and rad/s before using these
- * helpers; firewalker_fusion.h then combines the mapped acceleration and gyro.
- * The native motion tests use the same mapping to replay physical rotations,
+ * firewalker_imu.cpp converts sensor readings to m/s² and rad/s before using
+ * these helpers; firewalker_fusion.h then combines the mapped acceleration and
+ * gyro. The native motion tests use the same mapping to replay physical rotations,
  * so a sign mismatch cannot be hidden by a filter that eventually settles.
  *
- * This describes the prototype mount: accel X is fore-aft, accel Z is up, and
- * rotation around Y changes pitch. Neutral-position trim is separate from the
- * axis mapping; changing the resting angle cannot repair an incorrect gyro sign.
+ * Both shoes share this mapping, because they mount the controller in the same
+ * orientation: accel X is fore-aft, accel Z is up, and rotation around Y changes
+ * pitch. Each controller's neutral offset is captured and saved separately (see
+ * firewalker_neutral.h); it changes the resting angle and cannot repair an
+ * incorrect axis or gyro sign.
  */
 namespace Firewalker {
 namespace Mg24Mount {

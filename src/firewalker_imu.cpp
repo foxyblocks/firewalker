@@ -1,66 +1,69 @@
+// Motion service for the MG24 Sense's onboard LSM6DS3TR-C. See firewalker_imu.h for
+// the contract. The sensor library reports acceleration in g and rotation in deg/s,
+// while the fusion math and the config.h thresholds use m/s^2 and rad/s, so readings
+// convert to those units here and nowhere else.
+#if !defined(FIREWALKER_LEGACY_FEATHER)
+
 #include "firewalker_imu.h"
 
+#include <LSM6DS3.h>
 #include <Wire.h>
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
 #include <math.h>
 
 #include "config.h"
 #include "firewalker_fusion.h"
+#include "firewalker_mg24_mount.h"
 
 namespace Firewalker {
 
-static Adafruit_MPU6050 mpu;
-static bool          ready        = false;
-static ImuSample     latest       = {0, 0, 0, 0, 0, 0, IMU_GRAVITY};
+static constexpr float G_TO_MPS2 = 9.80665f;
+static constexpr float DEGREES_TO_RADIANS = 0.0174532925f;
 
-// Fused fore-aft tilt, radians (0 = level). The filter math is the pure
-// fuseTiltStep() in firewalker_fusion.h; this module just feeds it samples.
-static float         fusedAngle   = 0.0f;
-static bool          firstSample  = true;
+static LSM6DS3 sensor(I2C_MODE, IMU_I2C_ADDR);
+static bool ready = false;
+static ImuSample latest = {0, 0, 0, 0, 0, 0, IMU_GRAVITY};
 
-// Stomp detection state (pure stompStep() hysteresis, firewalker_fusion.h).
-static StompState    stomp;
+// Fused fore-aft angle in radians. Zero is sensor level, not the boot's neutral.
+static float fusedAngle = 0.0f;
+static bool firstSample = true;
+static float neutralOffsetDeg = 0.0f;
+
+static StompState stomp;
 
 static unsigned long lastSampleMs = 0;
-static unsigned long lastLogMs    = 0;
-
-// Pick a signed accel/gyro component by axis index (0=X,1=Y,2=Z) — lets the
-// mount-specific axis mapping live in config.h instead of being hard-coded here.
-static float accelAxis(uint8_t idx, float sign) {
-  float v = (idx == 0) ? latest.ax : (idx == 1) ? latest.ay : latest.az;
-  return v * sign;
-}
-static float gyroAxis(uint8_t idx, float sign) {
-  float v = (idx == 0) ? latest.gx : (idx == 1) ? latest.gy : latest.gz;
-  return v * sign;
-}
+static unsigned long lastLogMs = 0;
 
 bool imuBegin() {
-  Wire.begin();  // Feather RP2040 SDA/SCL (GP2/GP3, also the STEMMA QT port)
-  ready = mpu.begin(IMU_I2C_ADDR);
+  pinMode(IMU_ENABLE_PIN, OUTPUT);
+  digitalWrite(IMU_ENABLE_PIN, HIGH);
+  delay(10);
+
+  ready = (sensor.begin() == 0);
   if (ready) {
-    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
-    mpu.setGyroRange(MPU6050_RANGE_500_DEG);
-    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
-    Serial.print(F("[firewalker] mpu6050 ready @0x"));
+    // Block data update keeps each reading's two bytes from the same sample. Without
+    // it, a value crossing zero while being read comes back off by exactly 256 counts,
+    // which is 0.31 rad/s of phantom rotation and enough to fail a neutral capture.
+    uint8_t control = 0;
+    sensor.readRegister(&control, LSM6DS3_ACC_GYRO_CTRL3_C);
+    sensor.writeRegister(LSM6DS3_ACC_GYRO_CTRL3_C, control | LSM6DS3_ACC_GYRO_BDU_BLOCK_UPDATE);
+
+    Serial.print(F("[firewalker] lsm6ds3 ready @0x"));
     Serial.println(IMU_I2C_ADDR, HEX);
   } else {
-    Serial.print(F("[firewalker] mpu6050 NOT found @0x"));
-    Serial.print(IMU_I2C_ADDR, HEX);
-    Serial.println(F(" — check SDA/SCL, 3V3, GND, AD0"));
+    Serial.print(F("[firewalker] lsm6ds3 NOT found @0x"));
+    Serial.println(IMU_I2C_ADDR, HEX);
   }
 
   Serial.print(F("[firewalker] imu stomp |a|>="));
   Serial.print(IMU_STOMP_ACCEL_THRESHOLD);
   Serial.print(F(" release<="));
   Serial.print(IMU_RELEASE_ACCEL_THRESHOLD);
-  Serial.print(F(" tilt axis(accel fwd="));
-  Serial.print(IMU_MOUNT_FOREAFT_AXIS);
+  Serial.print(F(" mount(fwd="));
+  Serial.print(Mg24Mount::FOREAFT_AXIS);
   Serial.print(F(" up="));
-  Serial.print(IMU_MOUNT_VERTICAL_AXIS);
+  Serial.print(Mg24Mount::VERTICAL_AXIS);
   Serial.print(F(" gyro="));
-  Serial.print(IMU_MOUNT_PITCH_GYRO_AXIS);
+  Serial.print(Mg24Mount::PITCH_GYRO_AXIS);
   Serial.println(F(")"));
   return ready;
 }
@@ -75,24 +78,21 @@ bool imuUpdate() {
   float dt = firstSample ? 0.0f : (now - lastSampleMs) / 1000.0f;
   lastSampleMs = now;
 
-  sensors_event_t a, g, temp;
-  mpu.getEvent(&a, &g, &temp);
-  latest.ax = a.acceleration.x;
-  latest.ay = a.acceleration.y;
-  latest.az = a.acceleration.z;
-  latest.gx = g.gyro.x;
-  latest.gy = g.gyro.y;
-  latest.gz = g.gyro.z;
+  latest.ax = sensor.readFloatAccelX() * G_TO_MPS2;
+  latest.ay = sensor.readFloatAccelY() * G_TO_MPS2;
+  latest.az = sensor.readFloatAccelZ() * G_TO_MPS2;
+  latest.gx = sensor.readFloatGyroX() * DEGREES_TO_RADIANS;
+  latest.gy = sensor.readFloatGyroY() * DEGREES_TO_RADIANS;
+  latest.gz = sensor.readFloatGyroZ() * DEGREES_TO_RADIANS;
   latest.mag = sqrtf(latest.ax * latest.ax + latest.ay * latest.ay +
                      latest.az * latest.az);
 
-  // Complementary filter for the fore-aft tilt angle (pure math in
-  // firewalker_fusion.h): the accelerometer gives the absolute angle, the
-  // gyro's pitch-rate axis is integrated to track fast motion without drift.
-  float aFwd = accelAxis(IMU_MOUNT_FOREAFT_AXIS, IMU_MOUNT_FOREAFT_SIGN);
-  float aUp = accelAxis(IMU_MOUNT_VERTICAL_AXIS, IMU_MOUNT_VERTICAL_SIGN);
+  // The accelerometer gives the absolute angle and the gyro tracks fast motion
+  // without drift. The first sample seeds the filter so tilt is right at boot.
+  float aFwd = Mg24Mount::foreAftAcceleration(latest.ax, latest.ay, latest.az);
+  float aUp = Mg24Mount::verticalAcceleration(latest.ax, latest.ay, latest.az);
   float accAngle = accelTiltAngle(aFwd, aUp);
-  float gyroRate = gyroAxis(IMU_MOUNT_PITCH_GYRO_AXIS, IMU_MOUNT_PITCH_GYRO_SIGN);
+  float gyroRate = Mg24Mount::pitchAngularRate(latest.gx, latest.gy, latest.gz);
   if (firstSample) {
     fusedAngle = accAngle;
     firstSample = false;
@@ -100,7 +100,6 @@ bool imuUpdate() {
     fusedAngle = fuseTiltStep(fusedAngle, accAngle, gyroRate, dt, IMU_FILTER_ALPHA);
   }
 
-  // Stomp hysteresis + refractory (pure stompStep() in firewalker_fusion.h).
   stompStep(stomp, latest.mag, now,
             {IMU_STOMP_ACCEL_THRESHOLD, IMU_RELEASE_ACCEL_THRESHOLD,
              IMU_REFRACTORY_MS});
@@ -111,11 +110,20 @@ bool imuUpdate() {
 const ImuSample& imuLatest() { return latest; }
 
 float imuTiltFwd() {
-  // Trim the mount's sole-flat fore-aft cant so a flat foot reads level, then
-  // normalize to ±1 at IMU_TILT_FULL_DEG of tilt from flat. DEG→RAD = π/180.
-  float trimmed = fusedAngle - IMU_MOUNT_FOREAFT_REST_DEG * 0.0174532925f;
+  if (!ready) return 0.0f;
+  float trimmed = fusedAngle - neutralOffsetDeg * DEGREES_TO_RADIANS;
   return normalizeTilt(trimmed, IMU_TILT_FULL_DEG);
 }
+
+float imuRawAngleDeg() { return fusedAngle * 57.2957795f; }
+
+float imuGyroMagnitude() {
+  return sqrtf(latest.gx * latest.gx + latest.gy * latest.gy + latest.gz * latest.gz);
+}
+
+void imuSetNeutralOffsetDeg(float degrees) { neutralOffsetDeg = degrees; }
+
+float imuNeutralOffsetDeg() { return neutralOffsetDeg; }
 
 bool imuTakeStomp() {
   if (!stomp.pending) return false;
@@ -136,18 +144,27 @@ void imuLog() {
   if ((now - lastLogMs) < IMU_LOG_MS) return;
   lastLogMs = now;
 
-  Serial.print(F("[firewalker] imu a=("));
-  Serial.print(latest.ax, 2); Serial.print(F(","));
-  Serial.print(latest.ay, 2); Serial.print(F(","));
-  Serial.print(latest.az, 2); Serial.print(F(") |a|="));
+  Serial.print(F("[imu] a=("));
+  Serial.print(latest.ax, 2);
+  Serial.print(',');
+  Serial.print(latest.ay, 2);
+  Serial.print(',');
+  Serial.print(latest.az, 2);
+  Serial.print(F(") |a|="));
   Serial.print(latest.mag, 2);
   Serial.print(F(" g=("));
-  Serial.print(latest.gx, 2); Serial.print(F(","));
-  Serial.print(latest.gy, 2); Serial.print(F(","));
-  Serial.print(latest.gz, 2); Serial.print(F(") tilt="));
+  Serial.print(latest.gx, 2);
+  Serial.print(',');
+  Serial.print(latest.gy, 2);
+  Serial.print(',');
+  Serial.print(latest.gz, 2);
+  Serial.print(F(") angle="));
+  Serial.print(imuRawAngleDeg(), 2);
+  Serial.print(F(" tilt="));
   Serial.print(imuTiltFwd(), 2);
   Serial.print(F(" armed="));
   Serial.println(stomp.armed ? F("true") : F("false"));
 }
 
 }  // namespace Firewalker
+#endif
