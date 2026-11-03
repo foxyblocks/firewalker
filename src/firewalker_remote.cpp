@@ -17,7 +17,16 @@
 
 namespace Firewalker {
 
-static char deviceId[5] = "0000";
+static char deviceId[5] = "";
+
+// The Bluetooth stack can boot before setup() runs, and its advertised name needs the
+// id, so whichever side gets there first fills it in. The value never changes.
+static const char* loadDeviceId() {
+  if (deviceId[0] == '\0') {
+    snprintf(deviceId, sizeof(deviceId), "%04X", (unsigned)(getDeviceUniqueId() & 0xFFFF));
+  }
+  return deviceId;
+}
 
 // ── USB console ──────────────────────────────────────────────────────────
 
@@ -194,7 +203,7 @@ void sl_bt_on_event(sl_bt_msg_t* event) {
   using namespace Firewalker;
   switch (SL_BT_MSG_ID(event->header)) {
     case sl_bt_evt_system_boot_id: {
-      snprintf(deviceName, sizeof(deviceName), "Firewalker-%s", deviceId);
+      snprintf(deviceName, sizeof(deviceName), "Firewalker-%s", loadDeviceId());
       uint16_t grantedMtu;
       sl_bt_gatt_server_set_max_mtu(REMOTE_ATT_VALUE_MAX + 3, &grantedMtu);
       buildGattDatabase();
@@ -250,7 +259,7 @@ namespace Firewalker {
 // ── Shared interface ─────────────────────────────────────────────────────
 
 void remoteBegin() {
-  snprintf(deviceId, sizeof(deviceId), "%04X", (unsigned)(getDeviceUniqueId() & 0xFFFF));
+  loadDeviceId();
 #if defined(ARDUINO_SILABS_STACK_BLE_SILABS)
   rxQueue = xQueueCreateStatic(REMOTE_RX_QUEUE_DEPTH, sizeof(RxLine), rxQueueBuffer, &rxQueueStorage);
 #endif
@@ -306,7 +315,7 @@ bool remoteTakeClientReady() {
 #endif
 }
 
-const char* remoteDeviceId() { return deviceId; }
+const char* remoteDeviceId() { return loadDeviceId(); }
 
 }  // namespace Firewalker
 #endif

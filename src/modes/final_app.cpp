@@ -252,14 +252,12 @@ void setup() {
 }
 
 void loop() {
-  const unsigned long now = millis();
-
   if (imuUpdate()) {
     if (imuTakeStomp()) {
       stompPending = true;
       stompSinceReport = true;
     }
-    neutralCapture.addSample(now, imuRawAngleDeg(), imuGyroMagnitude(), imuLatest().mag);
+    neutralCapture.addSample(millis(), imuRawAngleDeg(), imuGyroMagnitude(), imuLatest().mag);
   }
   updateNeutralCapture();
 
@@ -267,6 +265,11 @@ void loop() {
   while (remoteNextLine(line, sizeof(line))) {
     handleCommand(parseCommand(line));
   }
+
+  // Read the clock after handling commands, which stamp their changes with millis().
+  // An earlier reading would make those stamps look like they're in the future, and
+  // the elapsed times below would wrap around to huge values.
+  const unsigned long now = millis();
 
   if (saveScheduler.due(now)) saveNow();
 

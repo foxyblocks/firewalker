@@ -142,8 +142,11 @@ class SaveScheduler {
     lastChangeMs_ = nowMs;
   }
 
+  // Elapsed times are signed, so a `nowMs` read just before the latest change counts
+  // as no time passed rather than wrapping around to about 49 days.
   bool due(uint32_t nowMs) const {
-    return dirty_ && (nowMs - lastChangeMs_ >= quietMs_ || nowMs - firstChangeMs_ >= maxMs_);
+    return dirty_ && ((int32_t)(nowMs - lastChangeMs_) >= (int32_t)quietMs_ ||
+                      (int32_t)(nowMs - firstChangeMs_) >= (int32_t)maxMs_);
   }
 
   void markSaved() { dirty_ = false; }

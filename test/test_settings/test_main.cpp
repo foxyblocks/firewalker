@@ -130,6 +130,12 @@ static void test_scheduler_saves_once_changes_pause() {
   TEST_ASSERT_FALSE(scheduler.due(2000));
 }
 
+static void test_scheduler_is_not_due_when_now_predates_the_change() {
+  SaveScheduler scheduler(1000, 5000);
+  scheduler.markChanged(5000);
+  TEST_ASSERT_FALSE(scheduler.due(4999));
+}
+
 static void test_slider_burst_becomes_one_save() {
   SaveScheduler scheduler(1000, 5000);
   int saves = 0;
@@ -168,6 +174,7 @@ int main(int, char**) {
   RUN_TEST(test_unusable_neutral_offset_reads_as_invalid);
   RUN_TEST(test_scheduler_stays_quiet_with_nothing_to_save);
   RUN_TEST(test_scheduler_saves_once_changes_pause);
+  RUN_TEST(test_scheduler_is_not_due_when_now_predates_the_change);
   RUN_TEST(test_slider_burst_becomes_one_save);
   RUN_TEST(test_endless_changes_still_save_by_the_longest_delay);
   return UNITY_END();
