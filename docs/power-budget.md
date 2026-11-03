@@ -48,7 +48,7 @@ PLATFORMIO_BUILD_SRC_FLAGS=-DFIREWALKER_LED_BRIGHTNESS_MAX=255 pio run -e final_
 Build both shoes the same way. Settings saved under a higher cap read as invalid under a
 lower one, so that shoe falls back to its defaults.
 
-`./mg24 --brightness` accepts up to 255 regardless of the cap, because it's a deliberate
+`./cli --brightness` accepts up to 255 regardless of the cap, because it's a deliberate
 bench override. Keep it within the profile you're actually powering.
 
 The final battery design is outside this budget, and is tracked in

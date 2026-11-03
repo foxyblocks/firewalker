@@ -73,7 +73,7 @@ code, issues, and docs rather than drifting to synonyms.
   so both shoes run the same firmware binary.
 - **Remote** — anything controlling running firmware through the line protocol in
   `docs/remote-protocol.md`: the iPhone app over BLE, or a USB serial console. Distinct
-  from the **`mg24` bench tool**, which builds and flashes one-off test firmware.
+  from the **`cli` bench tool**, which builds and flashes one-off test firmware.
 - **Status light** — the board's onboard LED: solid when running, a slow blink if the
   IMU is missing, a fast blink during a neutral capture. It's independent of the strip
   and of any phone or serial monitor.
@@ -84,7 +84,7 @@ code, issues, and docs rather than drifting to synonyms.
 
 In scope now: one strip per shoe; the **IMU** as the sole stomp sensor; runtime
 **patterns** (`flow` + `fire-trail`) on the app; the BLE and USB **remote**;
-per-controller **settings**; the `imu_debug` build and the `mg24` bench tool. Still
+per-controller **settings**; the `imu_debug` build and the `cli` bench tool. Still
 explicitly **out** of scope: the 2-D "perimeter bubble" flow (roll as well as pitch),
 multiple strips per shoe, synchronization between shoes, battery management and the
 wearable power plan, and premature performance work.

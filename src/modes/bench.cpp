@@ -1,6 +1,6 @@
 // bench runs one strip test configured entirely by build flags, so a test never
-// edits firmware settings or touches a shoe's saved settings. The `mg24` CLI
-// generates these flags (see tools/mg24), and the strip_test and strip_off
+// edits firmware settings or touches a shoe's saved settings. The `cli` tool
+// generates these flags (see tools/cli), and the strip_test and strip_off
 // environments in platformio.ini use fixed ones. Pattern tests run the real flow and
 // fire-trail implementations, with simulated tilt and impacts unless BENCH_MOTION is
 // set. Motion-free builds never start the sensor. Every frame covers the whole strip,

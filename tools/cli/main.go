@@ -1,4 +1,4 @@
-// mg24 is the local bench tool for the XIAO MG24 Sense: it builds a one-off strip
+// cli is the local bench tool for the XIAO MG24 Sense: it builds a one-off strip
 // test and flashes it to a USB-connected board, so bench work doesn't depend on the
 // phone remote. Cobra handles arguments. Flags become build flags for the `bench`
 // PlatformIO environment (see src/modes/bench.cpp), so running a test never edits
@@ -61,7 +61,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 	if err := newCommand().ExecuteContext(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "mg24:", err)
+		fmt.Fprintln(os.Stderr, "cli:", err)
 		os.Exit(1)
 	}
 }
@@ -69,7 +69,7 @@ func main() {
 func newCommand() *cobra.Command {
 	opts := &options{}
 	root := &cobra.Command{
-		Use: "mg24", Short: "Build and run MG24 Sense strip tests on D10",
+		Use: "cli", Short: "Build and run MG24 Sense strip tests on D10",
 		Long:         "Run MG24 bench tests without editing firmware settings. Defaults: 160 pixels, brightness 16/255, data on D10. Each command builds and uploads; --build-only compiles without touching the board.",
 		SilenceUsage: true, SilenceErrors: true,
 		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},

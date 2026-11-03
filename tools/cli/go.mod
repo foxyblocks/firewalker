@@ -1,4 +1,4 @@
-module firewalker/mg24
+module firewalker/cli
 
 go 1.23
 

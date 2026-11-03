@@ -26,7 +26,7 @@ The planned Firewalker remote provides pattern/off selection, brightness, live m
 debugging, and a **Calibrate neutral** action. Each controller remembers its own
 selected pattern, brightness, and neutral calibration across power cycles.
 
-The `mg24` Cobra CLI built for local debugging stays a supported interface
+The `cli` bench tool built for local debugging stays a supported interface
 alongside the remote. It builds, flashes, and runs tests from a USB-connected
 computer, so bench work doesn't depend on the phone.
 
@@ -48,7 +48,7 @@ Several guides describe hardware and behavior that are no longer current.
 - Preserve flow, fire-trail, tilt fusion, stomp detection, and stomp strength.
 - Replace physical button controls with an iPhone BLE remote for debugging and
   pattern selection. Build and verify the remote in FOX-269.
-- Support the `mg24` Cobra CLI alongside the remote for debugging and running
+- Support the `cli` bench tool alongside the remote for debugging and running
   patterns and diagnostics locally.
 - Use the same firmware on both shoes mounted in the same controller orientation.
 - Preserve color test, all-off, and motion-calibration diagnostics.
@@ -120,7 +120,7 @@ without reconstructing the prototype's history.
 - Refresh `README.md`, `CONTEXT.md`, and agent orientation in `CLAUDE.md`.
 - Consolidate the prototype into the main source tree; remove prototype wrapper
   translation units and the Arduino CLI workflow once the retained app,
-  diagnostics, and `mg24` CLI work under the chosen PlatformIO toolchain. The CLI
+  diagnostics, and `cli` tool work under the chosen PlatformIO toolchain. The CLI
   moves with the prototype and is not retired with it.
 - Preserve architectural decision history, clearly distinguishing historical
   hardware details from current setup instructions. Do not maintain a parallel
@@ -171,7 +171,7 @@ controls below describe what the remote needs to do.
 
 ### Local bench CLI
 
-The `mg24` Cobra CLI is a supported control and debug interface in addition to
+The `cli` bench tool is a supported control and debug interface in addition to
 the remote. Use it for bench tests and debugging from a computer; use the remote
 for live control of a running shoe.
 
@@ -236,7 +236,7 @@ Proposed approach:
 7. Confirm the BLE interface and MG24 stack against the remote in FOX-269.
 8. Continue consolidating bench diagnostics and motion firmware while the
    remote is built. Verify the remote before the full migration sign-off.
-   Move the `mg24` CLI to the pinned toolchain and consolidated source paths as
+   Move the `cli` tool to the pinned toolchain and consolidated source paths as
    part of this work; it currently stages prototype files and calls Arduino CLI.
 9. Add per-controller settings storage with validation and a versioned record.
    Save settings when user changes are accepted, with coalescing for rapid slider
@@ -301,7 +301,7 @@ Proposed approach:
    brightness, neutral capture, and settings persistence.
    Validate them together while the retained patterns run.
 5. Remove retired hardware code/dependencies and redundant prototype paths, after
-   the `mg24` CLI runs on the pinned toolchain. Rewrite
+   the `cli` tool runs on the pinned toolchain. Rewrite
    current guides and update decision/agent documentation to the final behavior.
 6. Validate both mounted shoes with the same firmware under the supported power
    setups. Review current instructions as a new reader. Battery/enclosure design
@@ -318,7 +318,7 @@ migration. Proposed checks during implementation:
   tilt direction, single stomp events, and iPhone pattern/off and brightness controls.
 - Test sensor-unavailable behavior and the chosen firmware-running/error indicator.
 - Test both mounted shoes with the same firmware and mounting orientation.
-- Run every retained `mg24` CLI command on hardware, including board selection with
+- Run every retained `cli` tool command on hardware, including board selection with
   two controllers connected and `--log-motion` over USB.
 - Test the chosen remote's controls, debug output, button releases/repeats, disconnects, and reconnects
   while animations and motion processing are active.
@@ -350,7 +350,7 @@ deliverables below:
 - Disconnecting the phone does not reset the active settings or stop the pattern;
   reconnecting can inspect and control the current state.
 - Document how to set up and use the chosen remote.
-- The `mg24` CLI runs flow, fire-trail, color, and off on the actual hardware from
+- The `cli` tool runs flow, fire-trail, color, and off on the actual hardware from
   the pinned toolchain, selects the intended board, and is documented as a
   supported interface alongside the remote.
 - Color, all-off, and motion-calibration diagnostics remain supported; the DC

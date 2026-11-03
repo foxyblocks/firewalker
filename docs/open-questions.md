@@ -21,7 +21,7 @@ Both shoes mount the controller in the same orientation and share one axis map i
 so check each mounted shoe:
 
 - **Axes and signs:** does toe-down read as positive tilt? Check both a slow static tilt
-  and a quick movement with `./mg24 flow --motion --log-motion`. Neutral calibration
+  and a quick movement with `./cli flow --motion --log-motion`. Neutral calibration
   can't repair a wrong axis or gyro sign.
 - **Stomp thresholds:** what does a real stomp and an ordinary step produce on a mounted
   shoe? Tune `IMU_STOMP_ACCEL_THRESHOLD`, `IMU_RELEASE_ACCEL_THRESHOLD`,
@@ -52,7 +52,7 @@ so check each mounted shoe:
 ## Scope guardrails
 
 In scope: one strip per shoe, the onboard sensor, the flow and fire-trail patterns, the
-iPhone remote, the USB console, and the `mg24` bench tool. Out of scope: the 2-D
+iPhone remote, the USB console, and the `cli` bench tool. Out of scope: the 2-D
 "perimeter bubble" flow, multiple strips per shoe, synchronization between shoes,
 Android, over-the-air firmware updates, and the final battery and enclosure.
 

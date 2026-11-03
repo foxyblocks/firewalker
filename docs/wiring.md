@@ -52,7 +52,7 @@ it's powered.
 2. Check that the onboard LED is lit. If it isn't, the firmware isn't running.
 3. Check for about 5 V between the strip's +5V and GND, and that you're wired to its
    input end rather than its output end.
-4. Run `./mg24 color --lit 4 --brightness 16`, which lights only the first four pixels.
+4. Run `./cli color --lit 4 --brightness 16`, which lights only the first four pixels.
    Open a USB console and check that the firmware reports `[firewalker] mode=bench`.
 5. If the strip shows the wrong pixels or random colors, suspect the signal rather than
    the power: try the resistor and level shifter above.

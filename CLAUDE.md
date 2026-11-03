@@ -39,7 +39,7 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
   Arduino-free logic that `test/` exercises off-hardware.
 - `tools/pio/mg24_stack.py` — PlatformIO build step: picks the core's radio stack, pins
   Arm's compiler, and makes uploads target exactly one board.
-- `tools/mg24/` and `./mg24` — the bench CLI: flag-configured strip tests.
+- `tools/cli/` and `./cli` — the bench CLI: flag-configured strip tests.
 - `test/` — host-native Unity tests for the pure logic (`pio test -e native`).
 - `CONTEXT.md` — domain glossary; reuse these terms.
 - `docs/wiring.md`, `docs/power-budget.md` — wiring and current math.
@@ -57,9 +57,9 @@ pio run -e strip_test -t upload        # cycle colors on every pixel
 pio run -e strip_off -t upload         # blank every pixel
 pio device monitor                     # USB console + logs at 115200 baud
 pio test -e native                     # host-native tests of the pure logic
-(cd tools/mg24 && go test ./...)       # tests for the bench CLI
+(cd tools/cli && go test ./...)       # tests for the bench CLI
 
-./mg24 flow --motion --log-motion      # one-off strip test, see README.md
+./cli flow --motion --log-motion      # one-off strip test, see README.md
 ```
 
 With two boards connected, uploads refuse to guess. Add `--upload-port <usb serial>`;

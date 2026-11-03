@@ -71,23 +71,23 @@ boot moves, it reports why and keeps the previous calibration. Do this once per 
 
 ## Bench tests
 
-`./mg24` builds a one-off strip test and flashes it, without changing any firmware
+`./cli` builds a one-off strip test and flashes it, without changing any firmware
 settings or a shoe's saved settings. It needs [Go](https://go.dev) and PlatformIO.
 
 ```bash
-./mg24 flow --pixels 160 --brightness 16               # flow with no sensor input
-./mg24 flow --tilt=-0.5                                # fixed simulated heel-down tilt
-./mg24 flow --stomp-every 2s                           # timed flashes and trails
-./mg24 flow --motion                                   # onboard tilt and stomp input
-./mg24 flow --motion --log-motion                      # same, and stream motion over USB
-./mg24 fire-trail --stomp-every 1s                     # repeat fire trails without motion
-./mg24 fire-trail --motion                             # real stomps trigger fire trails
-./mg24 color --lit 20 --brightness 16 --interval 500ms # cycle white/red/green/blue
-./mg24 color --color '#ff8000' --lit 10                # fixed orange, other pixels black
-./mg24 off                                             # blank all connected pixels
-./mg24 flow --build-only                               # compile without uploading
-./mg24 flow --dry-run                                  # show settings without building
-./mg24 flow --help
+./cli flow --pixels 160 --brightness 16               # flow with no sensor input
+./cli flow --tilt=-0.5                                # fixed simulated heel-down tilt
+./cli flow --stomp-every 2s                           # timed flashes and trails
+./cli flow --motion                                   # onboard tilt and stomp input
+./cli flow --motion --log-motion                      # same, and stream motion over USB
+./cli fire-trail --stomp-every 1s                     # repeat fire trails without motion
+./cli fire-trail --motion                             # real stomps trigger fire trails
+./cli color --lit 20 --brightness 16 --interval 500ms # cycle white/red/green/blue
+./cli color --color '#ff8000' --lit 10                # fixed orange, other pixels black
+./cli off                                             # blank all connected pixels
+./cli flow --build-only                               # compile without uploading
+./cli flow --dry-run                                  # show settings without building
+./cli flow --help
 ```
 
 - `--pixels` is the total connected length, and color tests use `--lit` to choose how
@@ -120,7 +120,7 @@ Pure logic runs off-hardware, so it needs no board:
 
 ```bash
 pio test -e native
-(cd tools/mg24 && go test ./...)
+(cd tools/cli && go test ./...)
 ```
 
 Lit LEDs still need eyes on the real strip: a successful compile or upload doesn't
