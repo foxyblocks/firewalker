@@ -53,10 +53,13 @@ static inline uint8_t* encodeChannel(uint8_t* out, uint8_t value) {
   return out;
 }
 
-// One extra zero byte leaves D10 low when the transfer ends, which the strip needs to
-// see for the latch.
+// The frame sits between two zero bytes. The leading one matters because the SPI hardware
+// raises D10 for its first bit before its clock starts, which stretches that first high
+// pulse. Every encoded LED bit starts high, so without this the first pixel's top green
+// bit always reads as a one and that pixel sticks on bright green. The trailing one leaves
+// D10 low for the latch. Neither is long enough for the strip to treat as a latch mid-frame.
 size_t LedStrip::encodedSize() const {
-  return (size_t)count_ * ENCODED_BYTES_PER_PIXEL + 1;
+  return (size_t)count_ * ENCODED_BYTES_PER_PIXEL + 2;
 }
 
 void LedStrip::begin() {
@@ -88,6 +91,7 @@ void LedStrip::show() {
   if (!pixels_ || !encoded_) return;
 
   uint8_t* out = encoded_;
+  *out++ = 0;
   for (uint16_t i = 0; i < count_; i++) {
     const uint8_t* pixel = &pixels_[(size_t)i * 3];
     out = encodeChannel(out, scaleChannel(pixel[1], brightness_));  // G
