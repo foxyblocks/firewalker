@@ -52,6 +52,8 @@ class LedStrip {
   static uint32_t ColorHSV(uint16_t hue, uint8_t sat = 255, uint8_t val = 255);
 
  private:
+  void sendByte(uint8_t value);
+
   uint16_t count_;
   uint8_t* pixels_ = nullptr;  // R, G, B per pixel, before brightness
   uint8_t brightness_ = 255;

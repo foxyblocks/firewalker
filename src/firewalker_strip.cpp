@@ -28,21 +28,24 @@ static inline uint8_t scaleChannel(uint8_t value, uint8_t brightness) {
 }
 
 // Sends one byte, most significant bit first. Each bit's timer starts before the
-// pulse width is chosen and before D10 goes high, so those steps count toward
-// the pulse. Starting the timer after the high write stretches every pulse enough
-// to turn zeros into ones, which corrupts even all-black frames. The compiler
-// barrier stops the width loads from moving ahead of the timer read, which
-// otherwise shows up as stray lit pixels. It emits no instructions.
-static inline void sendByte(uint8_t value, uint32_t t0h, uint32_t t1h, uint32_t period) {
+// pulse width is loaded from memory and before D10 goes high, so those steps count
+// toward the pulse. They have to: this strip reads a zero with a long high pulse as
+// a one, and at 39 MHz the wait loop only checks the timer every 6 or so cycles. Even
+// a few cycles of work moved outside the timed interval stretches zeros enough to
+// light stray pixels, while starting the timer after the high write corrupts all-black
+// frames too. So keep the width loads here, rather than passing the widths in as
+// arguments, and keep the compiler barrier, which stops those loads moving ahead of
+// the timer read. It emits no instructions.
+void LedStrip::sendByte(uint8_t value) {
   for (uint8_t bit = 0; bit < 8; bit++) {
     const uint32_t start = DWT->CYCCNT;
     __asm__ __volatile__("" ::: "memory");
-    const uint32_t high = (value & 0x80) ? t1h : t0h;
+    const uint32_t high = (value & 0x80) ? cyclesT1H_ : cyclesT0H_;
     dataHigh();
     while ((DWT->CYCCNT - start) < high) {
     }
     dataLow();
-    while ((DWT->CYCCNT - start) < period) {
+    while ((DWT->CYCCNT - start) < cyclesPeriod_) {
     }
     value <<= 1;
   }
@@ -96,9 +99,9 @@ void LedStrip::show() {
   noInterrupts();
   for (uint16_t i = 0; i < count_; i++) {
     const uint8_t* pixel = &pixels_[(size_t)i * 3];
-    sendByte(scaleChannel(pixel[1], brightness_), cyclesT0H_, cyclesT1H_, cyclesPeriod_);
-    sendByte(scaleChannel(pixel[0], brightness_), cyclesT0H_, cyclesT1H_, cyclesPeriod_);
-    sendByte(scaleChannel(pixel[2], brightness_), cyclesT0H_, cyclesT1H_, cyclesPeriod_);
+    sendByte(scaleChannel(pixel[1], brightness_));
+    sendByte(scaleChannel(pixel[0], brightness_));
+    sendByte(scaleChannel(pixel[2], brightness_));
   }
   interrupts();
   dataLow();
