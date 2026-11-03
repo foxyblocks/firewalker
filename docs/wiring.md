@@ -12,9 +12,10 @@ handles control.
 | **GND** | **GND** | A common ground is mandatory, even when the strip has its own supply. |
 | **5V** | **+5V** | For USB bench work only. See below. |
 
-D10 is the chip's PA5. If the data pin ever moves, `LED_PIN` in
-[`config.h`](../include/config.h) and the port writes in
-[`firewalker_strip.cpp`](../src/firewalker_strip.cpp) have to move together.
+D10 is the board's SPI data output, and the SPI hardware generates the strip's signal
+(see [`firewalker_strip.cpp`](../src/firewalker_strip.cpp)), so the data line can't simply
+move to another pin. The same hardware also claims **D8** and **D9**, so leave those
+unconnected.
 
 ## Power
 

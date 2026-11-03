@@ -4,6 +4,7 @@
 // 800 kHz) on the XIAO MG24's D10 pad. Patterns draw into a pixel buffer through
 // `Firewalker::strip` (firewalker_core.h) and push it with show(). Brightness is
 // applied at show() time, so changing it never loses the colors a pattern set.
+// src/firewalker_strip.cpp explains how the signal is generated.
 //
 // The Feather build and the prototype sketch still use the Adafruit_NeoPixel API,
 // so with FIREWALKER_ADAFRUIT_STRIP_API this header only aliases that class.
@@ -23,9 +24,8 @@ class LedStrip {
  public:
   explicit LedStrip(uint16_t pixelCount) : count_(pixelCount) {}
 
-  // Allocates the buffer, claims D10, and measures the CPU clock so bit timing
-  // doesn't depend on getCPUClock(), which misreports on this core. Takes about
-  // 100 ms. Call from setup(), not at global-constructor time.
+  // Allocates the frame buffers and starts the SPI hardware that drives D10. Call
+  // from setup(), not at global-constructor time.
   void begin();
 
   // Global 0-255 scale applied to every channel at show() time.
@@ -40,8 +40,9 @@ class LedStrip {
   void setPixelColor(uint16_t index, uint8_t r, uint8_t g, uint8_t b);
 
   // Sends one whole frame, including black for unlit pixels, so a previous frame
-  // can't stay lit on downstream pixels. Does nothing before begin(). Blocks for
-  // about 30 us per pixel plus the 300 us latch.
+  // can't stay lit on downstream pixels. Does nothing before begin(). Blocks the
+  // calling task for about 30 us per pixel plus the latch, while interrupts and
+  // higher-priority tasks such as the Bluetooth stack keep running.
   void show();
 
   static uint32_t Color(uint8_t r, uint8_t g, uint8_t b) {
@@ -52,12 +53,12 @@ class LedStrip {
   static uint32_t ColorHSV(uint16_t hue, uint8_t sat = 255, uint8_t val = 255);
 
  private:
-  void sendByte(uint8_t value);
+  size_t encodedSize() const;
 
   uint16_t count_;
-  uint8_t* pixels_ = nullptr;  // R, G, B per pixel, before brightness
+  uint8_t* pixels_ = nullptr;   // R, G, B per pixel, before brightness
+  uint8_t* encoded_ = nullptr;  // the frame as SPI bytes, sent by DMA
   uint8_t brightness_ = 255;
-  uint32_t cyclesT0H_ = 0, cyclesT1H_ = 0, cyclesPeriod_ = 0;
 };
 
 }  // namespace Firewalker

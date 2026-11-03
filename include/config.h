@@ -16,8 +16,8 @@ constexpr unsigned long SERIAL_BAUD = 115200;
 #else
 // ── Strip ───────────────────────────────────────────────────────────────
 // BTF FCOB-5V-160L-W-IP30-SPI-5MM: a nominal 1m of 160 individually addressable
-// pixels, XGB1338 (WS2812B-compatible, GRB, 800 kHz). Data is on D10, which is PA5.
-// src/firewalker_strip.cpp writes that port directly, so change both together.
+// pixels, XGB1338 (WS2812B-compatible, GRB, 800 kHz). Data is on D10, which is SPI
+// MOSI. The signal comes from the SPI hardware, so it can't move to another pin freely.
 constexpr uint8_t LED_PIN = D10;
 
 // Connected pixel count and ring layout. The bench layout scales the original
@@ -45,12 +45,12 @@ static_assert(LED_COUNT > 0 && STRIP_TOE_INDEX < STRIP_HEEL_INDEX &&
                   STRIP_HEEL_INDEX < LED_COUNT,
               "Strip layout must satisfy toe < heel < pixel count");
 
-// Pulse widths of one WS2812 bit. Bench-confirmed on the BTF strip, so re-check
-// black frames, fixed colors, and animations on the real strip after any change.
-constexpr uint32_t STRIP_T0H_NS        = 350;
-constexpr uint32_t STRIP_T1H_NS        = 700;
-constexpr uint32_t STRIP_BIT_PERIOD_NS = 1250;
-constexpr uint32_t STRIP_LATCH_US      = 300;
+// Signal timing. src/firewalker_strip.cpp turns each LED bit into four bits of SPI at
+// this rate, which sets every pulse width. 3.25 MHz divides evenly from the board's
+// 39 MHz clock. Re-check black frames, fixed colors, and animations on the real strip
+// after any change, because a successful upload doesn't verify the signal.
+constexpr uint32_t STRIP_SPI_HZ   = 3250000;
+constexpr uint32_t STRIP_LATCH_US = 300;
 
 // Default brightness (0-255) on first boot. After that each controller restores
 // its own saved value. Brightness scales requested color and is not a current

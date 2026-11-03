@@ -27,7 +27,7 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
 - `src/patterns/` — runtime visual behaviors (`flow`, `fire_trail`) behind the
   `Pattern` interface (`include/patterns/pattern.h`). Each pattern owns its own
   animation state and engine.
-- `src/firewalker_strip.cpp` — the WS2812 strip driver behind `LedStrip`.
+- `src/firewalker_strip.cpp` — the strip driver behind `LedStrip`: hardware-timed, SPI + DMA on D10.
 - `src/firewalker_imu.cpp` — shared IMU service: read, complementary-filter tilt, neutral
   offset, stomp detect.
 - `src/firewalker_remote.cpp` — the USB console and BLE service behind one line-based

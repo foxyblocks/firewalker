@@ -221,9 +221,8 @@ Proposed approach:
    abstraction is unnecessary once the old board is retired.
 2. Keep the motion service's useful contract and pure fusion/stomp math; replace
    its MPU-6050 reader with the onboard-sensor implementation and explicit units.
-3. Consolidate WS2812 signaling used by the app, color test, and off build. Preserve
-   the tested timing behavior while removing misleading library-name shadowing
-   and duplicate low-level drivers where practical.
+3. Consolidate WS2812 signaling used by the app, color test, and off build into one
+   driver, removing misleading library-name shadowing and duplicate low-level drivers.
 4. Select and pin one MG24 platform/core. The existing Arduino CLI and PlatformIO
    paths use different core versions; a successful upload alone is insufficient
    validation of the full app.
@@ -284,9 +283,10 @@ Proposed approach:
 - **Neutral capture and storage:** an unstable or failed capture must not replace
   valid calibration. Reboot and save-failure checks are required for the settings
   that the product promises to remember.
-- **Bluetooth and LED timing:** the current strip driver disables interrupts
-  while sending each frame. Verify motion, animations, and bidirectional BLE
-  commands together at the configured strip length.
+- **Bluetooth and LED timing:** CPU-timed pulses proved unreliable with the Bluetooth
+  stack in the build, even with interrupts off, so the strip driver now generates its
+  signal with SPI and DMA. Verify motion, animations, and bidirectional BLE commands
+  together at the configured strip length.
 - **Calibration visibility:** complete the iPhone feedback path with clear behavior
   if the motion sensor is unavailable.
 

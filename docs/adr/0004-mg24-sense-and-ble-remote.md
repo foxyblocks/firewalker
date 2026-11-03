@@ -29,8 +29,15 @@ build, and the phone app is optional once a shoe is set up.
   that native tests cover, generic BLE terminals can debug it, and adding a command doesn't
   change the GATT layout. See [`docs/remote-protocol.md`](../remote-protocol.md).
 
+- **CPU-timed strip pulses** (the prototype's driver): rejected once BLE was in the build.
+  Measured in the firmware, about one zero pulse in 3000 stretched, some as long as a one,
+  even with interrupts off, which lit stray pixels. The same driver was clean with no radio.
+  The driver now sends each frame through SPI and DMA, so hardware sets every edge and
+  interrupts stay on.
+
 ## Consequences
 
+- D10 has to stay the SPI data pin, and D8 and D9 are claimed along with it.
 - USB stays a full control and log channel: the MG24's USB port carries the sketch's
   `Serial` in both directions, through the onboard debug chip. Bench work and motion logs
   need neither the phone nor a UART adapter.
