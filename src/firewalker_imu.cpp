@@ -6,6 +6,7 @@
 #include <math.h>
 
 #include "config.h"
+#include "firewalker_fusion.h"
 
 namespace Firewalker {
 
@@ -13,15 +14,13 @@ static Adafruit_MPU6050 mpu;
 static bool          ready        = false;
 static ImuSample     latest       = {0, 0, 0, 0, 0, 0, IMU_GRAVITY};
 
-// Fused fore-aft tilt, radians (0 = level). Complementary filter: gyro rate
-// integrated short-term, pulled toward the accelerometer's absolute angle.
+// Fused fore-aft tilt, radians (0 = level). The filter math is the pure
+// fuseTiltStep() in firewalker_fusion.h; this module just feeds it samples.
 static float         fusedAngle   = 0.0f;
 static bool          firstSample  = true;
 
-// Stomp detection (acceleration-magnitude hysteresis + refractory).
-static bool          armed        = true;
-static bool          stompPending = false;
-static unsigned long lastStompMs  = 0;
+// Stomp detection state (pure stompStep() hysteresis, firewalker_fusion.h).
+static StompState    stomp;
 
 static unsigned long lastSampleMs = 0;
 static unsigned long lastLogMs    = 0;
@@ -57,11 +56,11 @@ bool imuBegin() {
   Serial.print(F(" release<="));
   Serial.print(IMU_RELEASE_ACCEL_THRESHOLD);
   Serial.print(F(" tilt axis(accel fwd="));
-  Serial.print(FLOW_FOREAFT_AXIS);
+  Serial.print(IMU_MOUNT_FOREAFT_AXIS);
   Serial.print(F(" up="));
-  Serial.print(FLOW_VERTICAL_AXIS);
+  Serial.print(IMU_MOUNT_VERTICAL_AXIS);
   Serial.print(F(" gyro="));
-  Serial.print(FLOW_PITCH_GYRO_AXIS);
+  Serial.print(IMU_MOUNT_PITCH_GYRO_AXIS);
   Serial.println(F(")"));
   return ready;
 }
@@ -87,32 +86,24 @@ bool imuUpdate() {
   latest.mag = sqrtf(latest.ax * latest.ax + latest.ay * latest.ay +
                      latest.az * latest.az);
 
-  // Complementary filter for the fore-aft tilt angle. The accelerometer gives
-  // the absolute angle (gravity split between the heel↔toe axis and the
-  // vertical-at-rest axis); the gyro's pitch-rate axis is integrated to track
-  // fast motion without drift.
-  float aFwd = accelAxis(FLOW_FOREAFT_AXIS, FLOW_FOREAFT_SIGN);
-  float aUp = accelAxis(FLOW_VERTICAL_AXIS, FLOW_VERTICAL_SIGN);
-  float accAngle = atan2f(aFwd, aUp);
-  float gyroRate = gyroAxis(FLOW_PITCH_GYRO_AXIS, FLOW_PITCH_GYRO_SIGN);
+  // Complementary filter for the fore-aft tilt angle (pure math in
+  // firewalker_fusion.h): the accelerometer gives the absolute angle, the
+  // gyro's pitch-rate axis is integrated to track fast motion without drift.
+  float aFwd = accelAxis(IMU_MOUNT_FOREAFT_AXIS, IMU_MOUNT_FOREAFT_SIGN);
+  float aUp = accelAxis(IMU_MOUNT_VERTICAL_AXIS, IMU_MOUNT_VERTICAL_SIGN);
+  float accAngle = accelTiltAngle(aFwd, aUp);
+  float gyroRate = gyroAxis(IMU_MOUNT_PITCH_GYRO_AXIS, IMU_MOUNT_PITCH_GYRO_SIGN);
   if (firstSample) {
     fusedAngle = accAngle;
     firstSample = false;
   } else {
-    fusedAngle = FLOW_FILTER_ALPHA * (fusedAngle + gyroRate * dt) +
-                 (1.0f - FLOW_FILTER_ALPHA) * accAngle;
+    fusedAngle = fuseTiltStep(fusedAngle, accAngle, gyroRate, dt, IMU_FILTER_ALPHA);
   }
 
-  // Stomp: fire once on a magnitude spike (after the refractory gap), then
-  // re-arm only once it falls back below the release threshold.
-  if (armed && latest.mag >= IMU_STOMP_ACCEL_THRESHOLD &&
-      (now - lastStompMs) >= IMU_REFRACTORY_MS) {
-    armed = false;
-    stompPending = true;
-    lastStompMs = now;
-  } else if (!armed && latest.mag <= IMU_RELEASE_ACCEL_THRESHOLD) {
-    armed = true;
-  }
+  // Stomp hysteresis + refractory (pure stompStep() in firewalker_fusion.h).
+  stompStep(stomp, latest.mag, now,
+            {IMU_STOMP_ACCEL_THRESHOLD, IMU_RELEASE_ACCEL_THRESHOLD,
+             IMU_REFRACTORY_MS});
 
   return true;
 }
@@ -120,17 +111,24 @@ bool imuUpdate() {
 const ImuSample& imuLatest() { return latest; }
 
 float imuTiltFwd() {
-  float deg = fusedAngle * 57.2957795f;  // rad -> deg
-  float t = deg / FLOW_TILT_FULL_DEG;
-  if (t > 1.0f) t = 1.0f;
-  if (t < -1.0f) t = -1.0f;
-  return t;
+  // Trim the mount's sole-flat fore-aft cant so a flat foot reads level, then
+  // normalize to ±1 at IMU_TILT_FULL_DEG of tilt from flat. DEG→RAD = π/180.
+  float trimmed = fusedAngle - IMU_MOUNT_FOREAFT_REST_DEG * 0.0174532925f;
+  return normalizeTilt(trimmed, IMU_TILT_FULL_DEG);
 }
 
 bool imuTakeStomp() {
-  if (!stompPending) return false;
-  stompPending = false;
+  if (!stomp.pending) return false;
+  stomp.pending = false;
   return true;
+}
+
+float imuStompStrength() {
+  float s = (stomp.fireMag - IMU_STOMP_ACCEL_THRESHOLD) /
+            (IMU_STOMP_FORCE_FULL - IMU_STOMP_ACCEL_THRESHOLD);
+  if (s < 0.0f) s = 0.0f;
+  if (s > 1.0f) s = 1.0f;
+  return s;
 }
 
 void imuLog() {
@@ -149,7 +147,7 @@ void imuLog() {
   Serial.print(latest.gz, 2); Serial.print(F(") tilt="));
   Serial.print(imuTiltFwd(), 2);
   Serial.print(F(" armed="));
-  Serial.println(armed ? F("true") : F("false"));
+  Serial.println(stomp.armed ? F("true") : F("false"));
 }
 
 }  // namespace Firewalker

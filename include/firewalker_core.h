@@ -3,9 +3,9 @@
 #include <Arduino.h>
 #include <Adafruit_NeoPixel.h>
 
-// Shared hardware + drawing services: the main strip, the onboard status pixel,
-// the D6 button, the fire-trail engine, and a solid idle fill. Sensor logic
-// lives elsewhere (firewalker_imu); visual behaviors live in patterns/.
+// Shared hardware services: the main strip, the onboard status pixel, the D6
+// button, and a solid idle fill. Sensor logic lives elsewhere (firewalker_imu);
+// visual behaviors — including their animation engines — live in patterns/.
 
 namespace Firewalker {
 
@@ -17,13 +17,6 @@ void setupCore(const __FlashStringHelper* modeName);
 // Edge-triggered, debounced read of the D6 button. True once per press. The app
 // uses it to cycle patterns; imu_debug uses it as a bench input.
 bool debugButtonPressed();
-
-// Fire-trail engine (used by the fire-trail pattern).
-void spawnTrail();
-void renderTrails();
-void advanceTrailsIfDue();
-void resetTrails();
-bool hasActiveTrails();
 
 // Fill the whole strip a solid color scaled to a 0..LED_BRIGHTNESS level (the
 // imu_debug motion visual).

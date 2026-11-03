@@ -1,8 +1,8 @@
 // imu_debug — bench / calibration build for the GY-521 (MPU-6050). It logs raw
 // accel + gyro, the fused fore-aft tilt, and stomp events over serial, and
 // mirrors the live tilt as strip brightness so you can confirm the axis mapping
-// by eye. Use it to set the FLOW_* axis indices/signs and the stomp thresholds
-// in config.h before running the app. See docs/wiring-mpu6050.md.
+// by eye. Use it to set the IMU_MOUNT_* axis indices/signs and the stomp
+// thresholds in config.h before running the app. See docs/wiring-mpu6050.md.
 
 #include "modes/imu_debug.h"
 

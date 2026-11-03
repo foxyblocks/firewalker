@@ -5,22 +5,17 @@
 
 #include "config.h"
 #include "firewalker_core.h"
+#include "firewalker_strip_map.h"
 
 namespace Firewalker {
 
-// Each pixel's fore-aft position s ∈ [0,1]. The strip loops heel→toe→heel, so
-// the toe (FLOW_TOE_INDEX) is the apex (s=1) and both ends are the heel (s=0).
-// A tent function over the index handles the two (possibly unequal) sides.
+// Each pixel's fore-aft position s ∈ [0,1] (heel=0, toe=1) from the ring map
+// in firewalker_strip_map.h: the strip is a closed loop around the foot
+// (pixel 0 at the inner ankle, toe/heel at measured indices), and the two
+// arcs between toe and heel get linear ramps.
 void FlowPattern::buildPositions() {
   for (uint16_t i = 0; i < LED_COUNT; i++) {
-    float s;
-    if (i <= FLOW_TOE_INDEX) {
-      s = (FLOW_TOE_INDEX == 0) ? 1.0f : (float)i / (float)FLOW_TOE_INDEX;
-    } else {
-      uint16_t backspan = (LED_COUNT - 1) - FLOW_TOE_INDEX;
-      s = (backspan == 0) ? 1.0f : (float)((LED_COUNT - 1) - i) / (float)backspan;
-    }
-    pos_[i] = s;
+    pos_[i] = stripForeAft(i, LED_COUNT, STRIP_TOE_INDEX, STRIP_HEEL_INDEX);
   }
   built_ = true;
 }
@@ -33,23 +28,36 @@ void FlowPattern::enter() {
   strip.setBrightness(LED_BRIGHTNESS);
 }
 
-// Launch up to 4 diverging fronts from the tilt-derived fore-aft source. The
-// source fraction f maps to a pixel on each side (side A: heel..toe, side B:
-// toe..heel); from each, one front heads toward the heel end and one toward the
-// toe. Fronts with no room to travel (source already at an end) are skipped.
-void FlowPattern::spawnTrail(float tilt) {
+// Launch up to 4 diverging fronts from the tilt-derived fore-aft source: one
+// source per arc of the ring (lateral arc = plain indices toe..heel; medial
+// arc = the wrap arc, handled in *unwrapped* indices heel..heel+wrapLen so
+// fronts can cross the 39→0 seam), and from each source one front toward the
+// heel and one toward the toe. Unwrapped positions fold back to real pixels
+// only when painting. Fronts with no room to travel (source already at an arc
+// end) are skipped.
+void FlowPattern::spawnTrail(float tilt, float strength) {
   float f = 0.5f + 0.5f * tilt;  // 0=heel, 0.5=mid-foot, 1=toe
   if (f < 0.0f) f = 0.0f;
   if (f > 1.0f) f = 1.0f;
 
-  const uint16_t end  = LED_COUNT - 1;
-  const float    srcA = f * (float)FLOW_TOE_INDEX;
-  const float    srcB = (float)FLOW_TOE_INDEX + (1.0f - f) * (float)(end - FLOW_TOE_INDEX);
+  // Band brightness scales linearly with the stomp force: a threshold-force
+  // step lights at FLOW_TRAIL_BRIGHT_MIN, a full-force stomp at 1.0.
+  float bright = FLOW_TRAIL_BRIGHT_MIN + strength * (1.0f - FLOW_TRAIL_BRIGHT_MIN);
+
+  constexpr uint16_t plainLen = stripPlainArcLen(STRIP_TOE_INDEX, STRIP_HEEL_INDEX);
+  constexpr uint16_t wrapLen  = stripWrapArcLen(LED_COUNT, STRIP_TOE_INDEX, STRIP_HEEL_INDEX);
+  constexpr uint16_t wrapToe  = STRIP_HEEL_INDEX + wrapLen;  // unwrapped toe
+
+  // Lateral arc: s falls toe→heel as the index climbs, so the source sits f of
+  // the arc back from the heel. Medial arc (unwrapped): s climbs with the index.
+  const float srcA = (float)STRIP_HEEL_INDEX - f * (float)plainLen;
+  const float srcB = (float)STRIP_HEEL_INDEX + f * (float)wrapLen;
 
   const float    heads[4] = {srcA, srcA, srcB, srcB};
   const int8_t   dirs[4]  = {-1, +1, -1, +1};
-  const uint16_t los[4]   = {0, 0, FLOW_TOE_INDEX, FLOW_TOE_INDEX};
-  const uint16_t his[4]   = {FLOW_TOE_INDEX, FLOW_TOE_INDEX, end, end};
+  const uint16_t los[4]   = {STRIP_TOE_INDEX, STRIP_TOE_INDEX,
+                             STRIP_HEEL_INDEX, STRIP_HEEL_INDEX};
+  const uint16_t his[4]   = {STRIP_HEEL_INDEX, STRIP_HEEL_INDEX, wrapToe, wrapToe};
 
   for (uint8_t i = 0; i < 4; i++) {
     bool room = (dirs[i] > 0) ? (heads[i] < (float)his[i] - 0.5f)
@@ -57,7 +65,7 @@ void FlowPattern::spawnTrail(float tilt) {
     if (!room) continue;
     for (uint8_t k = 0; k < FLOW_MAX_FRONTS; k++) {
       if (!fronts_[k].active) {
-        fronts_[k] = {heads[i], dirs[i], los[i], his[i], true};
+        fronts_[k] = {heads[i], dirs[i], los[i], his[i], true, bright};
         break;
       }
     }
@@ -65,8 +73,9 @@ void FlowPattern::spawnTrail(float tilt) {
 }
 
 // Trail band color at depth d behind the head (0 = white head). White → current
-// hue (full) → the previous hue in the rotation.
-static uint32_t bandColor(uint8_t d, uint16_t hue) {
+// hue (full) → the previous hue in the rotation. `bright` (0..1) scales the
+// band's value so harder stomps paint brighter trails.
+static uint32_t bandColor(uint8_t d, uint16_t hue, float bright) {
   float t = (FLOW_TRAIL_LEN <= 1) ? 0.0f : (float)d / (float)(FLOW_TRAIL_LEN - 1);
   uint16_t h;
   uint8_t  s;
@@ -78,7 +87,16 @@ static uint32_t bandColor(uint8_t d, uint16_t hue) {
     h = (uint16_t)(hue - (uint16_t)(seg * (float)FLOW_TRAIL_PREV_HUE));
     s = 255;
   }
-  return Adafruit_NeoPixel::ColorHSV(h, s, 255);
+  return Adafruit_NeoPixel::ColorHSV(h, s, (uint8_t)(bright * 255.0f));
+}
+
+// Blend a packed RGB color toward white by amt (0 = unchanged, 1 = full white).
+static uint32_t whiten(uint32_t c, float amt) {
+  uint8_t r = (uint8_t)(c >> 16), g = (uint8_t)(c >> 8), b = (uint8_t)c;
+  r = (uint8_t)(r + (255 - r) * amt);
+  g = (uint8_t)(g + (255 - g) * amt);
+  b = (uint8_t)(b + (255 - b) * amt);
+  return Adafruit_NeoPixel::Color(r, g, b);
 }
 
 void FlowPattern::update(const PatternInput& in) {
@@ -99,7 +117,12 @@ void FlowPattern::update(const PatternInput& in) {
     tilt = (tilt < 0.0f) ? -scaled : scaled;
   }
 
-  if (in.stomp) spawnTrail(tilt);
+  // A tilted stomp pours directional trails from the down-point; a flat stomp
+  // has no down direction, so it flashes the whole strip white instead.
+  if (in.stomp) {
+    if (tilt == 0.0f) flashRemainMs_ = (float)FLOW_FLASH_MS;
+    else spawnTrail(tilt, in.stompStrength);
+  }
 
   // Advance fronts; retire any whose band has fully cleared its side.
   float step = FLOW_TRAIL_SPEED_PXPS * (float)in.dt / 1000.0f;
@@ -112,22 +135,41 @@ void FlowPattern::update(const PatternInput& in) {
       fronts_[k].active = false;
   }
 
-  // Pooling background: one rotating hue, brightness pooled toward the down-end.
+  // Fill-gauge background: one rotating hue. The lit band is a fill level from
+  // the down-end — `at` (0..1) is both the fill edge in fore-aft units and how
+  // far each survivor brightens toward full. Each pixel's litFrac fades across
+  // its own one-pixel span (pxW) as the edge sweeps past, so pixels extinguish
+  // one-by-one from the up-end. At level (at 0) every pixel is lit at baseline.
+  at = fabsf(tilt);                                  // post-deadzone magnitude / fill edge
+  const bool  toeDown   = (tilt >= 0.0f);
+  const float pxW       = 1.0f / (float)stripPlainArcLen(STRIP_TOE_INDEX, STRIP_HEEL_INDEX);
+  const float litBright = FLOW_BASELINE + at * (1.0f - FLOW_BASELINE);  // survivors → full
+  float flash = (flashRemainMs_ > 0.0f) ? flashRemainMs_ / (float)FLOW_FLASH_MS : 0.0f;
+  if (flash > 1.0f) flash = 1.0f;
   for (uint16_t i = 0; i < LED_COUNT; i++) {
-    float b = FLOW_BASELINE + tilt * FLOW_GAIN * (pos_[i] - 0.5f);
-    if (b < 0.0f) b = 0.0f;
-    if (b > 1.0f) b = 1.0f;
-    strip.setPixelColor(i, Adafruit_NeoPixel::ColorHSV(hueU, 255, (uint8_t)(b * 255.0f)));
+    // litFrac: 1 well inside the lit band, ramping to 0 one pixel past the edge.
+    float litFrac = toeDown ? (pos_[i] - at) / pxW + 1.0f
+                            : (1.0f - at - pos_[i]) / pxW + 1.0f;
+    if (litFrac < 0.0f) litFrac = 0.0f;
+    if (litFrac > 1.0f) litFrac = 1.0f;
+    float b = litFrac * litBright;
+    uint32_t c = Adafruit_NeoPixel::ColorHSV(hueU, 255, (uint8_t)(b * 255.0f));
+    if (flash > 0.0f) c = whiten(c, flash);
+    strip.setPixelColor(i, c);
+  }
+  if (flashRemainMs_ > 0.0f) {
+    flashRemainMs_ -= (float)in.dt;
+    if (flashRemainMs_ < 0.0f) flashRemainMs_ = 0.0f;
   }
 
-  // Stomp trails overlay the background, each clamped to its side of the loop.
+  // Stomp trails overlay the background, each clamped to its arc; unwrapped
+  // positions (medial arc past index 39) fold back to real pixels here.
   for (uint8_t k = 0; k < FLOW_MAX_FRONTS; k++) {
     if (!fronts_[k].active) continue;
     for (uint8_t d = 0; d < FLOW_TRAIL_LEN; d++) {
       int16_t p = (int16_t)lroundf(fronts_[k].head - (float)fronts_[k].dir * (float)d);
       if (p < (int16_t)fronts_[k].lo || p > (int16_t)fronts_[k].hi) continue;
-      if (p < 0 || p >= (int16_t)LED_COUNT) continue;
-      strip.setPixelColor(p, bandColor(d, hueU));
+      strip.setPixelColor(stripWrapIndex((uint16_t)p, LED_COUNT), bandColor(d, hueU, fronts_[k].bright));
     }
   }
 

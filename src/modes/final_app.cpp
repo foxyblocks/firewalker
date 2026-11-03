@@ -48,9 +48,10 @@ void loop() {
 
   unsigned long now = millis();
   Firewalker::PatternInput in;
-  in.tiltFwd = Firewalker::imuTiltFwd();
-  in.stomp   = Firewalker::imuTakeStomp();
-  in.dt      = now - lastUpdateMs;
+  in.tiltFwd       = Firewalker::imuTiltFwd();
+  in.stomp         = Firewalker::imuTakeStomp();
+  in.stompStrength = Firewalker::imuStompStrength();
+  in.dt            = now - lastUpdateMs;
   lastUpdateMs = now;
 
   patterns[active]->update(in);

@@ -56,7 +56,7 @@ Always observe the strip's **data direction arrow** — DIN is the upstream end.
 
 ## Power caveat
 
-The Feather's USB/VBUS 5V is fine for lighting the current 39 pixels **dimly**
+The Feather's USB/VBUS 5V is fine for lighting the 40 pixels **dimly**
 during bring-up, and this is the wiring currently confirmed working. It is
 still not a real power plan for higher brightness or more pixels. Note that
 stacked trails can light the whole strip at once; that full-strip moment is the
