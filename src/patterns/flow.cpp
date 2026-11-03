@@ -10,7 +10,7 @@ namespace Firewalker {
 
 // Each pixel's fore-aft position s ∈ [0,1] (heel=0, toe=1) from the ring map
 // in firewalker_strip_map.h: the strip is a closed loop around the foot
-// (pixel 0 at the inner ankle, toe/heel at measured indices), and the two
+// (pixel 0 under the controller, toe/heel at configured indices), and the two
 // arcs between toe and heel get linear ramps.
 void FlowPattern::buildPositions() {
   for (uint16_t i = 0; i < LED_COUNT; i++) {
@@ -27,9 +27,9 @@ void FlowPattern::enter() {
 }
 
 // Launch up to 4 diverging fronts from the tilt-derived fore-aft source: one
-// source per arc of the ring (lateral arc = plain indices toe..heel; medial
-// arc = the wrap arc, handled in *unwrapped* indices heel..heel+wrapLen so
-// fronts can cross the 39→0 seam), and from each source one front toward the
+// source per arc of the ring (the plain arc = indices toe..heel; the wrap arc
+// is handled in *unwrapped* indices heel..heel+wrapLen so fronts can cross the
+// seam from the last pixel to pixel 0), and from each source one front toward the
 // heel and one toward the toe. Unwrapped positions fold back to real pixels
 // only when painting. Fronts with no room to travel (source already at an arc
 // end) are skipped.
@@ -46,8 +46,8 @@ void FlowPattern::spawnTrail(float tilt, float strength) {
   constexpr uint16_t wrapLen  = stripWrapArcLen(LED_COUNT, STRIP_TOE_INDEX, STRIP_HEEL_INDEX);
   constexpr uint16_t wrapToe  = STRIP_HEEL_INDEX + wrapLen;  // unwrapped toe
 
-  // Lateral arc: s falls toe→heel as the index climbs, so the source sits f of
-  // the arc back from the heel. Medial arc (unwrapped): s climbs with the index.
+  // Plain arc: s falls toe→heel as the index climbs, so the source sits f of
+  // the arc back from the heel. Wrap arc (unwrapped): s climbs with the index.
   const float srcA = (float)STRIP_HEEL_INDEX - f * (float)plainLen;
   const float srcB = (float)STRIP_HEEL_INDEX + f * (float)wrapLen;
 
@@ -161,7 +161,7 @@ void FlowPattern::update(const PatternInput& in) {
   }
 
   // Stomp trails overlay the background, each clamped to its arc; unwrapped
-  // positions (medial arc past index 39) fold back to real pixels here.
+  // positions (wrap arc past the last index) fold back to real pixels here.
   for (uint8_t k = 0; k < FLOW_MAX_FRONTS; k++) {
     if (!fronts_[k].active) continue;
     for (uint8_t d = 0; d < FLOW_TRAIL_LEN; d++) {

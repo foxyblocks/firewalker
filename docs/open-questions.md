@@ -1,61 +1,64 @@
-# Open questions — hardware unknowns
+# Open questions
 
-Unresolved hardware facts. Recorded here (not hidden in code comments) so they
-get decided deliberately. Resolve → move the decision into `wiring.md`,
+Unresolved hardware facts. Recorded here, not hidden in code comments, so they get
+decided deliberately. Once one is resolved, move the decision into `wiring.md`,
 `power-budget.md`, `CONTEXT.md`, or an ADR as appropriate.
 
-## Power delivery (highest priority)
+## Strip layout on a mounted shoe
 
-- How is the strip powered in the **final wearable**? Single-cell LiPo + 5V
-  boost? 2×AA? USB power bank? This sets the real current ceiling and the safe
-  brightness/animation envelope. (The strip itself is settled: exactly 40
-  pixels, all driven — see CONTEXT.md "Strip".)
-- Current bench rig intentionally omits the data-line resistor, bulk capacitor,
-  and level shifter. At what brightness/length/use case do we upgrade to the
-  extra-effort wiring?
+- What's the real pixel count and ring layout per shoe? The firmware uses the bench
+  layout (160 pixels, toe 52, heel 132), which scales the old 40-pixel ring by four. It
+  isn't a measurement. Set `FIREWALKER_LED_COUNT`, `FIREWALKER_STRIP_TOE_INDEX`, and
+  `FIREWALKER_STRIP_HEEL_INDEX` in `include/config.h` once a shoe is assembled.
+- Do the animation speeds still look right? `FLOW_TRAIL_SPEED_PXPS`, `FLOW_TRAIL_LEN`,
+  `FIRE_TRAIL_STEP_MS`, and `FIRE_TRAIL_LEN` count in pixels and were tuned on a far less
+  dense strip, so the same values now cover a much shorter physical distance.
 
-## Controller / logic level
+## Mount and motion calibration
 
-- Current controller is the Adafruit Feather RP2040, with direct 3.3V data into
-  the strip. Does the final wearable need a 5V level shifter for reliability?
+Both shoes mount the controller in the same orientation and share one axis map in
+`include/firewalker_mg24_mount.h`. That map has only been confirmed on the bench mount,
+so check each mounted shoe:
 
-## Wearable constraints
+- **Axes and signs:** does toe-down read as positive tilt? Check both a slow static tilt
+  and a quick movement with `./mg24 flow --motion --log-motion`. Neutral calibration
+  can't repair a wrong axis or gyro sign.
+- **Stomp thresholds:** what does a real stomp and an ordinary step produce on a mounted
+  shoe? Tune `IMU_STOMP_ACCEL_THRESHOLD`, `IMU_RELEASE_ACCEL_THRESHOLD`,
+  `IMU_REFRACTORY_MS`, and `IMU_STOMP_FORCE_FULL`.
+- **Neutral capture bounds:** the `NEUTRAL_*` values in `include/config.h` pass on a
+  still bench. Do they also pass for a boot held still by hand, and reject a boot that's
+  really moving?
+- **Filter feel:** does `IMU_FILTER_ALPHA` and `IMU_TILT_FULL_DEG` still feel right?
 
-- Mounting: how/where does the strip attach to the shoe, and how is the
-  controller + battery enclosed and strain-relieved?
-- Connector strategy for removing electronics before washing?
+## Power
 
-## IMU calibration (bench — Feather is connected)
+- How is the strip powered in the final wearable? The battery and enclosure are outside
+  the current firmware work, and the answer sets the real brightness ceiling.
+- What are the strip's actual idle and peak currents? `power-budget.md` uses the
+  manufacturer's rating.
 
-The IMU is the stomp sensor (the FSR is retired). These constants are baked in
-`config.h` from a known mount (Feather on its side on the outer ankle, USB toward
-the heel; GY-521 co-mounted), but the exact axis/sign/values need a bench pass
-with `imu_debug`.
+## Signal
 
-**The protoboard carrier (FOX-183, `wiring-protoboard.md`) mounts on the inner
-ankle of both shoes** — identical hardware, USB up the leg, exposed face
-outward. The axis *assignments* (X fore-aft, Y vertical, Z pitch) match the
-already-bench-confirmed USB-up orientation, but the chirality-sensitive signs
-now depend on the foot: `IMU_MOUNT_FOOT_SIGN` flips fore-aft and pitch-gyro
-between left and right, and which physical foot gets which sign is a
-geometry-derived hypothesis (left = current bench signs). Confirm with
-`imu_debug` on each shoe after assembly:
+- Does the mounted wiring run still read 3.3 V data reliably, or does the wearable need
+  the level shifter from `wiring.md`?
 
-- **Stomp thresholds**: what `|a|` does a real foot stomp/step produce when
-  shoe-mounted? Tune `IMU_STOMP_ACCEL_THRESHOLD` / `IMU_RELEASE_ACCEL_THRESHOLD`
-  / `IMU_REFRACTORY_MS`. Is bare magnitude enough, or is a smarter step-detect
-  needed to reject ordinary walking?
-- **Flow tilt axis + sign**: which accel axis runs heel↔toe (drives pooling),
-  which gyro axis is the pitch rate for the complementary filter, and the signs.
-  Confirm/flip from a resting `imu_debug` capture.
-- **Complementary-filter constant** and **max-tilt angle** that saturates the
-  flow gradient — feel-tuned on the bench.
+## Wearable construction
 
-## Power / behavior
+- How does the strip attach to the shoe, and how is the controller enclosed and
+  strain-relieved?
+- How do the electronics come off for washing?
 
-- The **flow** pattern's spectrum-cycling hue passes through 2-channel colors
-  (yellow / cyan / magenta): a full strip at `LED_BRIGHTNESS = 100` is ~630 mA,
-  over the USB budget, and pooling + stacked trails can approach it — accepted
-  risk for the bench demo; revisit (brightness cap or external 5 V) if it
-  browns out. See `power-budget.md`.
-- Desired animations and their power profile once the wearable power plan is set.
+## Scope guardrails
+
+In scope: one strip per shoe, the onboard sensor, the flow and fire-trail patterns, the
+iPhone remote, the USB console, and the `mg24` bench tool. Out of scope: the 2-D
+"perimeter bubble" flow, multiple strips per shoe, synchronization between shoes,
+Android, over-the-air firmware updates, and the final battery and enclosure.
+
+## Conventions
+
+- Hardware constants live in `include/config.h`, never hard-coded in the mode or core
+  source files.
+- Hardware uncertainty is documented in `docs/`, not buried in code comments.
+- Durable decisions are recorded as ADRs under `docs/adr/`.

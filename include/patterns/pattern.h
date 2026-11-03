@@ -3,10 +3,11 @@
 #include <Arduino.h>
 
 // A Pattern is a runtime-selectable visual behavior of the strip (flow,
-// fire-trail, ...). The app holds several and switches between them live (D6
-// cycles). Each frame the app feeds the pattern the fused orientation, whether a
+// fire-trail, ...). The app holds several and the remote switches between them
+// live. Each frame the app feeds the pattern the fused orientation, whether a
 // stomp fired this tick, and the elapsed time, and the pattern renders to the
-// shared strip. See ADR-0002.
+// shared strip. Brightness belongs to the caller, so patterns never set it. See
+// ADR-0002.
 
 namespace Firewalker {
 

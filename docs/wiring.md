@@ -1,70 +1,58 @@
-# Wiring — Feather RP2040 rig
+# Wiring
 
-Assumptions for the current Adafruit Feather RP2040 + single WS2812B strip
-setup. These are **assumptions to verify against the physical build**, not
-confirmed measurements — anything uncertain is also tracked in
-[`open-questions.md`](open-questions.md).
+How the Seeed XIAO MG24 Sense connects to the BTF FCOB strip. There's no sensor wiring,
+because the motion sensor is on the board, and there are no buttons, because the remote
+handles control.
 
 ## Connections
 
-| From (Feather RP2040) | To (strip) | Notes |
+| From (XIAO MG24) | To (strip) | Notes |
 |---|---|---|
-| **D5** | **DIN** (data in) | Direct data wire. In the installed board variant, D5 maps to GPIO 7. |
-| **GND** | **GND** | Common ground is **mandatory**: Feather ground and strip ground must be tied together even when the strip has its own supply. |
-| **USB** | strip **5V/VCC** | The Feather's USB power-out/VBUS pin feeds the strip for the current low-brightness test rig. |
+| **D10** | **DIN** | At the strip's input end. Its arrows point away from the board. |
+| **GND** | **GND** | A common ground is mandatory, even when the strip has its own supply. |
+| **5V** | **+5V** | For USB bench work only. See below. |
 
-## FSR (temporary stomp simulator)
+D10 is the chip's PA5. If the data pin ever moves, `LED_PIN` in
+[`config.h`](../include/config.h) and the port writes in
+[`firewalker_strip.cpp`](../src/firewalker_strip.cpp) have to move together.
 
-An FSR stands in for a foot stomp while we test, before any real accelerometer
-or shoe-mounted trigger is added. The Feather reads the FSR through a voltage
-divider on analog input A0.
+## Power
 
-| From | To | Notes |
-|---|---|---|
-| **3V3** | one FSR leg | Powers the divider from Feather logic voltage. |
-| other FSR leg | **A0** | Analog sense point. In the installed board variant, A0 reads as GPIO 26. |
-| **A0** | fixed resistor to **GND** | Start with **10k ohm**. Larger values make lighter pressure more visible; smaller values favor heavier pressure. |
+There are two supported setups. [`power-budget.md`](power-budget.md) has the current
+math behind them.
 
-Pressing the FSR lowers its resistance, so this divider makes the A0 reading
-rise. The observed baseline is roughly 100-300, and a hard press reads around
-700-1000. The firmware fires once when the reading rises above
-`FSR_STOMP_THRESHOLD`, then waits until it falls below `FSR_RELEASE_THRESHOLD`
-before arming again. This hysteresis keeps one foot press from spawning repeated
-trails.
+**USB bench.** Feed the strip from the board's 5V pad, which exposes USB power. Seeed
+recommends keeping peripheral load on that pad under 500 mA. The firmware's brightness
+cap keeps a full-white frame near 400 mA by the strip's rating.
 
-## Debug button
+**External 5 V.** Feed the strip directly from a 5 V supply rated at least 2 A, keep
+the board on USB or its own supply, and tie the grounds together. Leave the board's 5V
+pad disconnected from that supply. Use this for anything brighter than the cap.
 
-The D6 button remains enabled as a bench-test trigger. It spawns the same trail
-as an FSR stomp, but it is digital and deterministic while the FSR threshold is
-being tuned.
+The 5V pad is not a boosted battery output, and the final battery design is still open.
 
-| From (Feather RP2040) | To (button) | Notes |
-|---|---|---|
-| **D6** | one leg | Uses the internal pull-up (`INPUT_PULLUP`) — no external resistor. In the installed board variant, D6 maps to GPIO 8. |
-| **GND** | other leg | Pressing connects D6 to GND. |
+## Signal integrity
 
-## Extra-effort reference
+The bench rig runs D10's 3.3 V data straight into the strip's input, and that works on
+the tested strip. Add these if the strip flickers or a longer run gets unreliable:
 
-The current working rig intentionally omits the level shifter, data-line
-resistor, and bulk capacitor. If the strip becomes flaky, gets longer/brighter,
-or moves from bench testing to wearable use, use
-[`wiring-extra-effort.html`](wiring-extra-effort.html) as the reference for the
-more protective wiring: 74AHCT125 level shifter, 300-470 ohm data resistor, and
-bulk capacitor across strip power.
+- A **330 Ω resistor** in series with DIN, close to the strip, to damp ringing.
+- A **1000 µF capacitor** across the strip's +5V and GND at the input, to absorb
+  current surges, especially with an external supply.
+- A **3.3 V to 5 V level shifter** on the data line, for a strip that won't read 3.3 V
+  data reliably.
 
-Always observe the strip's **data direction arrow** — DIN is the upstream end.
+Connect GND first and disconnect it last, and don't hot-plug the strip's data line while
+it's powered.
 
-## Power caveat
+## Troubleshooting a dark strip
 
-The Feather's USB/VBUS 5V is fine for lighting the 40 pixels **dimly**
-during bring-up, and this is the wiring currently confirmed working. It is
-still not a real power plan for higher brightness or more pixels. Note that
-stacked trails can light the whole strip at once; that full-strip moment is the
-worst case. See [`power-budget.md`](power-budget.md).
-
-## Logic level
-
-The Feather RP2040 is a **3.3 V** logic board. This strip is currently working
-with direct 3.3V data into a 5V-powered WS2812 strip. If the strip glitches or
-fails to respond reliably, the first upgrade is a 74AHCT125 or similar
-5V-powered level shifter as shown in the extra-effort reference.
+1. Reseat the board and check the connections first. A dark strip on the bench once
+   turned out to be the board not sitting fully in the breadboard.
+2. Check that the onboard LED is lit. If it isn't, the firmware isn't running.
+3. Check for about 5 V between the strip's +5V and GND, and that you're wired to its
+   input end rather than its output end.
+4. Run `./mg24 color --lit 4 --brightness 16`, which lights only the first four pixels.
+   Open a USB console and check that the firmware reports `[firewalker] mode=bench`.
+5. If the strip shows the wrong pixels or random colors, suspect the signal rather than
+   the power: try the resistor and level shifter above.

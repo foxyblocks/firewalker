@@ -1,109 +1,149 @@
 # Firewalker Shoes
 
-Wearable LED-shoe firmware, inspired by Adafruit's Gemma LED Sneakers /
-Firewalker guide. Built with **PlatformIO + Arduino framework** in VS Code (not
-the Arduino IDE).
+Wearable LED-shoe firmware, inspired by Adafruit's Gemma LED Sneakers / Firewalker
+guide. Built with **PlatformIO + Arduino framework**.
 
-> **Status:** IMU-driven, runtime light **patterns** on the Feather RP2040 rig,
-> across **39 pixels** of one WS2812B strip. A GY-521 / MPU-6050 (accel + gyro,
-> I2C) is the motion sensor. The app runs two patterns and **D6 cycles** between
-> them (boots into `flow`):
->
-> - **flow** — the strip shares one hue that slowly rotates through the spectrum
->   and "pools": brightness ramps toward whichever end of the foot tilts down
->   (the strip loops heel→toe→heel, so the toe is mid-strip). A **stomp**
->   (acceleration spike) launches trail fronts from the down-point — up to 4
->   bands diverging around each side to the heel and toe, a white head fading
->   through the current hue to the previous one.
-> - **fire-trail** — each stomp launches a fire-gradient band that climbs the
->   strip; several stack at once.
->
-> The onboard NeoPixel lights solid in every mode as a power indicator. The FSR
-> is retired ([ADR-0002](docs/adr/0002-runtime-patterns-imu-default.md)); no
-> wireless yet.
+Each shoe is a Seeed Studio XIAO MG24 Sense driving one addressable LED strip. The
+board's onboard motion sensor drives two patterns:
+
+- **flow**: the strip shares one hue that slowly rotates through the spectrum and
+  "pools" toward whichever end of the foot tilts down. A stomp launches trails from
+  the down-point, or flashes the strip white if the foot is level.
+- **fire-trail**: each stomp launches a fire-gradient band that climbs the strip,
+  and several can stack at once.
+
+Both shoes run the same firmware. Each one remembers its own pattern, brightness, and
+neutral calibration across power cycles, and can be controlled without reflashing
+from an iPhone app over BLE or from a computer over USB.
 
 ## Hardware
 
 | | |
 |---|---|
-| Board | Adafruit Feather RP2040 |
-| LED strip | WS2812B, `NEO_GRB` + 800 KHz |
-| Data pin | Feather **D5** → strip DIN (direct, no level shifter on current rig) |
-| Pixels driven | 39 (strip loops heel→toe→heel) |
-| Motion sensor | GY-521 / MPU-6050 over I2C (**SDA**/**SCL**, 3V3) |
-| Pattern cycle | Momentary button from Feather **D6** → GND (`INPUT_PULLUP`) |
-| Status light | Onboard **NeoPixel** (GP16), lit solid in every mode |
-| Power | Feather **USB/VBUS** → strip 5V, common ground — current scales with brightness × pixels lit (see [`docs/power-budget.md`](docs/power-budget.md)) |
+| Board | Seeed Studio XIAO MG24 Sense |
+| Motion sensor | Onboard LSM6DS3TR-C, no wiring needed |
+| LED strip | BTF-LIGHTING FCOB-5V-160L-W-IP30-SPI-5MM: about 1 m, 160 RGB pixels, 5 V, XGB1338 (WS2812B-compatible) |
+| Data pin | **D10** to the strip's DIN, at the input end |
+| Status light | Onboard LED: solid when running, slow blink if the sensor is missing, fast blink while calibrating |
+| Power | USB for bench work, or a dedicated 5 V supply for the strip. See [`docs/power-budget.md`](docs/power-budget.md) |
 
-See [`docs/wiring-mpu6050.html`](docs/wiring-mpu6050.html) for the IMU wiring,
-[`docs/wiring.md`](docs/wiring.md) for the base strip/button wiring,
-[`docs/wiring-extra-effort.html`](docs/wiring-extra-effort.html) for the
-level-shifter/resistor reference, and
-[`docs/open-questions.md`](docs/open-questions.md) for unresolved hardware
-decisions and the bench-calibration checklist.
+Wiring is in [`docs/wiring.md`](docs/wiring.md).
 
 ## Quick start
 
+You need [PlatformIO Core](https://docs.platformio.org/page/core/installation/index.html).
+The first build downloads the board platform and Arm's compiler (about 200 MB).
+
 ```bash
-# Build the default app (flow + fire-trail patterns)
-pio run
-
-# Upload the app to a connected Feather RP2040
-pio run -e final_app -t upload
-
-# Upload the IMU bench/calibration build
-pio run -e imu_debug -t upload
-
-# Watch serial output for the active build (115200 baud)
-pio device monitor -e imu_debug
+pio run                        # build the app
+pio run -e final_app -t upload # flash it
+pio device monitor             # open the USB console at 115200 baud
 ```
 
-Expected app serial output (boots into `flow`; D6 cycles patterns):
+With both shoes plugged in, an upload refuses to guess which one you meant. Find each
+board's serial number and name it:
 
-```
-[firewalker] mode=final_app
-[firewalker] pixels=39 led pin=7 button pin=8
-[firewalker] mpu6050 ready @0x68
-[firewalker] imu stomp |a|>=18.00 release<=12.00 tilt axis(accel fwd=0 up=1 gyro=2)
-[firewalker] pattern -> flow
-[firewalker] pattern -> fire-trail
+```bash
+pio device list
+pio run -e final_app -t upload --upload-port 572C60FA
 ```
 
-In the app, `flow` cycles one hue slowly through the spectrum and pools brightness
-toward the down-end as you tilt the shoe; a stomp (a sharp acceleration spike)
-launches diverging trail fronts from the down-point. Press **D6** to switch to
-`fire-trail`, where each stomp launches a climbing fire band. With no IMU
-connected the strip still shows `flow`'s flat baseline (no tilt, no stomps).
+## Controlling a shoe
 
-### Calibrating with `imu_debug`
+Type commands into the USB console, or send the same commands over BLE:
 
-`imu_debug` logs the raw accel/gyro, the fused tilt, and stomp events, and mirrors
-tilt as strip brightness — so you can confirm the axis mapping by eye and set the
-`FLOW_*` axes/signs and stomp thresholds in `include/config.h` (see the checklist
-in [`docs/open-questions.md`](docs/open-questions.md)).
-
+```text
+status
+pattern fire-trail
+pattern off
+brightness 32
+calibrate
+debug on
 ```
-[firewalker] mode=imu_debug
-[firewalker] pixels=39 led pin=7 button pin=8
-[firewalker] mpu6050 ready @0x68
-[firewalker] imu stomp |a|>=18.00 release<=12.00 tilt axis(accel fwd=0 up=1 gyro=2)
-[firewalker] imu a=(0.12,-0.34,9.79) |a|=9.80 g=(0.01,0.00,-0.02) tilt=0.04 armed=true
-[firewalker] imu stomp
-...
+
+Replies are JSON lines. [`docs/remote-protocol.md`](docs/remote-protocol.md) has the
+full reference, including the BLE service an iPhone app connects to. The app itself is
+tracked in [FOX-269](https://linear.app/foxyblocks/issue/FOX-269).
+
+To calibrate neutral, hold the boot still in its resting position and send `calibrate`.
+The firmware samples for one second and treats that pose as level from then on. If the
+boot moves, it reports why and keeps the previous calibration. Do this once per boot.
+
+## Bench tests
+
+`./mg24` builds a one-off strip test and flashes it, without changing any firmware
+settings or a shoe's saved settings. It needs [Go](https://go.dev) and PlatformIO.
+
+```bash
+./mg24 flow --pixels 160 --brightness 16               # flow with no sensor input
+./mg24 flow --tilt=-0.5                                # fixed simulated heel-down tilt
+./mg24 flow --stomp-every 2s                           # timed flashes and trails
+./mg24 flow --motion                                   # onboard tilt and stomp input
+./mg24 flow --motion --log-motion                      # same, and stream motion over USB
+./mg24 fire-trail --stomp-every 1s                     # repeat fire trails without motion
+./mg24 fire-trail --motion                             # real stomps trigger fire trails
+./mg24 color --lit 20 --brightness 16 --interval 500ms # cycle white/red/green/blue
+./mg24 color --color '#ff8000' --lit 10                # fixed orange, other pixels black
+./mg24 off                                             # blank all connected pixels
+./mg24 flow --build-only                               # compile without uploading
+./mg24 flow --dry-run                                  # show settings without building
+./mg24 flow --help
 ```
+
+- `--pixels` is the total connected length, and color tests use `--lit` to choose how
+  many light up while the rest get black.
+- Pattern tests derive virtual toe and heel positions from the strip length, and
+  `--toe` and `--heel` override them.
+- With several boards connected, `--port` or `--serial` picks one. A selection that
+  matches nothing fails rather than falling through to another shoe.
+- `--motion` can't be combined with simulated `--tilt` or `--stomp-every`.
+
+A bench test replaces the app on that board. Flash the app again to get it back; its
+saved settings are still there.
+
+The same tests are available without Go, and there's a build for checking the sensor's
+axes and thresholds:
+
+```bash
+pio run -e strip_test -t upload  # cycle colors on every pixel
+pio run -e strip_off -t upload   # blank every pixel
+pio run -e imu_debug -t upload   # log raw motion over USB, and mirror tilt as brightness
+pio device monitor
+```
+
+`off` blanks the pixels but doesn't disconnect their power, so the strip still draws
+its idle current. Unplug it for a full power-off.
+
+## Tests
+
+Pure logic runs off-hardware, so it needs no board:
+
+```bash
+pio test -e native
+(cd tools/mg24 && go test ./...)
+```
+
+Lit LEDs still need eyes on the real strip: a successful compile or upload doesn't
+verify the signal.
 
 ## ⚠️ Power safety
 
-Current scales with **brightness × pixels lit**. `flow` is magenta (a 2-channel
-color), so at `LED_BRIGHTNESS = 100` a near-level stomp can momentarily light the
-whole strip ~612 mA — over the USB budget (a known, accepted brownout risk for
-the bench demo). Before running brighter/longer, read
-[`docs/power-budget.md`](docs/power-budget.md) and use a dedicated 5V strip
-supply with grounds tied together.
+Brightness scales requested color. It isn't a current limit, and the strip can pull
+about 1.6 A at full white. The firmware caps the remote at brightness 64 so a USB-fed
+strip stays near the 500 mA the board's 5V pad should supply. Before raising the cap or
+running brighter, read [`docs/power-budget.md`](docs/power-budget.md) and use a
+dedicated 5 V supply with grounds tied together.
+
+## Known limits
+
+- Toe and heel positions are the bench layout (toe 52, heel 132), not measurements of
+  a mounted shoe. See [`docs/open-questions.md`](docs/open-questions.md).
+- Battery and enclosure design are still open.
+- BLE has no pairing, so anyone nearby with a BLE app can connect and change a shoe's
+  settings.
 
 ## Project conventions
 
-- Hardware knobs (pin, count, brightness, baud, color) live in
-  [`include/config.h`](include/config.h).
+- Hardware knobs live in [`include/config.h`](include/config.h).
 - Domain language: [`CONTEXT.md`](CONTEXT.md). Decisions: [`docs/adr/`](docs/adr).
-- Agent / Linear / triage setup: [`CLAUDE.md`](CLAUDE.md) and `docs/agents/`.
+- Agent, Linear, and triage setup: [`CLAUDE.md`](CLAUDE.md) and `docs/agents/`.

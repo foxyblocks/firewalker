@@ -1,6 +1,6 @@
 # MG24 Sense and BTF FCOB strip migration
 
-Status: Firmware scope defined. BLE remote app choice is **to decide later**.
+Status: In progress. The BLE remote is a custom Capacitor app (FOX-269).
 Date: 2026-11-02
 
 ## Summary
@@ -47,7 +47,7 @@ Several guides describe hardware and behavior that are no longer current.
 - Support the selected MG24 Sense + BTF FCOB strip as the sole hardware target.
 - Preserve flow, fire-trail, tilt fusion, stomp detection, and stomp strength.
 - Replace physical button controls with an iPhone BLE remote for debugging and
-  pattern selection. Choose and verify the remote in FOX-266.
+  pattern selection. Build and verify the remote in FOX-269.
 - Support the `mg24` Cobra CLI alongside the remote for debugging and running
   patterns and diagnostics locally.
 - Use the same firmware on both shoes mounted in the same controller orientation.
@@ -89,7 +89,7 @@ without reconstructing the prototype's history.
 | Flow pattern | Shared pattern; MG24 adapter supplies tilt/stomp input | Preserve | Confirmed |
 | Fire-trail pattern | Shared pattern; triggers on stomps | Preserve | Confirmed |
 | Tilt fusion and stomp detection/strength | Pure math plus board-specific sensor readers | Keep pure math; use onboard sensor reader | Confirmed |
-| Pattern selection and off | Prototype cycles with a D1 button | Replace the button with iPhone BLE controls | Controls confirmed. App choice deferred in FOX-266 |
+| Pattern selection and off | Prototype cycles with a D1 button | Replace the button with iPhone BLE controls | Confirmed. Capacitor app in FOX-269 |
 | Left/right shoe configurations | Root Feather builds; old per-foot mount calibration | Retire; use one firmware and a common mount orientation | Confirmed |
 | Per-foot pair flashing | `tools/flash-all.py` identifies Feather serial numbers | Retire the old per-foot selection tool; bulk flashing is not required | Confirmed direction |
 | Color test and all-off firmware | MG24 PlatformIO `strip_test` / `strip_off` | Preserve | Confirmed |
@@ -135,8 +135,8 @@ These are proposed file-level changes, not authorization to start deleting files
 - The tested strip data connection is D10 (PA5). No physical button is required.
 - Keep total connected pixels distinct from pixels illuminated by a diagnostic.
   Color and off diagnostics must send black to all inactive connected pixels.
-- Select flow, fire-trail, and off from the eventual iPhone BLE remote. FOX-266
-  tracks the app choice and MG24 integration.
+- Select flow, fire-trail, and off from the iPhone BLE remote. FOX-269 tracks the
+  app and its MG24 integration.
 - Restore the last selected pattern, including off, after a power cycle. Restore
   brightness and neutral calibration from the same controller's saved settings.
 - A phone disconnect keeps the current pattern and brightness running. Reconnecting
@@ -145,15 +145,13 @@ These are proposed file-level changes, not authorization to start deleting files
 - Provide a brightness slider and a **Calibrate neutral** button in that remote.
 - Describe all-off accurately: blanking the strip does not disconnect its power.
 - Make motion calibration usable through the selected iPhone debugging workflow.
-  The prototype's hardware-UART logs are not proof of working USB serial output.
 - The same firmware and controller orientation must give the intended motion
   response on both mounted shoes, without per-foot firmware selection.
 
  ### remote control app and interface
 
-**App choice — to decide later.** Options are an existing BLE app such as BlePad
-or a custom iPhone app built with Capacitor. The controls below describe what
-the remote needs to do.
+**App choice: a custom iPhone app built with Capacitor**, tracked in FOX-269. The
+controls below describe what the remote needs to do.
 
 | Remote control | Firmware action |
 |---|---|
@@ -165,13 +163,11 @@ the remote needs to do.
 | Debug output switch | Enable/disable bounded motion/status notifications |
 | Status screen | Report the actual settings, calibration, and sensor state |
 
-- Define firmware commands and status responses for the controls above.
-  Verify the BLE interface against the chosen app in FOX-266.
+- Define firmware commands and status responses for the controls above
+  (`docs/remote-protocol.md`). Verify the BLE interface against the app in FOX-269.
 - Identify each controller independently and report its actual settings on
   reconnect. Keep acknowledgements and motion telemetry bounded.
-- If BlePad is selected, verify its NUS commands and notifications on hardware
-  and document the tested layout. If Capacitor is selected, confirm the iOS
-  BLE integration and document how to run the custom remote.
+- Confirm the iOS BLE integration and document how to run the custom remote.
 
 ### Local bench CLI
 
@@ -190,8 +186,8 @@ for live control of a running shoe.
   dry-run. Flags apply to that test build and don't rewrite saved firmware settings.
 - With several boards connected, `--port`/`--serial` must select the board, and
   an upload must never go to a different connected shoe.
-- Keep `--log-motion` for motion logs. The board's USB port does not carry sketch
-  serial output, so these logs currently need a UART adapter on D12.
+- Keep `--log-motion` for motion logs. The board's USB port carries the sketch's
+  serial output in both directions, so these logs need no UART adapter.
 - Each command currently builds and flashes a test image. Changing settings on
   running firmware without a reflash remains the remote's job.
 - Name and document it as a supported tool rather than a temporary launcher.
@@ -237,9 +233,9 @@ Proposed approach:
    The old 40-pixel toe/heel positions and GY-521 mount signs are not measurements
    of the new strip or MG24 shoe mounts. Neutral offsets are captured and stored
    per controller, using the same firmware and axis configuration on both shoes.
-7. Confirm the BLE interface and MG24 stack after choosing the remote in FOX-266.
+7. Confirm the BLE interface and MG24 stack against the remote in FOX-269.
 8. Continue consolidating bench diagnostics and motion firmware while the
-   remote decision is open. Verify the remote before the full migration sign-off.
+   remote is built. Verify the remote before the full migration sign-off.
    Move the `mg24` CLI to the pinned toolchain and consolidated source paths as
    part of this work; it currently stages prototype files and calls Arduino CLI.
 9. Add per-controller settings storage with validation and a versioned record.
@@ -265,8 +261,8 @@ Proposed approach:
   are flow, brightness 16/255, and zero neutral offset with an uncalibrated status.
 - Debug status exposes active pattern, brightness, connection/sensor readiness,
   tilt and stomp information, calibration state, and whether settings saved.
-- Document phone commands and status/debug responses in FOX-266. Keep parsing and
-  debug output bounded so they do not block sensor sampling or animation.
+- Document phone commands and status/debug responses in `docs/remote-protocol.md`.
+  Keep parsing and debug output bounded so they do not block sensor sampling or animation.
 
 ## Risks and Mitigations
 
@@ -292,9 +288,7 @@ Proposed approach:
   while sending each frame. Verify motion, animations, and bidirectional BLE
   commands together at the configured strip length.
 - **Calibration visibility:** complete the iPhone feedback path with clear behavior
-  if the motion sensor is unavailable; do not rely on invisible UART logs.
-- **Prototype preservation:** `proto/` is currently untracked. Preserve its tested
-  implementation when promoting it; do not assume it can be recovered from git.
+  if the motion sensor is unavailable.
 
 ## Rollout and Migration Plan
 
@@ -303,8 +297,8 @@ Proposed approach:
    shared settings and driver code.
 3. Port the retained motion-driven app and diagnostics. Recalibrate the new mount
    and strip layout, and confirm the retained interactions on hardware.
-4. After the app decision, complete FOX-266 and document BLE commands and
-   motion/status feedback, brightness, neutral capture, and settings persistence.
+4. Complete FOX-269 and document BLE commands and motion/status feedback,
+   brightness, neutral capture, and settings persistence.
    Validate them together while the retained patterns run.
 5. Remove retired hardware code/dependencies and redundant prototype paths, after
    the `mg24` CLI runs on the pinned toolchain. Rewrite
@@ -325,7 +319,7 @@ migration. Proposed checks during implementation:
 - Test sensor-unavailable behavior and the chosen firmware-running/error indicator.
 - Test both mounted shoes with the same firmware and mounting orientation.
 - Run every retained `mg24` CLI command on hardware, including board selection with
-  two controllers connected and `--log-motion` through a UART adapter.
+  two controllers connected and `--log-motion` over USB.
 - Test the chosen remote's controls, debug output, button releases/repeats, disconnects, and reconnects
   while animations and motion processing are active.
 - Capture neutral on each mounted boot and verify near-zero tilt, correct
@@ -346,9 +340,9 @@ deliverables below:
 - Every retained animation and interaction works on the actual BTF FCOB strip.
 - Both mounted shoes run the same firmware with correct motion behavior and no
   left/right configuration or physical pattern-cycle button.
-- The chosen remote can change patterns and select off without reflashing,
-  adjust brightness, trigger neutral calibration, and supply usable motion/status
-  debugging as specified in FOX-266.
+- The remote can change patterns and select off without reflashing, adjust
+  brightness, trigger neutral calibration, and supply usable motion/status
+  debugging as specified in FOX-269.
 - Power-cycling each shoe restores its own selected pattern, brightness, and
   neutral calibration. Both shoes still run the same firmware binary.
 - A neutral capture produces near-zero tilt in the held pose within the documented
@@ -372,13 +366,11 @@ deliverables below:
 
 ## Open Questions
 
-The remote app choice is deferred. The remaining items cover that choice and
-implementation or assembly work.
+The remaining items cover implementation and assembly work.
 
 1. Measure the strip length and physical ring layout per shoe, recording pixel
    count and toe/heel positions. Keep these configurable until assembly is fixed.
-2. **To decide later:** choose an existing BLE app such as BlePad or a custom
-   Capacitor app in FOX-266, then verify it with the MG24.
+2. Build the Capacitor app in FOX-269 and verify it with the MG24.
 3. Tune the neutral-capture sample window, stability criteria, timeout, and tilt
    tolerance on the actual mounted hardware; document the chosen values.
 4. Define and verify sensor-failure behavior. Recommended default: expose a visible
@@ -390,12 +382,9 @@ implementation or assembly work.
 ## Related Work
 
 - [FOX-271 — Migrate Firewalker to the MG24 Sense and BTF FCOB strip](https://linear.app/foxyblocks/issue/FOX-271) (tracking ticket)
-- [FOX-266 — MG24 BLE remote decision and setup](https://linear.app/foxyblocks/issue/FOX-266)
+- [FOX-269 — Capacitor iPhone app](https://linear.app/foxyblocks/issue/FOX-269), which replaced [FOX-266](https://linear.app/foxyblocks/issue/FOX-266)
 - [FOX-270 — Add a TUI to the mg24 bench CLI](https://linear.app/foxyblocks/issue/FOX-270)
 - [Seeed MG24 Bluetooth guide](https://wiki.seeedstudio.com/xiao_mg24_bluetooth/)
-- [BlePad: BLE Remote — developer listing](https://apps.apple.com/us/app/blepad-ble-remote/id6787904993)
-- [BlePad developer examples](https://github.com/minervasoft-inc/blepad-examples)
-- [Developer's NUS interface and button event example](https://github.com/minervasoft-inc/blepad-examples/blob/main/esp32/ble-buzzer/ble-buzzer.ino)
 
 ## Appendix
 

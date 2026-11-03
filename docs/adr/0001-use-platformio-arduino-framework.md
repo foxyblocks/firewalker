@@ -2,6 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-05-31
+- **Note:** The decision stands, but the boards and environments below are history. The
+  current target is the XIAO MG24 Sense; see ADR-0004 and `platformio.ini`.
 
 ## Context
 

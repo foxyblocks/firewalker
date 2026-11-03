@@ -1,54 +1,62 @@
-# Power budget (USB)
+# Power budget
 
-Why current — not memory — is the ceiling on this rig, and how the fire trails
-fit under it.
+Why current is the ceiling on this rig, and what the brightness settings mean for each
+supported power setup.
 
 ## The numbers
 
-- A WS2812 pixel draws ≈ **20 mA per channel** at full value, so ≈ **60 mA** at
-  full white, plus ~1 mA quiescent.
-- The library applies the global brightness, so per-pixel current ≈
-  `Σchannels × 20 mA × (channel / 255) × (LED_BRIGHTNESS / 255)`.
-- A USB 2.0 port supplies ~**500 mA**. The current rig feeds the strip from the
-  Feather USB/VBUS pin, so the Feather and strip share that budget.
+BTF's [specification for the 160-pixel FCOB strip](https://www.btf-lighting.com/products/fcob-rgb-addressable-led-strip-dc5v-160pixels)
+lists up to **8 W per meter at 5 V**, about **1.6 A** for the full strip at white. That's
+about 10 mA per pixel at full white. These are rated figures, not measurements of this
+strip, and the strip's idle current hasn't been measured yet either. All 160 pixel
+controllers draw idle power even when showing black.
 
-## Worst case = the whole strip lit
+The firmware applies brightness to every channel, so requested current scales roughly
+with `brightness / 255`, and with how many channels and pixels are lit:
 
-Trails stack (`FIRE_TRAIL_MAX`), so enough overlapping bands can light all 40 px at
-once. That full-strip instant is the worst case — current scales with
-**brightness × pixels lit × how many channels the color uses**.
-
-The fire palette is all `R = 255` with falling `G` and `B = 0`, so each pixel
-uses ~1–1.8 channels — cheaper than white. Rough per-pixel and 40-px totals:
-
-| Brightness | Fire pixel (~1.4 ch avg) | 40 px (fire) | 40 px (white, 3 ch) |
+| Brightness | Full strip, white | Full strip, 2-channel color | Full strip, 1-channel color |
 |---|---|---|---|
-| `32` | ~4 mA | ~165 mA | ~340 mA |
-| `100` (current) | ~12 mA | **~480 mA** | ~970 mA |
+| `16` (default) | ~100 mA | ~67 mA | ~33 mA |
+| `32` | ~200 mA | ~134 mA | ~67 mA |
+| `64` (remote cap) | ~400 mA | ~268 mA | ~134 mA |
+| `128` | ~800 mA | ~535 mA | ~268 mA |
+| `255` | ~1.6 A | ~1.07 A | ~535 mA |
 
-So at the current `LED_BRIGHTNESS = 100`, a strip full of fire pixels (~480 mA)
-sits **right at the practical USB budget** — heavy trigger-mashing can brown out
-or flicker. A single `FIRE_TRAIL_LEN = 30` band is ~360 mA (under, but not by much).
-White at this brightness is far over — which is why the palette avoids it.
+## What the patterns draw
 
-The **flow** pattern cycles one shared hue through the spectrum; at the wheel's
-**2-channel** points (yellow / cyan / magenta) a full-value pixel is ~15.7 mA at
-brightness `100`, so a full strip is **~630 mA** — *over* USB. Flow rests at a
-~30% baseline (~190 mA, fine), but tilt pooling plus stacked stomp trails can
-push toward that full-strip worst case. On USB that's an accepted brownout risk
-for the bench demo; cap brightness (~64 keeps the worst case ~400 mA) or move
-to a dedicated 5 V supply to run it bright and safe.
+- **flow** cycles one hue through the spectrum, so a full strip passes through
+  2-channel colors (yellow, cyan, magenta). It rests at 80% per-pixel brightness when
+  level, and a level stomp flashes the whole strip **white**, which is its worst case.
+- **fire-trail** uses red-through-yellow, so about 1 to 2 channels per pixel, and only
+  lights the bands that are moving.
 
-## Levers to stay safe on USB
+## Power profiles
 
-- Lower `LED_BRIGHTNESS`, shorten `FIRE_TRAIL_LEN`, or drop `FIRE_TRAIL_MAX`.
-- Keep colors off pure white (the palette already does).
-- Estimate before bumping anything: `pixels_lit × per-pixel mA` under the
-  power source's real current budget.
+**USB bench, up to brightness 64.** Seeed recommends keeping the XIAO's 5V pad under
+500 mA, which also has to cover the board itself and whatever the USB port can actually
+supply. `LED_BRIGHTNESS_MAX` in [`config.h`](../include/config.h) caps the remote at 64,
+which keeps a full-white frame near 400 mA by the strip's rating.
 
-## Before going brighter / longer
+**External 5 V, above brightness 64.** Feed the strip directly from a supply rated at
+least 2 A, with grounds tied together (see [`wiring.md`](wiring.md)). Raising the cap
+takes a build flag, so a USB-powered board can't be pushed past it by accident:
 
-Move the strip to a **dedicated 5V supply** sized for the real worst case
-(`pixels × 60 mA` for white), keep grounds common, and power it **directly** —
-never through the Feather's 3V3 regulator. This is an
-[open question](open-questions.md) for the final wearable.
+```bash
+PLATFORMIO_BUILD_SRC_FLAGS=-DFIREWALKER_LED_BRIGHTNESS_MAX=255 pio run -e final_app -t upload
+```
+
+Build both shoes the same way. Settings saved under a higher cap read as invalid under a
+lower one, so that shoe falls back to its defaults.
+
+`./mg24 --brightness` accepts up to 255 regardless of the cap, because it's a deliberate
+bench override. Keep it within the profile you're actually powering.
+
+The final battery design is outside this budget, and is tracked in
+[`open-questions.md`](open-questions.md).
+
+## Levers to stay safe
+
+- Lower the brightness, which scales everything.
+- Shorten `FLOW_TRAIL_LEN` or `FIRE_TRAIL_LEN`, or drop `FIRE_TRAIL_MAX`.
+- Estimate before raising anything: pixels lit × per-pixel current, against the real
+  budget of the power source.

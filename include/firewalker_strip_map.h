@@ -3,16 +3,15 @@
 // Pure strip-geometry math — Arduino-free, like firewalker_fusion.h, so the
 // host-native tests (test/test_strip_map/) can exercise it off-hardware.
 //
-// The strip is a closed ring around the foot perimeter: pixel 0 starts at the
-// inner (medial) ankle directly under the controller, runs forward along the
-// medial side to the toe apex, back along the lateral side to the heel, then
-// returns to the start (the last pixel sits adjacent to pixel 0). Toe and heel
-// indices are measured constants (config.h STRIP_TOE_INDEX / STRIP_HEEL_INDEX).
+// The strip is a closed ring around the foot perimeter: pixel 0 starts directly
+// under the controller, runs forward along one side to the toe apex, back along
+// the other side to the heel, then returns to the start (the last pixel sits
+// adjacent to pixel 0). Toe and heel indices are constants in config.h
+// (STRIP_TOE_INDEX / STRIP_HEEL_INDEX).
 //
 // Two arcs connect toe and heel:
-//   - the "plain" arc: ascending indices toe..heel (the lateral side)
-//   - the "wrap" arc: heel..count-1 then 0..toe (the medial side, through the
-//     ring's index wrap)
+//   - the "plain" arc: ascending indices toe..heel
+//   - the "wrap" arc: heel..count-1 then 0..toe, through the ring's index wrap
 //
 // Patterns that move along an arc work in *unwrapped* coordinates — the wrap
 // arc is treated as the contiguous index range [heel .. heel + wrapArcLen] —
@@ -39,7 +38,7 @@ constexpr uint16_t stripWrapIndex(uint16_t p, uint16_t count) {
 
 // Fore-aft foot position s ∈ [0,1] of pixel i: heel = 0, toe = 1, linear in
 // pixel steps along whichever arc the pixel sits on. Assumes toe < heel < count
-// (true of the measured layout; both arcs then have nonzero length).
+// (config.h enforces this; both arcs then have nonzero length).
 inline float stripForeAft(uint16_t i, uint16_t count, uint16_t toe, uint16_t heel) {
   if (i >= toe && i <= heel) {
     // Plain arc: s falls 1→0 as the index climbs from toe to heel.

@@ -184,7 +184,7 @@ constexpr uint16_t FLOW_TRAIL_PREV_HUE   = 7300;   // tail hue step back (~40° 
 constexpr uint8_t  FLOW_MAX_FRONTS       = 16;     // 4 per stomp; supports ~4 concurrent stomps
 constexpr float    FLOW_TRAIL_BRIGHT_MIN = 0.30f;  // trail brightness at a threshold-force stomp (→1.0 at IMU_STOMP_FORCE_FULL)
 
-// Strip geometry (ring, toe/heel indices) lives in the NeoPixel section above
+// Strip geometry (ring, toe/heel indices) lives in the Strip section above
 // (STRIP_TOE_INDEX / STRIP_HEEL_INDEX) — it's a hardware fact, not a flow knob.
 
 // Ignore tiny tilts near level (residual wobble) so the strip rests flat; past the
