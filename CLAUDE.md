@@ -5,8 +5,9 @@ Wearable LED-shoe firmware. **PlatformIO + Arduino framework** (see
 MG24 Sense (see `docs/adr/0004-mg24-sense-and-ble-remote.md`).
 
 **Current phase: the MG24 migration (FOX-271, `specs/mg24-migration-spec.md`).** Drive
-one 160-pixel BTF FCOB strip (WS2812B-compatible) on D10 from the board's onboard
-motion sensor. The strip is a closed ring around the foot. The app (`final_app`) runs
+one BTF FCOB strip (WS2812B-compatible, 160 pixels per meter) on D10 from the board's
+onboard motion sensor. The strip is a closed ring around the foot, about 69 cm or 110
+pixels. The firmware assumes the uncut 160 pixels until it's cut to length. The app (`final_app`) runs
 runtime-switchable **patterns**: `flow` (a slowly spectrum-cycling hue pooled toward the
 down-end by fused fore-aft tilt, where a stomp launches diverging trail fronts) and
 `fire-trail` (stomp-spawned fire bands). A stomp is an IMU acceleration spike. Both

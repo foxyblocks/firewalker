@@ -274,8 +274,9 @@ Proposed approach:
 - **Changed strip density:** validate new strip geometry and animation timing;
   changing pixel count alone does not preserve physical positions or trail speed.
 - **Power:** replace generic old-strip estimates with guidance for the chosen
-  BTF strip and tested setup. Validate USB bench and external-5V operation as
-  distinct profiles. Final battery design is outside this migration.
+  BTF strip and tested setup. A boot's 69 cm is rated about 5.5 W, or 1.1 A at full white.
+  Validate USB bench and external-5V operation as distinct profiles. Final battery design
+  is outside this migration.
 - **Same firmware, two shoes:** identical controller orientation is the intended
   mounting constraint, not a reason to skip toe-down/heel-down checks on each shoe.
 - **Independent settings:** the phone must identify which controller it is connected
@@ -368,8 +369,9 @@ deliverables below:
 
 The remaining items cover implementation and assembly work.
 
-1. Measure the strip length and physical ring layout per shoe, recording pixel
-   count and toe/heel positions. Keep these configurable until assembly is fixed.
+1. Settle the cut point and physical ring layout per shoe, recording pixel count and
+   toe/heel positions. The boot measures about 69 cm, or about 110 pixels at 160 per
+   meter. Keep these configurable until assembly is fixed.
 2. Build the Capacitor app in FOX-269 and verify it with the MG24.
 3. Tune the neutral-capture sample window, stability criteria, timeout, and tilt
    tolerance on the actual mounted hardware; document the chosen values.

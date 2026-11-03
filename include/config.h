@@ -20,10 +20,11 @@ constexpr unsigned long SERIAL_BAUD = 115200;
 // MOSI. The signal comes from the SPI hardware, so it can't move to another pin freely.
 constexpr uint8_t LED_PIN = D10;
 
-// Connected pixel count and ring layout. The bench layout scales the original
-// 40-pixel ring by four, giving two 80-step arcs. These are not yet measurements
-// of a mounted shoe (see docs/open-questions.md). Test builds override them with
-// build flags, and every source file sees the same values.
+// Connected pixel count and ring layout. These describe the uncut bench strip, and the
+// ring positions scale the original 40-pixel ring by four. A boot needs about 69 cm, or
+// about 110 pixels, so set all three once the strip is cut (see docs/open-questions.md).
+// The cli tool reads them from here too. Test builds override them with build flags, and
+// every source file sees the same values.
 #ifndef FIREWALKER_LED_COUNT
 #define FIREWALKER_LED_COUNT 160
 #endif
@@ -60,10 +61,10 @@ constexpr uint32_t STRIP_LATCH_US = 300;
 #endif
 constexpr uint8_t LED_BRIGHTNESS = FIREWALKER_LED_BRIGHTNESS;
 
-// Highest brightness the remote may set. The FCOB strip is rated about 1.6 A at
-// full white, so 64/255 keeps a full-white frame near 400 mA, inside the 500 mA
-// the XIAO's USB-fed 5V pad should supply. Raise this only for a build that runs
-// the strip from a dedicated 5V supply (see docs/power-budget.md).
+// Highest brightness the remote may set. The uncut 160-pixel strip is rated about 1.6 A
+// at full white, so 64/255 keeps a full-white frame near 400 mA, inside the 500 mA the
+// XIAO's USB-fed 5V pad should supply. docs/power-budget.md has the numbers for a cut
+// strip and for a dedicated 5V supply.
 #ifndef FIREWALKER_LED_BRIGHTNESS_MAX
 #define FIREWALKER_LED_BRIGHTNESS_MAX 64
 #endif

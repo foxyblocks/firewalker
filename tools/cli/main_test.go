@@ -119,6 +119,26 @@ func TestValidateParsesColors(t *testing.T) {
 	}
 }
 
+func TestParseStripLayoutReadsConfig(t *testing.T) {
+	config := `
+#ifndef FIREWALKER_LED_COUNT
+#define FIREWALKER_LED_COUNT 110
+#endif
+#define FIREWALKER_STRIP_TOE_INDEX 36
+#define FIREWALKER_STRIP_HEEL_INDEX 91
+`
+	layout, err := parseStripLayout(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if layout != (stripLayout{pixels: 110, toe: 36, heel: 91}) {
+		t.Fatalf("got %+v", layout)
+	}
+	if _, err := parseStripLayout("#define FIREWALKER_LED_COUNT 110"); err == nil {
+		t.Fatal("expected a missing toe index to fail")
+	}
+}
+
 func TestBuildFlagsDescribeTheTest(t *testing.T) {
 	o, c := validConfig(testFireTrail)
 	c.stompEvery = 2 * time.Second

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -70,14 +71,14 @@ func newCommand() *cobra.Command {
 	opts := &options{}
 	root := &cobra.Command{
 		Use: "cli", Short: "Build and run MG24 Sense strip tests on D10",
-		Long:         "Run MG24 bench tests without editing firmware settings. Defaults: 160 pixels, brightness 16/255, data on D10. Each command builds and uploads; --build-only compiles without touching the board.",
+		Long:         "Run MG24 bench tests without editing firmware settings. Defaults: the strip length in include/config.h, brightness 16/255, data on D10. Each command builds and uploads; --build-only compiles without touching the board.",
 		SilenceUsage: true, SilenceErrors: true,
 		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 	}
 	f := root.PersistentFlags()
 	f.StringVar(&opts.repoRoot, "repo-root", "../..", "Firewalker repository root")
 	_ = f.MarkHidden("repo-root")
-	f.IntVar(&opts.pixels, "pixels", 160, "Total connected pixels (1–4096)")
+	f.IntVar(&opts.pixels, "pixels", 0, "Total connected pixels (1–4096); defaults to FIREWALKER_LED_COUNT in include/config.h")
 	f.IntVar(&opts.brightness, "brightness", 16, "Global brightness (1–255; not a current limit)")
 	f.StringVar(&opts.port, "port", "", "MG24 USB port; auto-detected when one board is connected")
 	f.StringVar(&opts.serial, "serial", "", "MG24 USB serial number; useful with multiple boards")
@@ -102,8 +103,8 @@ func newCommand() *cobra.Command {
 			flags.BoolVar(&cfg.logMotion, "log-motion", false, "Stream motion logs over USB after flashing; Ctrl-C leaves the board running")
 			flags.Float64Var(&cfg.tilt, "tilt", 0, "Fixed simulated tilt (-1 heel-down, 0 level, +1 toe-down)")
 			flags.DurationVar(&cfg.stompEvery, "stomp-every", 0, "Simulate impacts at this interval; 0 disables (fire-trail defaults to 1s without --motion)")
-			flags.IntVar(&cfg.toe, "toe", -1, "Virtual toe pixel; defaults to 32.5% of the strip")
-			flags.IntVar(&cfg.heel, "heel", -1, "Virtual heel pixel; defaults to 82.5% of the strip")
+			flags.IntVar(&cfg.toe, "toe", -1, "Toe pixel; defaults to config.h, or 32.5% of the strip with a custom --pixels")
+			flags.IntVar(&cfg.heel, "heel", -1, "Heel pixel; defaults to config.h, or 82.5% of the strip with a custom --pixels")
 		}
 		if t.test == testColor {
 			cmd.Flags().IntVar(&cfg.lit, "lit", -1, "Pixels to light at the input end; defaults to all")
@@ -114,6 +115,21 @@ func newCommand() *cobra.Command {
 			if cfg.test == testFireTrail && !cfg.motion && !cmd.Flags().Changed("stomp-every") {
 				cfg.stompEvery = time.Second
 			}
+			// A custom strip length gets its layout scaled in validate, because the
+			// configured toe and heel only describe the configured length.
+			if !cmd.Flag("pixels").Changed {
+				layout, err := readStripLayout(opts.repoRoot)
+				if err != nil {
+					return err
+				}
+				opts.pixels = layout.pixels
+				if cfg.toe == -1 {
+					cfg.toe = layout.toe
+				}
+				if cfg.heel == -1 {
+					cfg.heel = layout.heel
+				}
+			}
 			if err := validate(opts, cfg); err != nil {
 				return err
 			}
@@ -122,6 +138,38 @@ func newCommand() *cobra.Command {
 		root.AddCommand(cmd)
 	}
 	return root
+}
+
+type stripLayout struct{ pixels, toe, heel int }
+
+// parseStripLayout pulls the strip's default size and ring positions out of config.h's
+// source, so this tool and the firmware have one place to change them.
+func parseStripLayout(config string) (stripLayout, error) {
+	read := func(name string) (int, error) {
+		match := regexp.MustCompile(`(?m)^#define ` + name + ` (\d+)\s*$`).FindStringSubmatch(config)
+		if match == nil {
+			return 0, fmt.Errorf("can't find %s in include/config.h", name)
+		}
+		return strconv.Atoi(match[1])
+	}
+	var layout stripLayout
+	var err error
+	if layout.pixels, err = read("FIREWALKER_LED_COUNT"); err != nil {
+		return layout, err
+	}
+	if layout.toe, err = read("FIREWALKER_STRIP_TOE_INDEX"); err != nil {
+		return layout, err
+	}
+	layout.heel, err = read("FIREWALKER_STRIP_HEEL_INDEX")
+	return layout, err
+}
+
+func readStripLayout(repoRoot string) (stripLayout, error) {
+	data, err := os.ReadFile(filepath.Join(repoRoot, "include", "config.h"))
+	if err != nil {
+		return stripLayout{}, err
+	}
+	return parseStripLayout(string(data))
 }
 
 // Validate before discovering hardware or starting any build. Ring coordinates

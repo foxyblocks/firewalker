@@ -24,10 +24,12 @@ math behind them.
 
 **USB bench.** Feed the strip from the board's 5V pad, which exposes USB power. Seeed
 recommends keeping peripheral load on that pad under 500 mA. The firmware's brightness
-cap keeps a full-white frame near 400 mA by the strip's rating.
+cap keeps a full-white frame on the uncut strip near 400 mA by its rating, and lower once
+it's cut.
 
-**External 5 V.** Feed the strip directly from a 5 V supply rated at least 2 A, keep
-the board on USB or its own supply, and tie the grounds together. Leave the board's 5V
+**External 5 V.** Feed the strip directly from a 5 V supply rated at least 1.5 A per cut
+strip, or 2 A for the uncut strip. Keep the board on USB or its own supply, and tie the
+grounds together. Leave the board's 5V
 pad disconnected from that supply. Use this for anything brighter than the cap.
 
 The 5V pad is not a boosted battery output, and the final battery design is still open.

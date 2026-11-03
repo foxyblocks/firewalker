@@ -6,10 +6,13 @@ decided deliberately. Once one is resolved, move the decision into `wiring.md`,
 
 ## Strip layout on a mounted shoe
 
-- What's the real pixel count and ring layout per shoe? The firmware uses the bench
-  layout (160 pixels, toe 52, heel 132), which scales the old 40-pixel ring by four. It
-  isn't a measurement. Set `FIREWALKER_LED_COUNT`, `FIREWALKER_STRIP_TOE_INDEX`, and
-  `FIREWALKER_STRIP_HEEL_INDEX` in `include/config.h` once a shoe is assembled.
+- Where exactly does the strip get cut? A boot measures about **69 cm, which is about 110
+  pixels** at 160 per meter, but the cut point isn't settled. Once it is, count the pixels
+  and find the toe and heel on the mounted strip, then set `FIREWALKER_LED_COUNT`,
+  `FIREWALKER_STRIP_TOE_INDEX`, and `FIREWALKER_STRIP_HEEL_INDEX` in `include/config.h`.
+  Until then the firmware assumes the uncut bench strip (160 pixels, toe 52, heel 132).
+  The `cli` tool reads the same values. Then update the figures in `power-budget.md`, and
+  decide whether to raise `FIREWALKER_LED_BRIGHTNESS_MAX`.
 - Do the animation speeds still look right? `FLOW_TRAIL_SPEED_PXPS`, `FLOW_TRAIL_LEN`,
   `FIRE_TRAIL_STEP_MS`, and `FIRE_TRAIL_LEN` count in pixels and were tuned on a far less
   dense strip, so the same values now cover a much shorter physical distance.
@@ -35,8 +38,8 @@ so check each mounted shoe:
 
 - How is the strip powered in the final wearable? The battery and enclosure are outside
   the current firmware work, and the answer sets the real brightness ceiling.
-- What are the strip's actual idle and peak currents? `power-budget.md` uses the
-  manufacturer's rating.
+- What are the strip's actual idle and peak currents? `power-budget.md` scales the
+  manufacturer's rating to the measured 69 cm.
 
 ## Signal
 

@@ -22,8 +22,8 @@ from an iPhone app over BLE or from a computer over USB.
 |---|---|
 | Board | Seeed Studio XIAO MG24 Sense |
 | Motion sensor | Onboard LSM6DS3TR-C, no wiring needed |
-| LED strip | BTF-LIGHTING FCOB-5V-160L-W-IP30-SPI-5MM: about 1 m, 160 RGB pixels, 5 V, XGB1338 (WS2812B-compatible) |
-| Data pin | **D10** to the strip's DIN, at the input end |
+| LED strip | BTF-LIGHTING FCOB-5V-160L-W-IP30-SPI-5MM: 160 RGB pixels per meter, 5 V, XGB1338 (WS2812B-compatible). A boot uses about 69 cm, or about 110 pixels |
+| Data pin | **D10** to the strip's DIN, at the input end. D8 and D9 must stay unconnected |
 | Status light | Onboard LED: solid when running, slow blink if the sensor is missing, fast blink while calibrating |
 | Power | USB for bench work, or a dedicated 5 V supply for the strip. See [`docs/power-budget.md`](docs/power-budget.md) |
 
@@ -75,7 +75,7 @@ boot moves, it reports why and keeps the previous calibration. Do this once per 
 settings or a shoe's saved settings. It needs [Go](https://go.dev) and PlatformIO.
 
 ```bash
-./cli flow --pixels 160 --brightness 16               # flow with no sensor input
+./cli flow --brightness 16                             # flow with no sensor input
 ./cli flow --tilt=-0.5                                # fixed simulated heel-down tilt
 ./cli flow --stomp-every 2s                           # timed flashes and trails
 ./cli flow --motion                                   # onboard tilt and stomp input
@@ -90,10 +90,11 @@ settings or a shoe's saved settings. It needs [Go](https://go.dev) and PlatformI
 ./cli flow --help
 ```
 
-- `--pixels` is the total connected length, and color tests use `--lit` to choose how
-  many light up while the rest get black.
-- Pattern tests derive virtual toe and heel positions from the strip length, and
-  `--toe` and `--heel` override them.
+- The strip length and ring layout come from `include/config.h`. `--pixels` overrides the
+  total connected length, and color tests use `--lit` to choose how many light up while the
+  rest get black.
+- With a custom `--pixels`, pattern tests scale the toe and heel positions to fit. `--toe`
+  and `--heel` override them.
 - With several boards connected, `--port` or `--serial` picks one. A selection that
   matches nothing fails rather than falling through to another shoe.
 - `--motion` can't be combined with simulated `--tilt` or `--stomp-every`.
@@ -128,16 +129,18 @@ verify the signal.
 
 ## ⚠️ Power safety
 
-Brightness scales requested color. It isn't a current limit, and the strip can pull
-about 1.6 A at full white. The firmware caps the remote at brightness 64 so a USB-fed
-strip stays near the 500 mA the board's 5V pad should supply. Before raising the cap or
+Brightness scales requested color. It isn't a current limit. By its rating, the strip can
+pull about 1.1 A at full white once cut to a boot's 69 cm, or 1.6 A uncut. The firmware caps
+the remote at brightness 64 so a USB-fed strip stays inside the 500 mA the board's 5V pad
+should supply. Before raising the cap or
 running brighter, read [`docs/power-budget.md`](docs/power-budget.md) and use a
 dedicated 5 V supply with grounds tied together.
 
 ## Known limits
 
-- Toe and heel positions are the bench layout (toe 52, heel 132), not measurements of
-  a mounted shoe. See [`docs/open-questions.md`](docs/open-questions.md).
+- The firmware still assumes the uncut 160-pixel strip, with bench toe and heel positions
+  (52 and 132). A boot needs about 110 pixels, and these get set once the strip is cut. See
+  [`docs/open-questions.md`](docs/open-questions.md).
 - Battery and enclosure design are still open.
 - BLE has no pairing, so anyone nearby with a BLE app can connect and change a shoe's
   settings.
