@@ -4,10 +4,10 @@
 #include <stdint.h>
 
 // Pure orientation + stomp math for the IMU module — no Arduino, no sensor I/O.
-// This is the IMU module's internal seam: firewalker_imu.cpp adapts it to the
-// MPU-6050 and the config.h knobs; the native test env (`pio test -e native`)
-// exercises the same functions directly, so thresholds, the filter alpha, and
-// the hysteresis can be verified off-hardware. See ADR-0003 (why fusion) and
+// firewalker_imu.cpp and the MG24 prototype's imu_xiao.cpp supply axis-mapped
+// samples from their respective sensors. The native tests (`pio test -e native`)
+// exercise this math and replay the MG24's mount mapping, so tracking during
+// motion, thresholds, and hysteresis can be checked off-hardware. See ADR-0003 and
 // docs/open-questions.md (bench calibration).
 
 namespace Firewalker {

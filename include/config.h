@@ -17,18 +17,33 @@ constexpr unsigned long SERIAL_BAUD = 115200;
 // Feather RP2040 silk D5. The installed board variant maps D5 -> GPIO 7.
 constexpr uint8_t  LED_PIN = D11;
 
-// Number of pixels driven — the full strip (exactly 40). Total current scales
-// with this count, so keep it honest. See docs/power-budget.md.
-constexpr uint16_t LED_COUNT = 40;
+// Strip size and layout can be supplied by a prototype's build flags. Every
+// source file receives the same values, so the strip buffer and pattern arrays
+// agree on the pixel count. The default layout describes the 40-pixel shoe;
+// the MG24 build.sh selects its 160-pixel bench strip and scaled ring positions.
+#ifndef FIREWALKER_LED_COUNT
+#define FIREWALKER_LED_COUNT 40
+#endif
+#ifndef FIREWALKER_STRIP_TOE_INDEX
+#define FIREWALKER_STRIP_TOE_INDEX 13
+#endif
+#ifndef FIREWALKER_STRIP_HEEL_INDEX
+#define FIREWALKER_STRIP_HEEL_INDEX 33
+#endif
+constexpr uint16_t LED_COUNT = FIREWALKER_LED_COUNT;
 
 // Strip ring geometry (measured on the FOX-183 mount). The strip is a closed
 // loop around the foot perimeter: pixel 0 starts at the inner ankle directly
 // under the controller, runs forward along the medial side to the toe apex,
 // back along the lateral side to the heel, then returns to the start. Both
-// arcs between toe and heel are exactly 20 steps. The pure index→fore-aft
+// arcs between toe and heel are 20 steps in the default layout. Prototype
+// overrides use their supplied indices. The pure index→fore-aft
 // math lives in include/firewalker_strip_map.h (tested in test/test_strip_map).
-constexpr uint16_t STRIP_TOE_INDEX  = 13;
-constexpr uint16_t STRIP_HEEL_INDEX = 33;
+constexpr uint16_t STRIP_TOE_INDEX  = FIREWALKER_STRIP_TOE_INDEX;
+constexpr uint16_t STRIP_HEEL_INDEX = FIREWALKER_STRIP_HEEL_INDEX;
+static_assert(LED_COUNT > 0 && STRIP_TOE_INDEX < STRIP_HEEL_INDEX &&
+                  STRIP_HEEL_INDEX < LED_COUNT,
+              "Strip layout must satisfy toe < heel < pixel count");
 
 // ── Foot side ────────────────────────────────────────────────────────────
 // Both shoes carry an identical hardware build (controller on the inner ankle,
@@ -54,7 +69,12 @@ constexpr bool  FOOT_IS_LEFT = false;   // default: right foot
 
 // Global brightness (0-255). Total current scales with this, so raising it eats
 // into the USB budget fast — see docs/power-budget.md before pushing it up.
-constexpr uint8_t  LED_BRIGHTNESS = 100;   // 0-255
+#ifndef FIREWALKER_LED_BRIGHTNESS
+#define FIREWALKER_LED_BRIGHTNESS 100
+#endif
+// The prototype CLI supplies this for every translation unit, including
+// patterns that reapply brightness while rendering. The default is 100.
+constexpr uint8_t LED_BRIGHTNESS = FIREWALKER_LED_BRIGHTNESS;  // 0-255
 
 // Light the first pixel after boot so strip power/data wiring can be checked
 // without needing the serial monitor to catch setup() logs.
