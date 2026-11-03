@@ -389,6 +389,7 @@ implementation or assembly work.
 
 ## Related Work
 
+- [FOX-271 — Migrate Firewalker to the MG24 Sense and BTF FCOB strip](https://linear.app/foxyblocks/issue/FOX-271) (tracking ticket)
 - [FOX-266 — MG24 BLE remote decision and setup](https://linear.app/foxyblocks/issue/FOX-266)
 - [FOX-270 — Add a TUI to the mg24 bench CLI](https://linear.app/foxyblocks/issue/FOX-270)
 - [Seeed MG24 Bluetooth guide](https://wiki.seeedstudio.com/xiao_mg24_bluetooth/)
