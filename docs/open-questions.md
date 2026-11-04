@@ -29,10 +29,9 @@ so check each mounted shoe:
 - **Stomp thresholds:** what does a real stomp and an ordinary step produce on a mounted
   shoe? Tune `IMU_STOMP_ACCEL_THRESHOLD`, `IMU_RELEASE_ACCEL_THRESHOLD`,
   `IMU_REFRACTORY_MS`, and `IMU_STOMP_FORCE_FULL`.
-- **Worn pose captures:** the `CALIBRATION_*` values in `include/config.h` pass on a still
-  bench. Can you hold neutral, heel, and toe poses still enough while wearing the boot, and
-  do they still reject a boot that's really moving? If worn holds fail, loosen the limits
-  for heel and toe first. If that's not enough, record the extremes while rocking the foot.
+- **Worn pose captures:** does `CALIBRATION_MAX_SPREAD_DEG` in `include/config.h` let you
+  capture neutral, heel, and toe while wearing the boot, and still reject a foot rocking back
+  and forth?
 - **Filter feel:** do `IMU_FILTER_ALPHA` and `IMU_TILT_FULL_DEG` still feel right?
 
 ## Power

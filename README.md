@@ -69,11 +69,12 @@ Replies are JSON lines. [`docs/remote-protocol.md`](docs/remote-protocol.md) has
 full reference, including the BLE service an iPhone app connects to. The app itself is
 tracked in [FOX-269](https://linear.app/foxyblocks/issue/FOX-269).
 
-To calibrate a boot, wear it and hold each pose still while you send its command: first
+To calibrate a boot, wear it and hold each pose while you send its command: first
 `calibrate neutral` at rest, then optionally `calibrate heel` and `calibrate toe`. The
-firmware samples for one second and maps those poses to tilt -1, 0, and +1 from then on. A
-skipped side reaches full tilt 30 degrees from neutral. If the boot moves or a pose can't
-work, it reports why and keeps the previous calibration. Do this once per boot.
+firmware samples for two seconds and maps those poses to tilt -1, 0, and +1 from then on. A
+little wobble is fine. A skipped side reaches full tilt 30 degrees from neutral. If the boot
+never settles or a pose can't work, it reports why and keeps the previous calibration. Do
+this once per boot.
 
 ## Bench tests
 
@@ -156,3 +157,8 @@ dedicated 5 V supply with grounds tied together.
 - Hardware knobs live in [`include/config.h`](include/config.h).
 - Domain language: [`CONTEXT.md`](CONTEXT.md). Decisions: [`docs/adr/`](docs/adr).
 - Agent, Linear, and triage setup: [`CLAUDE.md`](CLAUDE.md) and `docs/agents/`.
+
+## iPhone remote
+
+`app/` is the iPhone app that controls the boots over Bluetooth, and its
+[README](app/README.md) covers running, testing, and installing it. It works with no network.

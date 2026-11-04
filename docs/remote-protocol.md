@@ -49,7 +49,7 @@ aren't JSON.
 | `pattern flow`, `pattern fire-trail`, `pattern off` | Selects a pattern and remembers it |
 | `power on`, `power off` | Off blanks the strip. On returns to the last lit pattern |
 | `brightness <n>` | Sets brightness, from 1 to `maxBrightness` |
-| `calibrate neutral`, `calibrate heel`, `calibrate toe` | Captures one pose; hold it still for one second. A bare `calibrate` means neutral |
+| `calibrate neutral`, `calibrate heel`, `calibrate toe` | Captures one pose; hold it for two seconds. A bare `calibrate` means neutral |
 | `debug on`, `debug off` | Starts or stops live motion lines |
 | `identify` | Blinks the strip for about 1.5 seconds, to show which boot this is. Changes no settings |
 
@@ -127,7 +127,7 @@ Reports a capture's progress. `angleDeg` is the angle the firmware saved for tha
 
 | Reason | Meaning |
 |---|---|
-| `motion` | The boot moved during the capture |
+| `motion` | The boot never settled into one pose during the capture |
 | `no-samples` | The sensor stopped delivering fresh samples |
 | `sensor-unavailable` | The motion sensor isn't available |
 | `out-of-range` | A neutral pose too far from level, more than 45 degrees |
@@ -156,8 +156,11 @@ A capture sets where tilt lands. It doesn't change the strip's toe and heel posi
 stomp thresholds, because steps and stomps are quick spikes rather than held angles. Watch
 `accelPeak` in motion lines to tune those.
 
-The window, stillness bounds, and limits are in [`config.h`](../include/config.h)
-(`CALIBRATION_*` and `TILT_LIMITS`). They've only been confirmed on a still bench so far.
+A capture collects the whole two seconds and judges it at the end, using only the middle
+half of the samples. Tremor, a slow sag, a brief stumble, or settling in late all still work.
+It only fails with `motion` if that middle half is spread too wide, such as a foot rocking
+from heel to toe. The window and limits are in [`config.h`](../include/config.h)
+(`CALIBRATION_*` and `TILT_LIMITS`).
 
 ### `motion`
 

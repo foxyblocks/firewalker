@@ -26,7 +26,7 @@ void renderIdleBrightness(uint8_t brightness);
 enum class StatusLight : uint8_t {
   Running,        // solid
   SensorMissing,  // slow blink: patterns run, but motion input is unavailable
-  Calibrating,    // fast blink: hold the boot still, or this is the boot being identified
+  Calibrating,    // fast blink: a capture is collecting, or this is the boot being identified
 };
 
 // Advances the blink pattern. Call often from the main loop.

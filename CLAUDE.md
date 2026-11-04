@@ -42,6 +42,7 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
   Arm's compiler, and makes uploads target exactly one board.
 - `tools/cli/` and `./cli` — the bench CLI: flag-configured strip tests.
 - `test/` — host-native Unity tests for the pure logic (`pio test -e native`).
+- `app/` — the Capacitor iPhone remote (React + TypeScript, Bun). See `app/README.md`.
 - `CONTEXT.md` — domain glossary; reuse these terms.
 - `docs/wiring.md`, `docs/power-budget.md` — wiring and current math.
 - `docs/remote-protocol.md` — what the iPhone app and USB console speak.

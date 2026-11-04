@@ -1,7 +1,7 @@
 // Native (off-hardware) tests for tilt calibration: include/firewalker_calibration.h. A
-// capture has to average a still boot and refuse everything else, the three poses have to
-// map onto -1, 0, and +1, and a rejected pose can never disturb a good calibration. Run
-// with `pio test -e native`.
+// capture has to find the pose in a wobbly hold and refuse a boot that never settles, the
+// three poses have to map onto -1, 0, and +1, and a rejected pose can never disturb a good
+// calibration. Run with `pio test -e native`.
 #include <unity.h>
 
 #include "firewalker_calibration.h"
@@ -9,13 +9,10 @@
 using namespace Firewalker;
 
 static const PoseCaptureLimits CAPTURE = {
-    1000,   // windowMs
-    500,    // noSampleMs
-    25,     // minSamples
-    3.0f,   // maxRangeDeg
-    0.25f,  // maxGyroRadS
-    9.81f,  // gravity
-    1.5f,   // maxAccelDev
+    2000,  // windowMs
+    500,   // noSampleMs
+    50,    // minSamples
+    8.0f,  // maxSpreadDeg
 };
 
 static const TiltLimits LIMITS = {
@@ -28,70 +25,102 @@ static const TiltLimits LIMITS = {
 void setUp() {}
 void tearDown() {}
 
-// Feeds a whole window of identical still samples at 50 Hz, the sensor's rate.
-static void feedStillWindow(PoseCapture& capture, uint32_t startMs, float angleDeg) {
+// Feeds a whole window of identical samples at 50 Hz, the sensor's rate.
+static void feedHold(PoseCapture& capture, uint32_t startMs, float angleDeg) {
   for (uint32_t t = 20; t <= CAPTURE.windowMs; t += 20) {
-    capture.addSample(startMs + t, angleDeg, 0.01f, 9.81f);
+    capture.addSample(startMs + t, angleDeg);
   }
 }
 
 // ── PoseCapture ───────────────────────────────────────────────────────────
 
-static void test_still_boot_captures_its_average_angle() {
+static void test_still_boot_captures_its_angle() {
   PoseCapture capture(CAPTURE);
   capture.start(1000, true);
   TEST_ASSERT_TRUE(capture.capturing());
-  feedStillWindow(capture, 1000, 4.0f);
+  feedHold(capture, 1000, 4.0f);
   TEST_ASSERT_EQUAL(CaptureState::Succeeded, capture.state());
-  TEST_ASSERT_FLOAT_WITHIN(0.01f, 4.0f, capture.meanDeg());
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 4.0f, capture.angleDeg());
 }
 
-static void test_small_wobble_is_averaged_not_rejected() {
+static void test_a_wobbling_hold_captures_its_middle() {
+  // A foot held up by muscle trembles a few degrees either side of the pose.
   PoseCapture capture(CAPTURE);
   capture.start(0, true);
   for (uint32_t t = 20; t <= CAPTURE.windowMs; t += 20) {
-    capture.addSample(t, (t % 40 == 0) ? 3.0f : 5.0f, 0.02f, 9.8f);
+    capture.addSample(t, (t % 40 == 0) ? 17.0f : 23.0f);
   }
   TEST_ASSERT_EQUAL(CaptureState::Succeeded, capture.state());
-  TEST_ASSERT_FLOAT_WITHIN(0.05f, 4.0f, capture.meanDeg());
+  TEST_ASSERT_FLOAT_WITHIN(0.5f, 20.0f, capture.angleDeg());
+}
+
+static void test_a_brief_jolt_does_not_move_the_result() {
+  // A quarter of a second of something much further off, as a stumble would give. The
+  // average of all the samples would land near 23 degrees here.
+  PoseCapture capture(CAPTURE);
+  capture.start(0, true);
+  for (uint32_t t = 20; t <= CAPTURE.windowMs; t += 20) {
+    capture.addSample(t, (t >= 800 && t < 1050) ? 45.0f : 20.0f);
+  }
+  TEST_ASSERT_EQUAL(CaptureState::Succeeded, capture.state());
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 20.0f, capture.angleDeg());
+}
+
+static void test_settling_into_the_pose_late_still_captures_it() {
+  // The first third of the window is spent arriving at the pose, sweeping from 0 to 30.
+  PoseCapture capture(CAPTURE);
+  capture.start(0, true);
+  for (uint32_t t = 20; t <= CAPTURE.windowMs; t += 20) {
+    const float arriving = 30.0f * (float)t / 660.0f;
+    capture.addSample(t, (t < 660) ? arriving : 30.0f);
+  }
+  TEST_ASSERT_EQUAL(CaptureState::Succeeded, capture.state());
+  TEST_ASSERT_FLOAT_WITHIN(1.0f, 30.0f, capture.angleDeg());
+}
+
+static void test_slow_sag_lands_in_the_middle_of_the_sag() {
+  // A tiring foot sinking from 24 to 18 degrees over the whole hold.
+  PoseCapture capture(CAPTURE);
+  capture.start(0, true);
+  for (uint32_t t = 20; t <= CAPTURE.windowMs; t += 20) {
+    capture.addSample(t, 24.0f - 6.0f * (float)t / (float)CAPTURE.windowMs);
+  }
+  TEST_ASSERT_EQUAL(CaptureState::Succeeded, capture.state());
+  TEST_ASSERT_FLOAT_WITHIN(0.5f, 21.0f, capture.angleDeg());
+}
+
+static void test_rocking_back_and_forth_fails_as_motion() {
+  // Swinging between heel and toe has no one pose to capture.
+  PoseCapture capture(CAPTURE);
+  capture.start(0, true);
+  for (uint32_t t = 20; t <= CAPTURE.windowMs; t += 20) {
+    capture.addSample(t, (t % 400 < 200) ? -20.0f : 20.0f);
+  }
+  TEST_ASSERT_EQUAL(CaptureState::FailedMotion, capture.state());
+}
+
+static void test_a_bad_moment_does_not_end_the_capture_early() {
+  // The whole point of judging at the end: a wild first sample leaves time to recover.
+  PoseCapture capture(CAPTURE);
+  capture.start(0, true);
+  capture.addSample(20, 80.0f);
+  TEST_ASSERT_TRUE(capture.capturing());
 }
 
 static void test_a_steep_pose_can_be_captured() {
   // The neutral limit belongs to applyPose, so a capture itself takes any angle.
   PoseCapture capture(CAPTURE);
   capture.start(0, true);
-  feedStillWindow(capture, 0, 70.0f);
+  feedHold(capture, 0, 70.0f);
   TEST_ASSERT_EQUAL(CaptureState::Succeeded, capture.state());
-  TEST_ASSERT_FLOAT_WITHIN(0.01f, 70.0f, capture.meanDeg());
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 70.0f, capture.angleDeg());
 }
 
 static void test_capture_does_not_finish_before_the_window_ends() {
   PoseCapture capture(CAPTURE);
   capture.start(0, true);
-  capture.addSample(20, 1.0f, 0.0f, 9.81f);
+  capture.addSample(CAPTURE.windowMs - 20, 1.0f);
   TEST_ASSERT_TRUE(capture.capturing());
-}
-
-static void test_rotation_fails_as_motion() {
-  PoseCapture capture(CAPTURE);
-  capture.start(0, true);
-  capture.addSample(20, 1.0f, 2.0f, 9.81f);
-  TEST_ASSERT_EQUAL(CaptureState::FailedMotion, capture.state());
-}
-
-static void test_acceleration_away_from_gravity_fails_as_motion() {
-  PoseCapture capture(CAPTURE);
-  capture.start(0, true);
-  capture.addSample(20, 1.0f, 0.0f, 14.0f);
-  TEST_ASSERT_EQUAL(CaptureState::FailedMotion, capture.state());
-}
-
-static void test_slow_drift_past_the_range_fails_as_motion() {
-  PoseCapture capture(CAPTURE);
-  capture.start(0, true);
-  capture.addSample(20, 0.0f, 0.0f, 9.81f);
-  capture.addSample(40, 4.0f, 0.0f, 9.81f);
-  TEST_ASSERT_EQUAL(CaptureState::FailedMotion, capture.state());
 }
 
 static void test_unavailable_sensor_fails_immediately() {
@@ -103,8 +132,8 @@ static void test_unavailable_sensor_fails_immediately() {
 static void test_samples_stopping_fails_as_no_samples() {
   PoseCapture capture(CAPTURE);
   capture.start(0, true);
-  capture.addSample(20, 1.0f, 0.0f, 9.81f);
-  capture.poll(100);
+  capture.addSample(20, 1.0f);
+  capture.poll(200);
   TEST_ASSERT_TRUE(capture.capturing());
   capture.poll(520);
   TEST_ASSERT_EQUAL(CaptureState::FailedNoSamples, capture.state());
@@ -113,28 +142,176 @@ static void test_samples_stopping_fails_as_no_samples() {
 static void test_too_few_samples_in_the_window_fails_as_no_samples() {
   PoseCapture capture(CAPTURE);
   capture.start(0, true);
-  capture.addSample(400, 1.0f, 0.0f, 9.81f);
-  capture.addSample(800, 1.0f, 0.0f, 9.81f);
-  capture.addSample(1000, 1.0f, 0.0f, 9.81f);
+  for (uint32_t t = 400; t <= CAPTURE.windowMs; t += 400) {
+    capture.addSample(t, 1.0f);
+  }
   TEST_ASSERT_EQUAL(CaptureState::FailedNoSamples, capture.state());
+}
+
+static void test_more_samples_than_the_buffer_holds_still_finishes() {
+  PoseCapture capture(CAPTURE);
+  capture.start(0, true);
+  for (uint32_t t = 1; t <= CAPTURE.windowMs; t += 1) {
+    capture.addSample(t, 5.0f);
+  }
+  TEST_ASSERT_EQUAL(CaptureState::Succeeded, capture.state());
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 5.0f, capture.angleDeg());
 }
 
 static void test_a_failed_capture_keeps_the_previous_result_readable() {
   PoseCapture capture(CAPTURE);
   capture.start(0, true);
-  feedStillWindow(capture, 0, 2.0f);
-  capture.start(2000, true);
-  capture.addSample(2020, 30.0f, 3.0f, 9.81f);
+  feedHold(capture, 0, 2.0f);
+  capture.start(3000, true);
+  for (uint32_t t = 20; t <= CAPTURE.windowMs; t += 20) {
+    capture.addSample(3000 + t, (t % 400 < 200) ? -20.0f : 20.0f);
+  }
   TEST_ASSERT_EQUAL(CaptureState::FailedMotion, capture.state());
-  TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.0f, capture.meanDeg());
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.0f, capture.angleDeg());
 }
 
 static void test_samples_after_finishing_are_ignored() {
   PoseCapture capture(CAPTURE);
   capture.start(0, true);
-  feedStillWindow(capture, 0, 2.0f);
-  capture.addSample(1100, 40.0f, 5.0f, 20.0f);
+  feedHold(capture, 0, 2.0f);
+  capture.addSample(CAPTURE.windowMs + 100, 40.0f);
   TEST_ASSERT_EQUAL(CaptureState::Succeeded, capture.state());
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.0f, capture.angleDeg());
+}
+
+// ── PoseCalibrator ────────────────────────────────────────────────────────
+
+// Runs a capture through a full window at one angle, then returns the report it ends with.
+// The first update reports the start, and the last one reports the outcome.
+static CaptureReport holdPose(PoseCalibrator& calibrator, TiltCalibration& calibration, CalibrationPose pose,
+                              uint32_t startMs, float angleDeg) {
+  calibrator.start(pose, startMs, true);
+  calibrator.update(startMs, calibration);
+  for (uint32_t t = 20; t <= CAPTURE.windowMs; t += 20) {
+    calibrator.addSample(startMs + t, angleDeg);
+  }
+  return calibrator.update(startMs + CAPTURE.windowMs, calibration);
+}
+
+static void rockThroughWindow(PoseCalibrator& calibrator, uint32_t startMs) {
+  for (uint32_t t = 20; t <= CAPTURE.windowMs; t += 20) {
+    calibrator.addSample(startMs + t, (t % 400 < 200) ? -20.0f : 20.0f);
+  }
+}
+
+static void test_calibrator_starts_idle_with_nothing_to_report() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  TEST_ASSERT_EQUAL_STRING("idle", calibrator.statusText());
+  TEST_ASSERT_EQUAL(CaptureReportKind::None, calibrator.update(0, calibration).kind);
+}
+
+static void test_a_new_capture_never_shows_the_previous_result() {
+  // A status line can go out in the same loop pass as a capture's ack, before the next
+  // update. If it still read "ok", a client would take that as this capture's result.
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  holdPose(calibrator, calibration, CalibrationPose::Neutral, 0, 2.0f);
+  TEST_ASSERT_EQUAL_STRING("ok", calibrator.statusText());
+
+  TEST_ASSERT_NULL(calibrator.start(CalibrationPose::Heel, 3000, true));
+  TEST_ASSERT_EQUAL_STRING("capturing", calibrator.statusText());
+}
+
+static void test_a_start_is_reported_once() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  calibrator.start(CalibrationPose::Toe, 0, true);
+  const CaptureReport report = calibrator.update(0, calibration);
+  TEST_ASSERT_EQUAL(CaptureReportKind::Started, report.kind);
+  TEST_ASSERT_EQUAL(CalibrationPose::Toe, report.pose);
+  TEST_ASSERT_EQUAL(CaptureReportKind::None, calibrator.update(20, calibration).kind);
+}
+
+static void test_a_held_pose_is_applied_and_reported() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  const CaptureReport report = holdPose(calibrator, calibration, CalibrationPose::Neutral, 0, 4.0f);
+  TEST_ASSERT_EQUAL(CaptureReportKind::Applied, report.kind);
+  TEST_ASSERT_EQUAL(CalibrationPose::Neutral, report.pose);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 4.0f, report.angleDeg);
+  TEST_ASSERT_TRUE(calibration.neutralSet);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 4.0f, calibration.neutralDeg);
+  TEST_ASSERT_EQUAL_STRING("ok", calibrator.statusText());
+}
+
+static void test_a_rejected_pose_is_reported_and_changes_nothing() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  holdPose(calibrator, calibration, CalibrationPose::Neutral, 0, 4.0f);
+  const CaptureReport report = holdPose(calibrator, calibration, CalibrationPose::Heel, 3000, 6.0f);
+  TEST_ASSERT_EQUAL(CaptureReportKind::Failed, report.kind);
+  TEST_ASSERT_EQUAL_STRING("too-close", report.reason);
+  TEST_ASSERT_EQUAL_STRING("too-close", calibrator.statusText());
+  TEST_ASSERT_FALSE(calibration.heelSet);
+}
+
+static void test_a_boot_that_never_settles_keeps_its_calibration() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  holdPose(calibrator, calibration, CalibrationPose::Neutral, 0, 4.0f);
+
+  calibrator.start(CalibrationPose::Neutral, 3000, true);
+  calibrator.update(3000, calibration);
+  rockThroughWindow(calibrator, 3000);
+  const CaptureReport report = calibrator.update(5000, calibration);
+  TEST_ASSERT_EQUAL(CaptureReportKind::Failed, report.kind);
+  TEST_ASSERT_EQUAL_STRING("motion", report.reason);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 4.0f, calibration.neutralDeg);
+}
+
+static void test_every_capture_reports_even_when_it_fails_the_same_way() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  for (uint32_t startMs = 0; startMs < 6000; startMs += 3000) {
+    calibrator.start(CalibrationPose::Neutral, startMs, true);
+    TEST_ASSERT_EQUAL(CaptureReportKind::Started, calibrator.update(startMs, calibration).kind);
+    rockThroughWindow(calibrator, startMs);
+    TEST_ASSERT_EQUAL(CaptureReportKind::Failed, calibrator.update(startMs + 2000, calibration).kind);
+  }
+}
+
+static void test_a_missing_sensor_refuses_every_time_and_reports_it() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  for (int attempt = 0; attempt < 2; attempt++) {
+    TEST_ASSERT_EQUAL_STRING("sensor-unavailable", calibrator.start(CalibrationPose::Neutral, 0, false));
+    TEST_ASSERT_EQUAL_STRING("sensor-unavailable", calibrator.statusText());
+    const CaptureReport report = calibrator.update(0, calibration);
+    TEST_ASSERT_EQUAL(CaptureReportKind::Failed, report.kind);
+    TEST_ASSERT_EQUAL_STRING("sensor-unavailable", report.reason);
+  }
+}
+
+static void test_a_second_capture_is_refused_and_leaves_the_first_running() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  calibrator.start(CalibrationPose::Neutral, 0, true);
+  calibrator.update(0, calibration);
+
+  TEST_ASSERT_EQUAL_STRING("already-capturing", calibrator.start(CalibrationPose::Heel, 100, true));
+  TEST_ASSERT_TRUE(calibrator.capturing());
+  TEST_ASSERT_EQUAL_STRING("capturing", calibrator.statusText());
+
+  for (uint32_t t = 20; t <= CAPTURE.windowMs; t += 20) calibrator.addSample(t, 4.0f);
+  const CaptureReport report = calibrator.update(CAPTURE.windowMs, calibration);
+  TEST_ASSERT_EQUAL(CaptureReportKind::Applied, report.kind);
+  TEST_ASSERT_EQUAL(CalibrationPose::Neutral, report.pose);
+}
+
+static void test_samples_stopping_is_reported() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  calibrator.start(CalibrationPose::Neutral, 0, true);
+  calibrator.update(0, calibration);
+  const CaptureReport report = calibrator.update(600, calibration);
+  TEST_ASSERT_EQUAL(CaptureReportKind::Failed, report.kind);
+  TEST_ASSERT_EQUAL_STRING("no-samples", report.reason);
 }
 
 // ── tiltFromAngle ─────────────────────────────────────────────────────────
@@ -291,18 +468,31 @@ static void test_retaking_neutral_keeps_a_backward_mounts_direction() {
 
 int main(int, char**) {
   UNITY_BEGIN();
-  RUN_TEST(test_still_boot_captures_its_average_angle);
-  RUN_TEST(test_small_wobble_is_averaged_not_rejected);
+  RUN_TEST(test_still_boot_captures_its_angle);
+  RUN_TEST(test_a_wobbling_hold_captures_its_middle);
+  RUN_TEST(test_a_brief_jolt_does_not_move_the_result);
+  RUN_TEST(test_settling_into_the_pose_late_still_captures_it);
+  RUN_TEST(test_slow_sag_lands_in_the_middle_of_the_sag);
+  RUN_TEST(test_rocking_back_and_forth_fails_as_motion);
+  RUN_TEST(test_a_bad_moment_does_not_end_the_capture_early);
   RUN_TEST(test_a_steep_pose_can_be_captured);
   RUN_TEST(test_capture_does_not_finish_before_the_window_ends);
-  RUN_TEST(test_rotation_fails_as_motion);
-  RUN_TEST(test_acceleration_away_from_gravity_fails_as_motion);
-  RUN_TEST(test_slow_drift_past_the_range_fails_as_motion);
   RUN_TEST(test_unavailable_sensor_fails_immediately);
   RUN_TEST(test_samples_stopping_fails_as_no_samples);
   RUN_TEST(test_too_few_samples_in_the_window_fails_as_no_samples);
+  RUN_TEST(test_more_samples_than_the_buffer_holds_still_finishes);
   RUN_TEST(test_a_failed_capture_keeps_the_previous_result_readable);
   RUN_TEST(test_samples_after_finishing_are_ignored);
+  RUN_TEST(test_calibrator_starts_idle_with_nothing_to_report);
+  RUN_TEST(test_a_new_capture_never_shows_the_previous_result);
+  RUN_TEST(test_a_start_is_reported_once);
+  RUN_TEST(test_a_held_pose_is_applied_and_reported);
+  RUN_TEST(test_a_rejected_pose_is_reported_and_changes_nothing);
+  RUN_TEST(test_a_boot_that_never_settles_keeps_its_calibration);
+  RUN_TEST(test_every_capture_reports_even_when_it_fails_the_same_way);
+  RUN_TEST(test_a_missing_sensor_refuses_every_time_and_reports_it);
+  RUN_TEST(test_a_second_capture_is_refused_and_leaves_the_first_running);
+  RUN_TEST(test_samples_stopping_is_reported);
   RUN_TEST(test_uncalibrated_boot_uses_the_default_range);
   RUN_TEST(test_tilt_is_exactly_zero_inside_the_dead_zone);
   RUN_TEST(test_each_pose_lands_on_its_tilt);

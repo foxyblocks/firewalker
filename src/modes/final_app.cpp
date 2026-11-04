@@ -30,9 +30,8 @@ using namespace Firewalker;
 static constexpr SettingsBounds SETTINGS_BOUNDS = {LED_BRIGHTNESS_MIN, LED_BRIGHTNESS_MAX,
                                                    TILT_LIMITS.maxNeutralDeg};
 static constexpr PoseCaptureLimits CAPTURE_LIMITS = {
-    CALIBRATION_WINDOW_MS,     CALIBRATION_NO_SAMPLE_MS,  CALIBRATION_MIN_SAMPLES,
-    CALIBRATION_MAX_RANGE_DEG, CALIBRATION_MAX_GYRO_RADS, IMU_GRAVITY,
-    CALIBRATION_MAX_ACCEL_DEV};
+    CALIBRATION_WINDOW_MS, CALIBRATION_NO_SAMPLE_MS, CALIBRATION_MIN_SAMPLES,
+    CALIBRATION_MAX_SPREAD_DEG};
 
 static FlowPattern flow;
 static FireTrailPattern fireTrail;
@@ -42,10 +41,7 @@ static Settings settings = defaultSettings(LED_BRIGHTNESS);
 static SaveScheduler saveScheduler(SETTINGS_SAVE_QUIET_MS, SETTINGS_SAVE_MAX_MS);
 static bool saveFailed = false;
 
-static PoseCapture poseCapture(CAPTURE_LIMITS);
-static CalibrationPose capturedPose = CalibrationPose::Neutral;
-static CaptureState reportedCaptureState = CaptureState::Idle;
-static const char* calibrationState = "idle";  // what status reports for the latest capture
+static PoseCalibrator calibrator(CAPTURE_LIMITS, TILT_LIMITS);
 
 static bool identifying = false;
 static unsigned long identifyStartMs = 0;
@@ -70,7 +66,7 @@ static void sendStatus() {
   report.sensorReady = imuReady();
   report.tilt = imuTiltFwd();
   report.calibration = settings.calibration;
-  report.calibrationState = calibrationState;
+  report.calibrationState = calibrator.statusText();
   report.saved = !saveScheduler.dirty() && !saveFailed;
   report.saveFailed = saveFailed;
   report.saves = settingsWriteCount();
@@ -169,18 +165,11 @@ static void handleCommand(const Command& command) {
       sendAck(command.type, true);
       break;
 
-    case CommandType::Calibrate:
-      if (poseCapture.capturing()) {
-        sendAck(command.type, false, "already-capturing");
-        return;
-      }
-      capturedPose = command.pose;
-      // Forget the last reported state, so a capture that fails the same way as the
-      // previous one still sends its own calibrate line.
-      reportedCaptureState = CaptureState::Idle;
-      poseCapture.start(millis(), imuReady());
-      sendAck(command.type, poseCapture.capturing(), captureFailureReason(poseCapture.state()));
+    case CommandType::Calibrate: {
+      const char* refusal = calibrator.start(command.pose, millis(), imuReady());
+      sendAck(command.type, refusal == nullptr, refusal);
       break;
+    }
 
     case CommandType::Debug:
       debugEnabled = command.on;
@@ -190,33 +179,22 @@ static void handleCommand(const Command& command) {
   statusPending = true;
 }
 
-// Reports a capture's progress once per state change. A pose that holds still and passes
-// its checks is applied and saved right away, because a calibration is worth more than the
-// wear of one write. Any failure leaves the previous calibration alone, in use and in flash.
+// Tells clients about each change in a capture. An applied pose is saved right away, because a
+// calibration is worth more than the wear of one write. A failure has changed nothing, in use
+// or in flash.
 static void updatePoseCapture() {
-  poseCapture.poll(millis());
-  const CaptureState state = poseCapture.state();
-  if (state == reportedCaptureState) return;
-  reportedCaptureState = state;
+  const CaptureReport report = calibrator.update(millis(), settings.calibration);
+  if (report.kind == CaptureReportKind::None) return;
 
   char line[REMOTE_LINE_MAX];
-  if (state == CaptureState::Capturing) {
-    calibrationState = "capturing";
-    formatCalibrationCapturing(line, sizeof(line), capturedPose);
+  if (report.kind == CaptureReportKind::Started) {
+    formatCalibrationCapturing(line, sizeof(line), report.pose);
+  } else if (report.kind == CaptureReportKind::Failed) {
+    formatCalibrationFailed(line, sizeof(line), report.pose, report.reason);
   } else {
-    const float angleDeg = poseCapture.meanDeg();
-    const char* failure = (state == CaptureState::Succeeded)
-                              ? applyPose(settings.calibration, capturedPose, angleDeg, TILT_LIMITS)
-                              : captureFailureReason(state);
-    if (failure) {
-      calibrationState = failure;
-      formatCalibrationFailed(line, sizeof(line), capturedPose, failure);
-    } else {
-      calibrationState = "ok";
-      imuSetCalibration(settings.calibration);
-      saveNow();
-      formatCalibrationOk(line, sizeof(line), capturedPose, angleDeg, imuTiltFwd());
-    }
+    imuSetCalibration(settings.calibration);
+    saveNow();
+    formatCalibrationOk(line, sizeof(line), report.pose, report.angleDeg, imuTiltFwd());
   }
   remoteSend(line);
   statusPending = true;
@@ -300,7 +278,7 @@ void loop() {
       stompSinceReport = true;
     }
     if (imuLatest().mag > accelPeak) accelPeak = imuLatest().mag;
-    poseCapture.addSample(millis(), imuRawAngleDeg(), imuGyroMagnitude(), imuLatest().mag);
+    calibrator.addSample(millis(), imuRawAngleDeg());
   }
   updatePoseCapture();
 
@@ -322,7 +300,7 @@ void loop() {
 
   renderIfDue(now);
 
-  updateStatusLight((poseCapture.capturing() || identifying) ? StatusLight::Calibrating
+  updateStatusLight((calibrator.capturing() || identifying) ? StatusLight::Calibrating
                     : imuReady()                             ? StatusLight::Running
                                                              : StatusLight::SensorMissing);
   remoteUpdate();
