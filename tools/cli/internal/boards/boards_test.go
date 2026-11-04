@@ -4,23 +4,21 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"go.bug.st/serial/enumerator"
 )
 
-const deviceList = `[
-  {"port": "/dev/cu.debug-console", "description": "n/a", "hwid": "n/a"},
-  {"port": "/dev/cu.usbmodem111", "description": "Other", "hwid": "USB VID:PID=239A:80F1 SER=FEATHER LOCATION=1-1"},
-  {"port": "/dev/cu.usbmodem572C60FA3", "description": "XIAO", "hwid": "USB VID:PID=2886:0062 SER=572C60FA LOCATION=2-1"},
-  {"port": "/dev/cu.usbmodemAAAA1", "description": "XIAO", "hwid": "USB VID:PID=2886:0062 SER=AAAA LOCATION=2-2"}
-]`
-
-func TestParseListKeepsOnlyMG24Boards(t *testing.T) {
-	boards, err := ParseList([]byte(deviceList))
-	if err != nil {
-		t.Fatal(err)
+func TestFromPortsKeepsOnlyMG24Boards(t *testing.T) {
+	ports := []*enumerator.PortDetails{
+		{Name: "/dev/cu.Bluetooth-Incoming-Port"},
+		{Name: "/dev/cu.usbmodem111", IsUSB: true, VID: "239A", PID: "80F1", SerialNumber: "FEATHER"},
+		{Name: "/dev/cu.usbmodem572C60FA3", IsUSB: true, VID: "2886", PID: "0062", SerialNumber: "572C60FA"},
+		{Name: "/dev/cu.usbmodemNOSERIAL", IsUSB: true, VID: "2886", PID: "0062"},
+		{Name: "/dev/ttyACM0", IsUSB: true, VID: "2886", PID: "0062", SerialNumber: "AAAA"},
 	}
-	want := []Board{{"/dev/cu.usbmodem572C60FA3", "572C60FA"}, {"/dev/cu.usbmodemAAAA1", "AAAA"}}
-	if !slices.Equal(boards, want) {
-		t.Fatalf("got %v, want %v", boards, want)
+	want := []Board{{"/dev/cu.usbmodem572C60FA3", "572C60FA"}, {"/dev/ttyACM0", "AAAA"}}
+	if got := FromPorts(ports); !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
 	}
 }
 
@@ -40,7 +38,8 @@ func TestSelectNeverGuesses(t *testing.T) {
 		{name: "port picks a board", boards: []Board{left, right}, port: "/dev/cu.left", want: left},
 		{name: "unknown serial fails", boards: []Board{left, right}, serial: "NOPE", wantErr: "no matching"},
 		{name: "a selection can't fall through to the other board", boards: []Board{left}, serial: "RIGHT", wantErr: "no matching"},
-		{name: "no boards fails", wantErr: "no matching"},
+		{name: "no boards suggests a data cable", wantErr: "No MG24 on USB. Try a data cable or a port without a hub."},
+		{name: "a selection with no boards gets the same hint", serial: "RIGHT", wantErr: "No MG24 on USB"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

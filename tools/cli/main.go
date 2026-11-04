@@ -1,28 +1,42 @@
-// cli is the local bench tool for the XIAO MG24 Sense: it builds a one-off strip
-// test and flashes it to a USB-connected board, so bench work doesn't depend on the
-// phone remote. Cobra handles arguments here; internal/bench owns what a test is and
-// internal/boards owns which board it runs on. Flags become build flags for the `bench`
-// PlatformIO environment (see src/modes/bench.cpp), so running a test never edits
-// firmware sources and never touches a shoe's saved settings. To return a board to
-// the app afterward, run `pio run -e final_app -t upload`.
+// cli is the local bench tool for the XIAO MG24 Sense: it flashes one-off strip tests
+// and whole firmware builds to a USB-connected board, and streams what the board says
+// back, so bench work doesn't depend on the phone remote.
+//
+// This file is the command line: Cobra subcommands, and the flow from parsed flags to a
+// flash. The pieces it calls own the rest. internal/bench is what a test is, boards is
+// which board it runs on, link talks to that board, flash runs PlatformIO, and theme
+// decides how output looks. A bench test becomes build flags for the `bench` PlatformIO
+// environment (see src/modes/bench.cpp), so running one never edits firmware sources and
+// never touches a shoe's saved settings. `./cli app` puts the shoe app back.
 package main
 
 import (
+	"bufio"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 
 	"firewalker/cli/internal/bench"
 	"firewalker/cli/internal/boards"
+	"firewalker/cli/internal/flash"
+	"firewalker/cli/internal/link"
+	"firewalker/cli/internal/protocol"
+	"firewalker/cli/internal/theme"
 )
 
-const serialBaud = "115200"
+// How long a boot gets to answer `status` before it's treated as not running the app.
+// The app answers within a few milliseconds, so this mostly decides how long a bench
+// build holds up the next run.
+const statusTimeout = 1200 * time.Millisecond
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -37,19 +51,20 @@ func newCommand() *cobra.Command {
 	opts := &bench.Options{}
 	root := &cobra.Command{
 		Use: "cli", Short: "Build and run MG24 Sense strip tests on D10",
-		Long:         "Run MG24 bench tests without editing firmware settings. Defaults: the strip length in include/config.h, brightness 16/255, data on D10. Each command builds and uploads; --build-only compiles without touching the board.",
+		Long:         "Run MG24 bench tests without editing firmware settings. Defaults: the board's saved strip layout, brightness 16/255, data on D10. Each command builds and uploads; --build-only compiles without touching the board.",
 		SilenceUsage: true, SilenceErrors: true,
 		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 	}
 	f := root.PersistentFlags()
 	f.StringVar(&opts.RepoRoot, "repo-root", "../..", "Firewalker repository root")
 	_ = f.MarkHidden("repo-root")
-	f.IntVar(&opts.Pixels, "pixels", 0, "Total connected pixels (1–4096); defaults to FIREWALKER_LED_COUNT in include/config.h")
+	f.IntVar(&opts.Pixels, "pixels", 0, "Total connected pixels (1–4096); pattern tests default to the board's saved layout, then include/config.h")
 	f.IntVar(&opts.Brightness, "brightness", 16, "Global brightness (1–255; not a current limit)")
 	f.StringVar(&opts.Port, "port", "", "MG24 USB port; auto-detected when one board is connected")
 	f.StringVar(&opts.Serial, "serial", "", "MG24 USB serial number; useful with multiple boards")
 	f.BoolVar(&opts.BuildOnly, "build-only", false, "Compile without uploading")
 	f.BoolVar(&opts.DryRun, "dry-run", false, "Show resolved settings without compiling or uploading")
+	f.BoolVar(&opts.Debug, "debug", false, "Stay attached after the upload and stream the board's output; Ctrl-C leaves the board running")
 
 	tests := []struct {
 		name, short string
@@ -66,11 +81,11 @@ func newCommand() *cobra.Command {
 		if cfg.IsPattern() {
 			flags := cmd.Flags()
 			flags.BoolVar(&cfg.Motion, "motion", false, "Use the onboard sensor for tilt and stomp input")
-			flags.BoolVar(&cfg.LogMotion, "log-motion", false, "Stream motion logs over USB after flashing; Ctrl-C leaves the board running")
+			flags.BoolVar(&cfg.LogMotion, "log-motion", false, "Log motion over USB and stream it after flashing; Ctrl-C leaves the board running")
 			flags.Float64Var(&cfg.Tilt, "tilt", 0, "Fixed simulated tilt (-1 heel-down, 0 level, +1 toe-down)")
 			flags.DurationVar(&cfg.StompEvery, "stomp-every", 0, "Simulate impacts at this interval; 0 disables (fire-trail defaults to 1s without --motion)")
-			flags.IntVar(&cfg.Toe, "toe", -1, "Toe pixel; defaults to config.h, or 32.5% of the strip with a custom --pixels")
-			flags.IntVar(&cfg.Heel, "heel", -1, "Heel pixel; defaults to config.h, or 82.5% of the strip with a custom --pixels")
+			flags.IntVar(&cfg.Toe, "toe", -1, "Toe pixel; defaults to the board's saved layout, or 32.5% of the strip with a custom --pixels")
+			flags.IntVar(&cfg.Heel, "heel", -1, "Heel pixel; defaults to the board's saved layout, or 82.5% of the strip with a custom --pixels")
 		}
 		if t.test == bench.TestColor {
 			cmd.Flags().IntVar(&cfg.Lit, "lit", -1, "Pixels to light at the input end; defaults to all")
@@ -81,77 +96,321 @@ func newCommand() *cobra.Command {
 			if cfg.Test == bench.TestFireTrail && !cfg.Motion && !cmd.Flags().Changed("stomp-every") {
 				cfg.StompEvery = time.Second
 			}
-			// A custom strip length gets its layout scaled in Validate, because the
-			// configured toe and heel only describe the configured length.
-			if !cmd.Flag("pixels").Changed {
-				layout, err := bench.ReadStripLayout(opts.RepoRoot)
-				if err != nil {
-					return err
-				}
-				opts.Pixels = layout.Pixels
-				if cfg.Toe == -1 {
-					cfg.Toe = layout.Toe
-				}
-				if cfg.Heel == -1 {
-					cfg.Heel = layout.Heel
-				}
-			}
-			if err := bench.Validate(opts, cfg); err != nil {
-				return err
-			}
 			return runTest(cmd.Context(), cmd, opts, cfg)
 		}
 		root.AddCommand(cmd)
 	}
+	root.AddCommand(newAppCommand(opts))
 	return root
 }
 
+func newAppCommand(opts *bench.Options) *cobra.Command {
+	return &cobra.Command{
+		Use:   "app",
+		Short: "Flash the shoe app (final_app) back onto a board; its saved settings stay",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			// The app's strip and brightness come from each boot's saved settings, so
+			// these flags would quietly do nothing.
+			for _, name := range []string{"pixels", "brightness"} {
+				if cmd.Flag(name).Changed {
+					return fmt.Errorf("app uses the boot's saved settings, so --%s doesn't apply", name)
+				}
+			}
+			return runApp(cmd.Context(), cmd, opts)
+		},
+	}
+}
+
+// openCache opens this user's boards.json. If there's no config folder to keep it in,
+// reads come back empty and writes fail, so nothing gets remembered and nothing breaks.
+func openCache() *boards.Cache {
+	path, err := boards.DefaultCachePath()
+	if err != nil {
+		path = ""
+	}
+	return boards.OpenCache(path)
+}
+
+// resolvedLayout is a layout plus a sentence saying where it came from.
+type resolvedLayout struct {
+	bench.ResolvedLayout
+	Note string
+}
+
+// layoutFinder works out which strip layout a pattern test should light. query is a
+// field so tests can answer for a boot.
+type layoutFinder struct {
+	cache *boards.Cache
+	query func(ctx context.Context, port string) (*protocol.Status, error)
+}
+
+func newLayoutFinder(cache *boards.Cache) layoutFinder {
+	return layoutFinder{cache: cache, query: func(ctx context.Context, port string) (*protocol.Status, error) {
+		return link.QueryStatus(ctx, port, statusTimeout)
+	}}
+}
+
+// resolve asks the target board, when there is one, and falls back to what's remembered
+// about it and then config.h. serial names a board that can't be asked, for a dry run
+// with no single connected target. A boot's answer is written to the cache, because the
+// bench build about to replace the app can't answer later.
+func (f layoutFinder) resolve(ctx context.Context, config bench.StripLayout, target *boards.Board, serial string) resolvedLayout {
+	choices := bench.LayoutChoices{Config: config}
+	reason := "no board to ask"
+	if target != nil {
+		serial = target.Serial
+		status, err := f.query(ctx, target.Port)
+		switch {
+		case err != nil:
+			reason = "it didn't answer: " + err.Error()
+		default:
+			layout, ok := status.Layout()
+			if ok {
+				saved := bench.StripLayout{Pixels: layout.LEDs, Toe: layout.Toe, Heel: layout.Heel}
+				choices.Boot = &saved
+			} else {
+				reason = fmt.Sprintf("%s is on proto %d, which doesn't report one", status.ID, status.Proto)
+			}
+			f.remember(serial, status)
+		}
+	}
+	id := serial
+	if record, ok := f.cache.Get(serial); ok && serial != "" {
+		if record.ID != "" {
+			id = record.ID
+		}
+		if choices.Boot == nil && record.Layout != nil {
+			choices.Remembered = &bench.StripLayout{Pixels: record.Layout.LEDs, Toe: record.Layout.Toe, Heel: record.Layout.Heel}
+		}
+	}
+
+	picked := bench.PickLayout(choices)
+	note := "include/config.h (" + reason + ")"
+	switch picked.Source {
+	case bench.SourceBoot:
+		note = "saved on " + id + " (read just now)"
+	case bench.SourceRemembered:
+		note = id + "'s last known layout (" + reason + ")"
+	}
+	return resolvedLayout{ResolvedLayout: picked, Note: note}
+}
+
+func (f layoutFinder) remember(serial string, status *protocol.Status) {
+	_ = f.cache.Update(serial, func(r *boards.Record) {
+		if status.ID != "" {
+			r.ID = status.ID
+		}
+		if layout, ok := status.Layout(); ok {
+			r.Layout = &boards.SavedLayout{LEDs: layout.LEDs, Toe: layout.Toe, Heel: layout.Heel}
+		}
+	})
+}
+
+// findTarget picks the board named by --port or --serial, or the only one connected.
+func findTarget(o *bench.Options) (boards.Board, error) {
+	connected, err := boards.Discover()
+	if err != nil {
+		return boards.Board{}, err
+	}
+	return boards.Select(connected, o.Port, o.Serial)
+}
+
+// runTest takes a parsed bench test through to a flash. Bad flags fail before anything
+// touches a board. Then comes the layout, which may need the board's answer, and only
+// then the checks that depend on the strip's length.
 func runTest(ctx context.Context, cmd *cobra.Command, o *bench.Options, c *bench.Config) error {
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "Test: %s | pixels: %d | brightness: %d/255 | D10 | motion: %t\n", c.Name, o.Pixels, o.Brightness, c.Motion)
+	th := theme.New(out)
+	if err := bench.CheckInputs(o, c); err != nil {
+		return err
+	}
+
+	upload := !o.BuildOnly && !o.DryRun
+	pixelsGiven := cmd.Flag("pixels").Changed
+	wantsSavedLayout := c.IsPattern() && !pixelsGiven
+
+	// An upload needs exactly one board, so anything else stops here. A dry run or a
+	// build-only run is fine without one: it just can't ask for the saved layout.
+	var target *boards.Board
+	if upload || wantsSavedLayout {
+		found, err := findTarget(o)
+		if upload && err != nil {
+			return err
+		}
+		if err == nil {
+			target = &found
+		}
+	}
+
+	cache := openCache()
+	layoutNote := layoutFlagsNote(cmd, c)
+	if !pixelsGiven {
+		config, err := bench.ReadStripLayout(o.RepoRoot)
+		if err != nil {
+			return err
+		}
+		if wantsSavedLayout {
+			resolved := newLayoutFinder(cache).resolve(ctx, config, target, o.Serial)
+			bench.ApplyLayout(o, c, resolved.Layout)
+			layoutNote = resolved.Note + withOverrides(cmd, c)
+		} else {
+			// Color and off tests don't use a ring. They light the whole configured
+			// length, and pixels a cut strip doesn't have simply never receive it.
+			bench.ApplyLayout(o, c, config)
+		}
+	}
+	if err := bench.Validate(o, c); err != nil {
+		return err
+	}
+
+	fmt.Fprintln(out, th.Bold.Render(fmt.Sprintf("Test: %s | pixels: %d | brightness: %d/255 | D10 | motion: %t", c.Name, o.Pixels, o.Brightness, c.Motion)))
 	if c.IsPattern() {
 		fmt.Fprintf(out, "Layout: toe=%d heel=%d | simulated tilt: %.2f | timed impacts: %s\n", c.Toe, c.Heel, c.Tilt, c.StompEvery)
+		fmt.Fprintln(out, th.Dim.Render("Layout from: "+layoutNote))
 	}
+	job := flash.Job{RepoRoot: o.RepoRoot, Env: "bench", SrcFlags: bench.BuildFlags(o, c)}
+	return flashAndFollow(ctx, out, th, cache, o, job, target, "bench "+c.Name, o.Debug || c.LogMotion)
+}
+
+// layoutFlagsNote says where a layout came from when --pixels set it directly. A color
+// or off test has no ring, and this note never gets printed for it.
+func layoutFlagsNote(cmd *cobra.Command, c *bench.Config) string {
+	if !c.IsPattern() {
+		return ""
+	}
+	if cmd.Flags().Changed("toe") && cmd.Flags().Changed("heel") {
+		return "--pixels, --toe, and --heel"
+	}
+	return "--pixels (toe and heel scaled to fit, unless set)"
+}
+
+// withOverrides adds which marker flags replaced part of a saved layout.
+func withOverrides(cmd *cobra.Command, c *bench.Config) string {
+	if !c.IsPattern() {
+		return ""
+	}
+	var flags []string
+	for _, name := range []string{"toe", "heel"} {
+		if cmd.Flags().Changed(name) {
+			flags = append(flags, "--"+name)
+		}
+	}
+	if len(flags) == 0 {
+		return ""
+	}
+	return ", with " + strings.Join(flags, " and ")
+}
+
+// runApp flashes the shoe app, which is the usual way back after bench work.
+func runApp(ctx context.Context, cmd *cobra.Command, o *bench.Options) error {
+	out := cmd.OutOrStdout()
+	th := theme.New(out)
+	if err := o.CheckTarget(); err != nil {
+		return err
+	}
+	var target *boards.Board
+	if !o.BuildOnly && !o.DryRun {
+		found, err := findTarget(o)
+		if err != nil {
+			return err
+		}
+		target = &found
+	}
+	fmt.Fprintln(out, th.Bold.Render("App: final_app | saved settings stay"))
+	job := flash.Job{RepoRoot: o.RepoRoot, Env: flash.AppEnv}
+	return flashAndFollow(ctx, out, th, openCache(), o, job, target, flash.AppEnv, o.Debug)
+}
+
+// flashAndFollow finishes every flash the same way: stop at a dry run, name the target,
+// run PlatformIO, note what's on the board now, and optionally stay attached.
+func flashAndFollow(ctx context.Context, out io.Writer, th *theme.Theme, cache *boards.Cache, o *bench.Options, job flash.Job, target *boards.Board, label string, follow bool) error {
 	if o.DryRun {
 		fmt.Fprintln(out, "Dry run: no compilation, upload, or firmware-source changes.")
 		return nil
 	}
-	if _, err := exec.LookPath("pio"); err != nil {
-		return fmt.Errorf("PlatformIO's pio command is required: %w", err)
-	}
-
-	args := []string{"run", "--project-dir", o.RepoRoot, "-e", "bench"}
-	var target boards.Board
 	if !o.BuildOnly {
-		connected, err := boards.Discover(ctx)
-		if err != nil {
-			return err
-		}
-		target, err = boards.Select(connected, o.Port, o.Serial)
-		if err != nil {
-			return err
-		}
 		fmt.Fprintf(out, "Target: %s (serial %s)\n", target.Port, target.Serial)
-		args = append(args, "-t", "upload", "--upload-port", target.Serial)
+		job.Serial = target.Serial
 	}
-
-	// These apply only to the firmware's own sources, so switching tests recompiles
-	// them without rebuilding the whole Silicon Labs core.
-	build := exec.CommandContext(ctx, "pio", args...)
-	build.Env = append(os.Environ(), "PLATFORMIO_BUILD_SRC_FLAGS="+strings.Join(bench.BuildFlags(o, c), " "))
-	build.Stdout, build.Stderr = os.Stdout, os.Stderr
-	if err := build.Run(); err != nil {
-		return fmt.Errorf("pio run failed: %w", err)
+	if err := job.Run(ctx, os.Environ(), os.Stdout, os.Stderr); err != nil {
+		return err
 	}
-
-	if c.LogMotion {
-		fmt.Fprintf(out, "Streaming motion logs from %s. Ctrl-C stops the stream and leaves the board running.\n", target.Port)
-		monitor := exec.Command("pio", "device", "monitor", "--port", target.Port, "--baud", serialBaud)
-		monitor.Stdin, monitor.Stdout, monitor.Stderr = os.Stdin, os.Stdout, os.Stderr
-		// The monitor handles Ctrl-C itself, so ignore this command's own context here.
-		if err := monitor.Run(); err != nil && ctx.Err() == nil {
-			return fmt.Errorf("pio device monitor failed: %w", err)
-		}
+	if o.BuildOnly {
+		return nil
+	}
+	if err := cache.Update(target.Serial, func(r *boards.Record) {
+		r.LastFlashed = label
+		r.FlashedAt = time.Now()
+	}); err != nil {
+		fmt.Fprintln(out, th.Dim.Render("Couldn't remember what's on this board: "+err.Error()))
+	}
+	if follow {
+		streamBoard(ctx, out, th, target.Serial)
 	}
 	return nil
+}
+
+// streamBoard stays attached to a board and prints what it says until Ctrl-C, which
+// closes the port and leaves the board running. People get the log's colors and times.
+// Anything else, such as a pipe into a script, gets the board's raw lines. In a terminal
+// a typed line goes to the board, so commands like `debug on` still work here.
+func streamBoard(ctx context.Context, out io.Writer, th *theme.Theme, serial string) {
+	fmt.Fprintf(out, "Streaming from %s. Ctrl-C stops the stream and leaves the board running.\n", serial)
+
+	var mu sync.Mutex
+	var current link.Transport
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		go func() {
+			scanner := bufio.NewScanner(os.Stdin)
+			for scanner.Scan() {
+				mu.Lock()
+				if current != nil {
+					_ = current.Send(scanner.Text())
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+
+	lastProblem := ""
+	note := func(kind theme.Kind, text string) {
+		if th.Colored() {
+			fmt.Fprintln(out, th.Line(time.Now(), kind, text))
+		} else {
+			fmt.Fprintln(out, text)
+		}
+	}
+	link.Follow(ctx, link.ForBoard(serial), 500*time.Millisecond, func(e link.Event) {
+		switch e.Kind {
+		case link.EventConnected:
+			mu.Lock()
+			current = e.Link
+			mu.Unlock()
+			if lastProblem != "" {
+				note(theme.KindInfo, "Attached to "+serial)
+			}
+			lastProblem = ""
+		case link.EventLine:
+			if !th.Colored() {
+				fmt.Fprintln(out, e.Line)
+				return
+			}
+			kind, text := theme.Describe(protocol.Classify(e.Line))
+			fmt.Fprintln(out, th.Line(time.Now(), kind, text))
+		case link.EventDisconnected:
+			mu.Lock()
+			current = nil
+			mu.Unlock()
+			lastProblem = "disconnected"
+			note(theme.KindInfo, "Lost "+serial+". Waiting for it to come back.")
+		case link.EventOpenFailed:
+			// The board is usually gone for a moment after an upload, so this repeats
+			// until it returns. One line per distinct reason is enough.
+			if message := e.Err.Error(); message != lastProblem && !errors.Is(ctx.Err(), context.Canceled) {
+				lastProblem = message
+				note(theme.KindInfo, "Waiting for "+serial+": "+message)
+			}
+		}
+	})
 }

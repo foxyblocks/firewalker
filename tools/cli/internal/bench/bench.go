@@ -3,7 +3,9 @@
 // running a test never edits firmware sources or touches a boot's saved settings.
 //
 // It's pure logic with no ports or child processes. The Cobra subcommands in main.go
-// fill in an Options and a Config from flags, then Validate and BuildFlags do the rest.
+// and the TUI's bench form both fill in an Options and a Config, then CheckInputs,
+// Validate, and BuildFlags do the rest, so a test can't be valid in one and not the
+// other. PickLayout decides which strip layout a pattern test runs on.
 package bench
 
 import (
@@ -22,6 +24,7 @@ type Options struct {
 	RepoRoot, Port, Serial string
 	Pixels, Brightness     int
 	BuildOnly, DryRun      bool
+	Debug                  bool // stay attached after the upload and stream the board's output
 }
 
 // The values match BENCH_TEST in src/modes/bench.cpp.
@@ -52,8 +55,58 @@ type Config struct {
 // the toe and heel matter.
 func (c *Config) IsPattern() bool { return c.Test == TestFlow || c.Test == TestFireTrail }
 
-// StripLayout is the strip's size and ring positions.
+// StripLayout is the strip's size and ring positions. Toe and heel can come in either
+// order, because a mirrored boot runs the ring the other way around.
 type StripLayout struct{ Pixels, Toe, Heel int }
+
+// LayoutSource says where a test's strip layout came from, so the tool can say so.
+type LayoutSource int
+
+const (
+	SourceConfig     LayoutSource = iota // include/config.h, the uncut strip's defaults
+	SourceRemembered                     // what this board last reported, from the cache
+	SourceBoot                           // the running app's reply, just now
+)
+
+// LayoutChoices are the candidates for a pattern test's layout. Boot and Remembered are
+// nil when there's nothing to offer: a bench build can't answer `status`, and a board
+// this tool has never talked to has nothing remembered.
+type LayoutChoices struct {
+	Boot, Remembered *StripLayout
+	Config           StripLayout
+}
+
+// ResolvedLayout is the layout PickLayout chose and where it came from.
+type ResolvedLayout struct {
+	Layout StripLayout
+	Source LayoutSource
+}
+
+// PickLayout chooses the layout a pattern test should light. What the boot says right
+// now is the truth, since a phone may have changed it. A bench build on the board can't
+// answer, so what the board last said comes next, and config.h is the last resort for a
+// board this tool has never heard from.
+func PickLayout(choices LayoutChoices) ResolvedLayout {
+	switch {
+	case choices.Boot != nil:
+		return ResolvedLayout{*choices.Boot, SourceBoot}
+	case choices.Remembered != nil:
+		return ResolvedLayout{*choices.Remembered, SourceRemembered}
+	}
+	return ResolvedLayout{choices.Config, SourceConfig}
+}
+
+// ApplyLayout makes a layout the test's defaults. A toe or heel the caller already set
+// stays, so `--toe 10` overrides one marker and keeps the rest of the boot's layout.
+func ApplyLayout(o *Options, c *Config, layout StripLayout) {
+	o.Pixels = layout.Pixels
+	if c.Toe == -1 {
+		c.Toe = layout.Toe
+	}
+	if c.Heel == -1 {
+		c.Heel = layout.Heel
+	}
+}
 
 // ParseStripLayout pulls the strip's default size and ring positions out of config.h's
 // source, so this tool and the firmware have one place to change them.
@@ -86,33 +139,30 @@ func ReadStripLayout(repoRoot string) (StripLayout, error) {
 	return ParseStripLayout(string(data))
 }
 
-// Validate checks a test and fills in its derived values. Call it before discovering
-// hardware or starting any build. Ring coordinates must describe two nonempty arcs;
-// simple color/off tests also allow one pixel. Motion and simulated inputs are exclusive
-// so flags cannot be ignored.
-func Validate(o *Options, c *Config) error {
-	if o.Pixels < 1 || o.Pixels > 4096 {
-		return fmt.Errorf("--pixels must be between 1 and 4096")
-	}
-	if o.Brightness < 1 || o.Brightness > 255 {
-		return fmt.Errorf("--brightness must be between 1 and 255")
-	}
+// CheckTarget checks the flags about which board to use and what to do with it. Whole
+// firmware flashes share these with bench tests.
+func (o *Options) CheckTarget() error {
 	if o.Port != "" && o.Serial != "" {
 		return fmt.Errorf("use --port or --serial, not both")
 	}
+	if o.Debug && o.BuildOnly {
+		return fmt.Errorf("--debug needs an upload, so it can't be combined with --build-only")
+	}
+	return nil
+}
+
+// CheckInputs checks everything that doesn't depend on the strip's length, and parses
+// the color. It runs before anything talks to a board, because the length may be about
+// to come from that board, and a typo shouldn't have to wait for that. Motion and
+// simulated inputs are exclusive so flags cannot be ignored.
+func CheckInputs(o *Options, c *Config) error {
+	if o.Brightness < 1 || o.Brightness > 255 {
+		return fmt.Errorf("--brightness must be between 1 and 255")
+	}
+	if err := o.CheckTarget(); err != nil {
+		return err
+	}
 	if c.IsPattern() {
-		if o.Pixels < 2 {
-			return fmt.Errorf("patterns need at least 2 pixels")
-		}
-		if c.Toe == -1 {
-			c.Toe = o.Pixels * 13 / 40
-		}
-		if c.Heel == -1 {
-			c.Heel = o.Pixels * 33 / 40
-		}
-		if c.Toe < 0 || c.Toe >= c.Heel || c.Heel >= o.Pixels {
-			return fmt.Errorf("layout must satisfy 0 <= toe < heel < pixels")
-		}
 		if math.IsNaN(c.Tilt) || math.IsInf(c.Tilt, 0) || c.Tilt < -1 || c.Tilt > 1 {
 			return fmt.Errorf("--tilt must be between -1 and 1")
 		}
@@ -128,12 +178,6 @@ func Validate(o *Options, c *Config) error {
 		if c.LogMotion && o.BuildOnly {
 			return fmt.Errorf("--log-motion needs an upload, so it can't be combined with --build-only")
 		}
-	}
-	if c.Lit == -1 {
-		c.Lit = o.Pixels
-	}
-	if c.Lit < 0 || c.Lit > o.Pixels {
-		return fmt.Errorf("--lit must be between 0 and --pixels")
 	}
 	if c.Interval < time.Millisecond || c.Interval > time.Hour {
 		return fmt.Errorf("--interval must be between 1ms and 1h")
@@ -152,6 +196,43 @@ func Validate(o *Options, c *Config) error {
 		c.ColorRGB = uint32(rgb)
 	} else {
 		return fmt.Errorf("invalid --color: use cycle, white, red, green, blue, or '#RRGGBB'")
+	}
+	return nil
+}
+
+// Validate checks a whole test and fills in its derived values, once the strip's length
+// is known. Ring coordinates must describe two nonempty arcs, with toe and heel on
+// different pixels in either order, matching stripLayoutValid in
+// include/firewalker_strip_map.h. Simple color/off tests also allow one pixel.
+func Validate(o *Options, c *Config) error {
+	if err := CheckInputs(o, c); err != nil {
+		return err
+	}
+	if o.Pixels < 1 || o.Pixels > 4096 {
+		return fmt.Errorf("--pixels must be between 1 and 4096")
+	}
+	if c.IsPattern() {
+		if o.Pixels < 2 {
+			return fmt.Errorf("patterns need at least 2 pixels")
+		}
+		if c.Toe == -1 {
+			c.Toe = o.Pixels * 13 / 40
+		}
+		if c.Heel == -1 {
+			c.Heel = o.Pixels * 33 / 40
+		}
+		if c.Toe < 0 || c.Toe >= o.Pixels || c.Heel < 0 || c.Heel >= o.Pixels {
+			return fmt.Errorf("--toe and --heel must be pixels on the strip, from 0 to %d", o.Pixels-1)
+		}
+		if c.Toe == c.Heel {
+			return fmt.Errorf("--toe and --heel must be different pixels")
+		}
+	}
+	if c.Lit == -1 {
+		c.Lit = o.Pixels
+	}
+	if c.Lit < 0 || c.Lit > o.Pixels {
+		return fmt.Errorf("--lit must be between 0 and --pixels")
 	}
 	return nil
 }
