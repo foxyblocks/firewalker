@@ -1,8 +1,9 @@
 /**
  * The app's frame: which screen is showing, and the checks that apply to all of them.
  * Every screen reads from `BootsStore` and re-renders when it changes, so there's no
- * other app-wide state. Bluetooth being off or denied replaces the whole app, because
- * nothing else can work until it's fixed.
+ * other app-wide state. Bluetooth being off or denied replaces the whole app where Bluetooth
+ * is the only way to reach a boot, because nothing else can work until it's fixed. A desktop
+ * browser with USB carries on without it (`BrowserTransport.radioState`).
  */
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";

@@ -10,7 +10,17 @@
  * side and docs/remote-protocol.md.
  */
 
-import { AccessLostError, type BootLink, type FoundBoot, type LinkEvents, type RadioState, type Transport } from "./transport";
+import {
+  AccessLostError,
+  usbDeviceId,
+  type BootLink,
+  type FoundBoot,
+  type LinkEvents,
+  type PickMethod,
+  type RadioState,
+  type Transport,
+} from "./transport";
+import { USB_PORT_BUSY_MESSAGE } from "./usb";
 import type { Pose, StripSetting } from "../core/protocol";
 
 const STATUS_MIN_MS = 250;
@@ -516,12 +526,16 @@ export class FakeTransport implements Transport {
   radio: RadioState = "on";
   /** How long a connection takes, during which the boot's first replies can already arrive. */
   openDelayMs = 0;
+  /** Picking a boot over USB fails, as it does when another program has the port. */
+  usbPortBusy = false;
+  readonly pickers: readonly PickMethod[];
   private readonly boots: FakeBoot[];
   private scanTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(boots: FakeBoot[], finding: "scan" | "picker" = "scan") {
+  constructor(boots: FakeBoot[], finding: "scan" | "picker" = "scan", pickers: readonly PickMethod[] = ["bluetooth"]) {
     this.boots = boots;
     this.finding = finding;
+    this.pickers = pickers;
   }
 
   async radioState(): Promise<RadioState> {
@@ -546,9 +560,13 @@ export class FakeTransport implements Transport {
     this.scanTimer = null;
   }
 
-  async pick(): Promise<FoundBoot | null> {
+  async pick(method: PickMethod = "bluetooth"): Promise<FoundBoot | null> {
+    if (method === "usb" && this.usbPortBusy) {
+      throw new Error(USB_PORT_BUSY_MESSAGE);
+    }
     const boot = this.boots.find((candidate) => candidate.reachable && !candidate.connected);
     if (!boot) return null;
+    if (method === "usb") boot.deviceId = usbDeviceId(boot.id);
     // A browser that can't remember boots grants access again under a new handle.
     if (boot.accessLost) {
       boot.accessLost = false;

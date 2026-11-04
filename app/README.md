@@ -2,7 +2,8 @@
 
 The iPhone app that controls the boots over Bluetooth, built with Capacitor, React, and
 TypeScript. It's bundled into the app, so it works with no network. Boots keep running
-whatever they're running if the phone goes away.
+whatever they're running if the phone goes away. The same app runs in a desktop browser,
+where it can also reach a boot plugged in over USB.
 
 It talks to each boot through the text protocol in
 [`docs/remote-protocol.md`](../docs/remote-protocol.md).
@@ -34,6 +35,8 @@ Open <http://localhost:5173/?boot=fake&paired=1>. These options set up a scenari
 | `offline=1` | Right is out of range |
 | `access=lost` | The browser lost access to both, as a reload can do |
 | `capture=moving` | Left moves during every capture |
+| `usb=1` | Offers Add over USB beside Bluetooth, as a desktop browser does |
+| `usb=busy` | The same, but another program has the boot's USB port |
 
 ### In Chrome with real boots
 
@@ -46,6 +49,23 @@ reconnect by themselves.
 
 Each boot holds one connection at a time, so a boot connected to the Mac is invisible to
 the iPhone until the Mac lets go.
+
+### In Chrome over USB
+
+Plug a boot into the computer, open <http://localhost:5173> in a Chromium desktop browser, and
+tap Add over USB on Find boots. The browser's picker only lists boots. Picking one asks the boot
+for its name and then lets go of the port, and labeling it Left or Right connects to it. A saved
+boot reconnects by itself after a reload, and reconnects when you plug it back in.
+
+You can mix the two, with one boot on USB and the other on Bluetooth. Labeling a boot's USB row
+moves that boot to USB, and it keeps its side and your name for it.
+
+Only one program can use a boot's USB port, so the app, `./cli`, and `pio device monitor` block
+each other. While something else has the port, the app shows the boot as reconnecting and picks
+it up once the port is free. Flashing over SWD doesn't need the port, so it works alongside the
+app.
+
+Safari and Firefox have no Web Serial, so they can't do this.
 
 ### In the iOS Simulator
 
@@ -100,6 +120,8 @@ home.
 | Chrome's picker stays empty or closes by itself | Allow Chrome under macOS Settings, Privacy & Security, Bluetooth, and keep its window in front. |
 | Reconnecting never finishes | Check the boot has power, and that nothing else is connected to it. |
 | "It kept moving" every time | A capture collects for two seconds and tolerates a wobble, but not rocking back and forth. Settle into the pose before the countdown ends. |
+| "Couldn't open that boot's USB port", or a USB boot stuck reconnecting | Something else has the port. Run `lsof /dev/cu.usbmodem*` to see what, and close it. |
+| "That board didn't answer" | It's plugged in but isn't running the app, such as after a bench build. Flash it with `pio run -e final_app -t upload`. |
 | "Update this boot's firmware" or "Needs a firmware update" | That boot's firmware is too old for this app or doesn't have that pattern. Flash the current build. |
 
 ## How it's organized
@@ -112,8 +134,10 @@ home.
 | `src/core/calibration.ts` | The order of calibration poses, and failure messages |
 | `src/core/stripSetup.ts` | Where the LED count, toe, and heel sliders can land |
 | `src/core/patternNames.ts` | Friendly names, with generated ones for new patterns |
-| `src/transport/transport.ts` | The seam between the app and the radio |
+| `src/transport/transport.ts` | The seam between the app and the boots |
 | `src/transport/ble.ts` | The real radio, for iOS and Chrome |
+| `src/transport/usb.ts` | A boot plugged in over USB, for desktop browsers |
+| `src/transport/browser.ts` | Offers Bluetooth and USB together in a desktop browser |
 | `src/transport/fakeBoot.ts` | A pretend boot speaking the real protocol |
 | `src/transport/setup.ts` | Chooses real or pretend boots at startup |
 | `src/ui/` | The screens |
