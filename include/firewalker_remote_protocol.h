@@ -244,15 +244,6 @@ inline void formatAck(char* out, size_t size, CommandType type, bool ok,
 }
 
 // Why a capture itself failed. applyPose has its own reasons for a pose it rejects.
-inline const char* captureFailureReason(CaptureState state) {
-  switch (state) {
-    case CaptureState::FailedMotion: return "motion";
-    case CaptureState::FailedNoSamples: return "no-samples";
-    case CaptureState::FailedUnavailable: return "sensor-unavailable";
-    default: return "none";
-  }
-}
-
 inline void formatCalibrationCapturing(char* out, size_t size, CalibrationPose pose) {
   snprintf(out, size, "{\"t\":\"calibrate\",\"pose\":\"%s\",\"state\":\"capturing\"}",
            poseName(pose));

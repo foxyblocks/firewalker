@@ -10,8 +10,9 @@
 // an uncaptured heel side falls back to a default range below neutral. Patterns still
 // receive -1 to +1, so they don't know any of this exists.
 //
-// A pose is captured by PoseCapture below, then checked and applied by applyPose(). A
-// rejected pose leaves the existing calibration untouched. Calibration sets where tilt
+// PoseCalibrator at the bottom runs a capture from command to reported result. It uses
+// PoseCapture to find the pose in a hold, and applyPose() to check and save it. A rejected
+// pose leaves the existing calibration untouched. Calibration sets where tilt
 // lands. It doesn't change the strip's toe and heel positions or the stomp thresholds.
 
 #include <math.h>
@@ -230,6 +231,110 @@ class PoseCapture {
   uint16_t count_ = 0;
   float samples_[POSE_CAPTURE_MAX_SAMPLES];
   float angleDeg_ = 0.0f;
+};
+
+// The reason a client sees for a capture that didn't finish.
+inline const char* captureFailureReason(CaptureState state) {
+  switch (state) {
+    case CaptureState::FailedMotion: return "motion";
+    case CaptureState::FailedNoSamples: return "no-samples";
+    case CaptureState::FailedUnavailable: return "sensor-unavailable";
+    default: return "none";
+  }
+}
+
+enum class CaptureReportKind : uint8_t {
+  None,     // nothing new to tell clients
+  Started,  // a capture began collecting
+  Applied,  // the pose was captured and saved into the calibration
+  Failed,   // the capture or its pose was rejected, and the calibration is unchanged
+};
+
+struct CaptureReport {
+  CaptureReportKind kind = CaptureReportKind::None;
+  CalibrationPose pose = CalibrationPose::Neutral;
+  float angleDeg = 0.0f;         // for Applied
+  const char* reason = nullptr;  // for Failed
+};
+
+// One capture from command to reported result, which is what final_app's loop drives. It's
+// the single owner of what clients get told about calibration, so the status text and the
+// reports can't disagree:
+//
+//   start()      when a calibrate command arrives. Its return value is what the ack says.
+//   addSample()  for each fresh sensor reading.
+//   update()     once per loop. It returns each change exactly once, and applies a finished
+//                pose to the calibration, so the caller only has to save it and tell clients.
+//   statusText() whenever a status line goes out.
+//
+// statusText() is correct from the moment start() returns. That matters because the status a
+// command triggers can go out in the same loop pass as its ack, before the next update(), and
+// a client would otherwise read the previous capture's result as this one's.
+class PoseCalibrator {
+ public:
+  PoseCalibrator(const PoseCaptureLimits& captureLimits, const TiltLimits& tiltLimits)
+      : capture_(captureLimits), tiltLimits_(tiltLimits) {}
+
+  // Starts capturing a pose. Returns nullptr, or why it can't start. A capture already
+  // running is left alone and keeps its place.
+  const char* start(CalibrationPose pose, uint32_t nowMs, bool sensorReady) {
+    if (capture_.capturing()) return "already-capturing";
+    pose_ = pose;
+    // Forget the last reported state, so a capture that ends the same way as the previous
+    // one still gets its own report.
+    reported_ = CaptureState::Idle;
+    capture_.start(nowMs, sensorReady);
+    if (capture_.capturing()) {
+      statusText_ = "capturing";
+      return nullptr;
+    }
+    statusText_ = captureFailureReason(capture_.state());
+    return statusText_;
+  }
+
+  void addSample(uint32_t nowMs, float angleDeg) { capture_.addSample(nowMs, angleDeg); }
+
+  // Call once per loop. Returns what changed since the last call. A pose that fails its
+  // checks leaves `calibration` untouched.
+  CaptureReport update(uint32_t nowMs, TiltCalibration& calibration) {
+    capture_.poll(nowMs);
+    const CaptureState state = capture_.state();
+    CaptureReport report;
+    if (state == reported_) return report;
+    reported_ = state;
+    report.pose = pose_;
+
+    if (state == CaptureState::Capturing) {
+      report.kind = CaptureReportKind::Started;
+      return report;
+    }
+
+    const char* failure = (state == CaptureState::Succeeded)
+                              ? applyPose(calibration, pose_, capture_.angleDeg(), tiltLimits_)
+                              : captureFailureReason(state);
+    if (failure) {
+      statusText_ = failure;
+      report.kind = CaptureReportKind::Failed;
+      report.reason = failure;
+    } else {
+      statusText_ = "ok";
+      report.kind = CaptureReportKind::Applied;
+      report.angleDeg = capture_.angleDeg();
+    }
+    return report;
+  }
+
+  bool capturing() const { return capture_.capturing(); }
+
+  // What status reports for the latest capture: idle, capturing, ok, or a failure reason.
+  const char* statusText() const { return statusText_; }
+
+ private:
+  PoseCapture capture_;
+  TiltLimits tiltLimits_;
+  CalibrationPose pose_ = CalibrationPose::Neutral;
+  CaptureState reported_ = CaptureState::Idle;
+  const char* statusText_ = "idle";
 };
 
 }  // namespace Firewalker

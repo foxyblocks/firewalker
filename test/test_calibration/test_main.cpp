@@ -179,6 +179,141 @@ static void test_samples_after_finishing_are_ignored() {
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.0f, capture.angleDeg());
 }
 
+// ── PoseCalibrator ────────────────────────────────────────────────────────
+
+// Runs a capture through a full window at one angle, then returns the report it ends with.
+// The first update reports the start, and the last one reports the outcome.
+static CaptureReport holdPose(PoseCalibrator& calibrator, TiltCalibration& calibration, CalibrationPose pose,
+                              uint32_t startMs, float angleDeg) {
+  calibrator.start(pose, startMs, true);
+  calibrator.update(startMs, calibration);
+  for (uint32_t t = 20; t <= CAPTURE.windowMs; t += 20) {
+    calibrator.addSample(startMs + t, angleDeg);
+  }
+  return calibrator.update(startMs + CAPTURE.windowMs, calibration);
+}
+
+static void rockThroughWindow(PoseCalibrator& calibrator, uint32_t startMs) {
+  for (uint32_t t = 20; t <= CAPTURE.windowMs; t += 20) {
+    calibrator.addSample(startMs + t, (t % 400 < 200) ? -20.0f : 20.0f);
+  }
+}
+
+static void test_calibrator_starts_idle_with_nothing_to_report() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  TEST_ASSERT_EQUAL_STRING("idle", calibrator.statusText());
+  TEST_ASSERT_EQUAL(CaptureReportKind::None, calibrator.update(0, calibration).kind);
+}
+
+static void test_a_new_capture_never_shows_the_previous_result() {
+  // A status line can go out in the same loop pass as a capture's ack, before the next
+  // update. If it still read "ok", a client would take that as this capture's result.
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  holdPose(calibrator, calibration, CalibrationPose::Neutral, 0, 2.0f);
+  TEST_ASSERT_EQUAL_STRING("ok", calibrator.statusText());
+
+  TEST_ASSERT_NULL(calibrator.start(CalibrationPose::Heel, 3000, true));
+  TEST_ASSERT_EQUAL_STRING("capturing", calibrator.statusText());
+}
+
+static void test_a_start_is_reported_once() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  calibrator.start(CalibrationPose::Toe, 0, true);
+  const CaptureReport report = calibrator.update(0, calibration);
+  TEST_ASSERT_EQUAL(CaptureReportKind::Started, report.kind);
+  TEST_ASSERT_EQUAL(CalibrationPose::Toe, report.pose);
+  TEST_ASSERT_EQUAL(CaptureReportKind::None, calibrator.update(20, calibration).kind);
+}
+
+static void test_a_held_pose_is_applied_and_reported() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  const CaptureReport report = holdPose(calibrator, calibration, CalibrationPose::Neutral, 0, 4.0f);
+  TEST_ASSERT_EQUAL(CaptureReportKind::Applied, report.kind);
+  TEST_ASSERT_EQUAL(CalibrationPose::Neutral, report.pose);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 4.0f, report.angleDeg);
+  TEST_ASSERT_TRUE(calibration.neutralSet);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 4.0f, calibration.neutralDeg);
+  TEST_ASSERT_EQUAL_STRING("ok", calibrator.statusText());
+}
+
+static void test_a_rejected_pose_is_reported_and_changes_nothing() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  holdPose(calibrator, calibration, CalibrationPose::Neutral, 0, 4.0f);
+  const CaptureReport report = holdPose(calibrator, calibration, CalibrationPose::Heel, 3000, 6.0f);
+  TEST_ASSERT_EQUAL(CaptureReportKind::Failed, report.kind);
+  TEST_ASSERT_EQUAL_STRING("too-close", report.reason);
+  TEST_ASSERT_EQUAL_STRING("too-close", calibrator.statusText());
+  TEST_ASSERT_FALSE(calibration.heelSet);
+}
+
+static void test_a_boot_that_never_settles_keeps_its_calibration() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  holdPose(calibrator, calibration, CalibrationPose::Neutral, 0, 4.0f);
+
+  calibrator.start(CalibrationPose::Neutral, 3000, true);
+  calibrator.update(3000, calibration);
+  rockThroughWindow(calibrator, 3000);
+  const CaptureReport report = calibrator.update(5000, calibration);
+  TEST_ASSERT_EQUAL(CaptureReportKind::Failed, report.kind);
+  TEST_ASSERT_EQUAL_STRING("motion", report.reason);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 4.0f, calibration.neutralDeg);
+}
+
+static void test_every_capture_reports_even_when_it_fails_the_same_way() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  for (uint32_t startMs = 0; startMs < 6000; startMs += 3000) {
+    calibrator.start(CalibrationPose::Neutral, startMs, true);
+    TEST_ASSERT_EQUAL(CaptureReportKind::Started, calibrator.update(startMs, calibration).kind);
+    rockThroughWindow(calibrator, startMs);
+    TEST_ASSERT_EQUAL(CaptureReportKind::Failed, calibrator.update(startMs + 2000, calibration).kind);
+  }
+}
+
+static void test_a_missing_sensor_refuses_every_time_and_reports_it() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  for (int attempt = 0; attempt < 2; attempt++) {
+    TEST_ASSERT_EQUAL_STRING("sensor-unavailable", calibrator.start(CalibrationPose::Neutral, 0, false));
+    TEST_ASSERT_EQUAL_STRING("sensor-unavailable", calibrator.statusText());
+    const CaptureReport report = calibrator.update(0, calibration);
+    TEST_ASSERT_EQUAL(CaptureReportKind::Failed, report.kind);
+    TEST_ASSERT_EQUAL_STRING("sensor-unavailable", report.reason);
+  }
+}
+
+static void test_a_second_capture_is_refused_and_leaves_the_first_running() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  calibrator.start(CalibrationPose::Neutral, 0, true);
+  calibrator.update(0, calibration);
+
+  TEST_ASSERT_EQUAL_STRING("already-capturing", calibrator.start(CalibrationPose::Heel, 100, true));
+  TEST_ASSERT_TRUE(calibrator.capturing());
+  TEST_ASSERT_EQUAL_STRING("capturing", calibrator.statusText());
+
+  for (uint32_t t = 20; t <= CAPTURE.windowMs; t += 20) calibrator.addSample(t, 4.0f);
+  const CaptureReport report = calibrator.update(CAPTURE.windowMs, calibration);
+  TEST_ASSERT_EQUAL(CaptureReportKind::Applied, report.kind);
+  TEST_ASSERT_EQUAL(CalibrationPose::Neutral, report.pose);
+}
+
+static void test_samples_stopping_is_reported() {
+  PoseCalibrator calibrator(CAPTURE, LIMITS);
+  TiltCalibration calibration;
+  calibrator.start(CalibrationPose::Neutral, 0, true);
+  calibrator.update(0, calibration);
+  const CaptureReport report = calibrator.update(600, calibration);
+  TEST_ASSERT_EQUAL(CaptureReportKind::Failed, report.kind);
+  TEST_ASSERT_EQUAL_STRING("no-samples", report.reason);
+}
+
 // ── tiltFromAngle ─────────────────────────────────────────────────────────
 
 static void test_uncalibrated_boot_uses_the_default_range() {
@@ -348,6 +483,16 @@ int main(int, char**) {
   RUN_TEST(test_more_samples_than_the_buffer_holds_still_finishes);
   RUN_TEST(test_a_failed_capture_keeps_the_previous_result_readable);
   RUN_TEST(test_samples_after_finishing_are_ignored);
+  RUN_TEST(test_calibrator_starts_idle_with_nothing_to_report);
+  RUN_TEST(test_a_new_capture_never_shows_the_previous_result);
+  RUN_TEST(test_a_start_is_reported_once);
+  RUN_TEST(test_a_held_pose_is_applied_and_reported);
+  RUN_TEST(test_a_rejected_pose_is_reported_and_changes_nothing);
+  RUN_TEST(test_a_boot_that_never_settles_keeps_its_calibration);
+  RUN_TEST(test_every_capture_reports_even_when_it_fails_the_same_way);
+  RUN_TEST(test_a_missing_sensor_refuses_every_time_and_reports_it);
+  RUN_TEST(test_a_second_capture_is_refused_and_leaves_the_first_running);
+  RUN_TEST(test_samples_stopping_is_reported);
   RUN_TEST(test_uncalibrated_boot_uses_the_default_range);
   RUN_TEST(test_tilt_is_exactly_zero_inside_the_dead_zone);
   RUN_TEST(test_each_pose_lands_on_its_tilt);
