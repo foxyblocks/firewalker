@@ -82,6 +82,11 @@ home.
 - **Calibrate:** do this wearing the boots. Neutral with your weight even, heel down with
   toes up, toe down with heel up, each as far as you want the full effect. Stay in the pose
   for the two seconds after the countdown. A little wobble is fine. Heel and toe are optional.
+- **Calibrate, Strip tab:** tells each boot how long its strip is and where the toe and heel
+  are, while you look at the strip, one boot at a time. LED count fills the strip in blue, so
+  slide until the blue reaches the end. Toe and heel each light one pixel, yellow and purple,
+  that you move to the right spot. The minus and plus buttons land on the exact pixel, and each
+  change saves on the boot.
 - **Status:** what a boot actually reports, plus live debug numbers.
 
 ## Troubleshooting
@@ -102,6 +107,7 @@ home.
 | `src/core/boot.ts` | One boot's connection, command queue, and last report |
 | `src/core/boots.ts` | The pair: labels, the Both tab, and pattern tiles |
 | `src/core/calibration.ts` | The order of calibration poses, and failure messages |
+| `src/core/stripSetup.ts` | Where the LED count, toe, and heel sliders can land |
 | `src/core/patternNames.ts` | Friendly names, with generated ones for new patterns |
 | `src/transport/transport.ts` | The seam between the app and the radio |
 | `src/transport/ble.ts` | The real radio, for iOS and Chrome |

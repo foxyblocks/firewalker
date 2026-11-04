@@ -145,9 +145,9 @@ dedicated 5 V supply with grounds tied together.
 
 ## Known limits
 
-- The firmware still assumes the uncut 160-pixel strip, with bench toe and heel positions
-  (52 and 132). A boot needs about 110 pixels, and these get set once the strip is cut. See
-  [`docs/open-questions.md`](docs/open-questions.md).
+- A boot starts from the uncut 160-pixel strip, with bench toe and heel positions (52 and 132).
+  It needs about 110 pixels, so set each boot's count, toe, and heel from the iPhone remote's
+  Calibrate sheet once its strip is cut. See [`docs/open-questions.md`](docs/open-questions.md).
 - Battery and enclosure design are still open.
 - BLE has no pairing, so anyone nearby with a BLE app can connect and change a shoe's
   settings.

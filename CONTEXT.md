@@ -32,7 +32,12 @@ code, issues, and docs rather than drifting to synonyms.
   forward along one side to the **toe apex**, back along the other side to the
   **heel**, and returns to the start. Index order is *not* the heel→toe axis; the
   pure map in `include/firewalker_strip_map.h` gives each pixel its fore-aft foot
-  position (toe/heel indices are `STRIP_TOE_INDEX` / `STRIP_HEEL_INDEX`).
+  position.
+- **Strip layout** — the pixel count of a ring, and which pixels sit at the toe and
+  heel. Each controller saves its own, set from a remote. The ring can run either way,
+  so toe and heel fall in either order.
+- **Strip preview** — what the strip shows in place of its pattern while the layout is
+  being set: a blue fill for the count, or one yellow or purple pixel for the toe or heel.
 - **Pixel** — one addressable RGB LED on the strip. Costs 3 bytes of controller
   SRAM, and draws about 10 mA at full white by the strip's rating.
 - **DIN** — the strip's data input line, driven from the controller's D10 pad. The

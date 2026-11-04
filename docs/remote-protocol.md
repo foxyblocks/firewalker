@@ -52,6 +52,8 @@ aren't JSON.
 | `calibrate neutral`, `calibrate heel`, `calibrate toe` | Captures one pose; hold it for two seconds. A bare `calibrate` means neutral |
 | `debug on`, `debug off` | Starts or stops live motion lines |
 | `identify` | Blinks the strip for about 1.5 seconds, to show which boot this is. Changes no settings |
+| `strip leds <n>`, `strip toe <n>`, `strip heel <n>` | Sets the pixel count, or the pixel at the toe or heel, and remembers it. See [Strip layout](#strip-layout) |
+| `strip preview leds`, `strip preview toe`, `strip preview heel`, `strip preview off` | Shows that value on the strip in place of the pattern, or returns to the pattern. Changes no settings |
 
 Each controller keeps its own settings, and a command only affects the controller
 that receives it. `off` blanks the pixels but doesn't disconnect their power, so the
@@ -70,9 +72,10 @@ Sent once per command, except `status`, which replies with a status line directl
 
 Errors are `empty`, `too-long`, `too-many-arguments`, `expected-one-argument`,
 `unknown-command`, `unknown-pattern`, `unknown-pose`, `expected-on-or-off`,
-`expected-0-to-255`, `out-of-range`, and `already-capturing`, plus `sensor-unavailable`
-for a capture that can't start. A command the firmware can't parse reports
-`"cmd":"unknown"`.
+`expected-0-to-255`, `expected-setting-and-value`, `expected-number`, `unknown-strip-setting`,
+`unknown-strip-preview`, `out-of-range`, `same-pixel`, and `already-capturing`, plus
+`sensor-unavailable` for a capture that can't start. A command the firmware can't parse
+reports `"cmd":"unknown"`.
 
 ### `patterns`
 
@@ -90,7 +93,7 @@ Sent in reply to `status`, when a client subscribes, and after any change. Chang
 are reported at most every 250 ms, so a slider drag gets one line per interval.
 
 ```json
-{"t":"status","proto":1,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true}
+{"t":"status","proto":2,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":"off"}
 ```
 
 | Field | Meaning |
@@ -110,6 +113,9 @@ are reported at most every 250 ms, so a slider drag gets one line per interval.
 | `saves` | Flash writes since boot |
 | `debug` | Whether motion lines are on |
 | `ble` | Whether a BLE client is subscribed |
+| `leds`, `maxLeds` | How many pixels the ring has, and the most this build can drive |
+| `toe`, `heel` | The pixels at the toe and heel, counting from 0 |
+| `preview` | What the strip is previewing in place of its pattern: `leds`, `toe`, `heel`, or `off` |
 
 `saved` stays `false` for up to a second or so after a change while the save waits
 for the changes to pause. A slider drag becomes one flash write rather than one per
@@ -152,15 +158,48 @@ and the firmware never captures on its own at startup, because a boot may be til
   within 10 degrees of it. That side then returns to its default.
 - Tilt reads exactly 0 within 3 degrees of neutral, so a calibrated boot rests flat.
 
-A capture sets where tilt lands. It doesn't change the strip's toe and heel positions or the
-stomp thresholds, because steps and stomps are quick spikes rather than held angles. Watch
-`accelPeak` in motion lines to tune those.
+A capture sets where tilt lands. It doesn't change the strip's toe and heel pixels (see
+[Strip layout](#strip-layout)) or the stomp thresholds, because steps and stomps are quick
+spikes rather than held angles. Watch `accelPeak` in motion lines to tune those.
 
 A capture collects the whole two seconds and judges it at the end, using only the middle
 half of the samples. Tremor, a slow sag, a brief stumble, or settling in late all still work.
 It only fails with `motion` if that middle half is spread too wide, such as a foot rocking
 from heel to toe. The window and limits are in [`config.h`](../include/config.h)
 (`CALIBRATION_*` and `TILT_LIMITS`).
+
+### Strip layout
+
+Each controller saves how many pixels its ring has and which of them sit at the toe and heel,
+so a strip cut to fit a boot needs no firmware change. Pixels count from 0, the first one after
+the controller, so on a 110-pixel ring the last pixel is 109. A first boot starts from the values
+in [`config.h`](../include/config.h), and a boot updated from earlier firmware keeps its other
+settings and starts from those too.
+
+The rules, in [`firewalker_strip_map.h`](../include/firewalker_strip_map.h):
+
+- `strip leds` takes 2 up to `maxLeds`. Pixels past the count stay dark.
+- `strip toe` and `strip heel` take any pixel in the ring except the other one's, which fails
+  with `same-pixel`. Toe and heel can fall in either order, because the ring can run either way
+  around the foot.
+- A shorter count never fails over the toe or heel. One past the new end moves to the end, keeping
+  its side of the other. For example, toe 52 and heel 132 with `strip leds 110` become toe 52 and
+  heel 109. The status line reports where they landed.
+
+Changes save the same way a brightness change does, so a slider drag becomes one flash write.
+
+`strip preview` is how you see what you're setting:
+
+| Preview | What the strip shows |
+|---|---|
+| `leds` | The whole ring in blue, so you stop when the blue reaches the end of the strip |
+| `toe` | The toe pixel alone, in yellow |
+| `heel` | The heel pixel alone, in purple |
+
+It runs at a fixed brightness, whatever the boot's brightness and pattern are, and it even shows
+with the lights off. It lasts one minute from the latest `strip` command, so a client holds it up
+by repeating `strip preview` and can't leave a boot stuck on it by going away. When it ends, the
+pattern starts again.
 
 ### `motion`
 
@@ -187,4 +226,4 @@ as a sampled view rather than a complete record.
 
 Disconnecting never changes anything on the shoe. The pattern, brightness, and motion
 processing keep running, and the shoe starts advertising again. Settings saved before
-the disconnect stay saved.
+the disconnect stay saved. A strip preview runs out its minute and then ends.

@@ -7,12 +7,11 @@ decided deliberately. Once one is resolved, move the decision into `wiring.md`,
 ## Strip layout on a mounted shoe
 
 - Where exactly does the strip get cut? A boot measures about **69 cm, which is about 110
-  pixels** at 160 per meter, but the cut point isn't settled. Once it is, count the pixels
-  and find the toe and heel on the mounted strip, then set `FIREWALKER_LED_COUNT`,
-  `FIREWALKER_STRIP_TOE_INDEX`, and `FIREWALKER_STRIP_HEEL_INDEX` in `include/config.h`.
-  Until then the firmware assumes the uncut bench strip (160 pixels, toe 52, heel 132).
-  The `cli` tool reads the same values. Then update the figures in `power-budget.md`, and
-  decide whether to raise `FIREWALKER_LED_BRIGHTNESS_MAX`.
+  pixels** at 160 per meter, but the cut point isn't settled. Once it is, set each boot's
+  count, toe, and heel from the iPhone remote's Calibrate sheet, then update the figures in
+  `power-budget.md`, and decide whether to raise `FIREWALKER_LED_BRIGHTNESS_MAX`. Until then a
+  boot starts from the uncut bench strip in `include/config.h` (160 pixels, toe 52, heel 132),
+  which the `cli` tool also reads.
 - Do the animation speeds still look right? `FLOW_TRAIL_SPEED_PXPS`, `FLOW_TRAIL_LEN`,
   `FIRE_TRAIL_STEP_MS`, and `FIRE_TRAIL_LEN` count in pixels and were tuned on a far less
   dense strip, so the same values now cover a much shorter physical distance.
