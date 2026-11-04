@@ -162,6 +162,9 @@ static void handleCommand(const Command& command) {
         sendAck(command.type, false, "already-capturing");
         return;
       }
+      // Forget the last reported state, so a capture that fails the same way as the
+      // previous one still sends its own calibrate line.
+      reportedNeutralState = NeutralState::Idle;
       neutralCapture.start(millis(), imuReady());
       sendAck(command.type, neutralCapture.capturing(),
               neutralFailureReason(neutralCapture.state()));
