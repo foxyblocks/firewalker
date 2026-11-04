@@ -22,6 +22,8 @@ import {
   type MotionReply,
   type Pose,
   type StatusReply,
+  type StripPreview,
+  type StripSetting,
 } from "./protocol";
 import type { BootLink, Transport } from "../transport/transport";
 
@@ -33,6 +35,11 @@ const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
 // A capture collects for two seconds, so anything past this means a lost result.
 const CAPTURE_RESULT_WAIT_MS = 4000;
+// A boot drops a strip preview a minute after the last strip command, so asking well inside
+// that keeps it up, and a phone that goes away can't leave a boot stuck on it.
+const PREVIEW_REFRESH_MS = 20000;
+// These follow a finger, so a status line mustn't move them mid-drag.
+const SLIDER_FIELDS: ReadonlySet<keyof Pending> = new Set(["brightness", "leds", "toe", "heel"]);
 
 export type LinkState = "idle" | "connecting" | "online" | "reconnecting";
 
@@ -41,6 +48,10 @@ export interface Pending {
   power?: boolean;
   brightness?: number;
   debug?: boolean;
+  leds?: number;
+  toe?: number;
+  heel?: number;
+  preview?: StripPreview;
 }
 
 export type CaptureResult =
@@ -87,6 +98,8 @@ export class BootClient {
   private wantDebug = false;
   private dragging = false;
   private desiredBrightness = 0;
+  private readonly desiredStrip: Record<StripSetting, number> = { leds: 0, toe: 0, heel: 0 };
+  private wantPreview: StripPreview = "off";
   private reconnectDelay = RECONNECT_MIN_MS;
   /** Bumped per connection, so a stale attempt can't touch the current one. */
   private generation = 0;
@@ -98,6 +111,7 @@ export class BootClient {
   private firstStatusTimer: ReturnType<typeof setTimeout> | null = null;
   private firstStatusAsks = 0;
   private commandTimer: ReturnType<typeof setTimeout> | null = null;
+  private previewTimer: ReturnType<typeof setInterval> | null = null;
 
   private capture: {
     pose: Pose;
@@ -140,6 +154,8 @@ export class BootClient {
     this.wanted = false;
     this.generation++;
     this.clearReconnect();
+    this.stopPreviewRefresh();
+    this.wantPreview = "off";
     const link = this.link;
     this.teardown();
     this.update({ link: "idle" });
@@ -317,6 +333,8 @@ export class BootClient {
       this.reconnectDelay = RECONNECT_MIN_MS;
       // Debug stays on after a disconnect, so clean up after an earlier session.
       if (status.debug && !this.wantDebug) this.setDebug(false);
+      // Bring back a preview the connection dropped, or clear one left by an earlier session.
+      if (this.wantPreview !== "off" || status.preview !== "off") this.sendPreview();
     }
 
     if (this.inFlight?.expect === "status") this.finishJob();
@@ -332,11 +350,8 @@ export class BootClient {
     const pending = { ...this.state.pending };
     const busy = (field: keyof Pending) =>
       this.inFlight?.field === field || this.queue.some((job) => job.field === field);
-    if (pending.pattern !== undefined && !busy("pattern")) delete pending.pattern;
-    if (pending.power !== undefined && !busy("power")) delete pending.power;
-    if (pending.debug !== undefined && !busy("debug")) delete pending.debug;
-    if (pending.brightness !== undefined && !busy("brightness") && !this.dragging) {
-      delete pending.brightness;
+    for (const field of Object.keys(pending) as (keyof Pending)[]) {
+      if (!busy(field) && !(this.dragging && SLIDER_FIELDS.has(field))) delete pending[field];
     }
     return pending;
   }
@@ -431,6 +446,58 @@ export class BootClient {
         expect: "ack",
       });
     }
+  }
+
+  /**
+   * Sets one value of the strip layout. Like brightness, the job reads the value when it's
+   * sent, so a whole drag shares one queue slot and the boot gets the latest position.
+   */
+  setStrip(setting: StripSetting, value: number): void {
+    if (!this.online) return;
+    this.desiredStrip[setting] = value;
+    this.setPending({ [setting]: value });
+    const alreadyQueued = this.queue.some((job) => job.field === setting);
+    if (!alreadyQueued) {
+      this.enqueue({
+        line: () => commands.strip(setting, this.desiredStrip[setting]),
+        field: setting,
+        expect: "ack",
+      });
+    }
+  }
+
+  /**
+   * Chooses what the strip previews while its layout is being set, or "off" to return to
+   * the pattern. It stays up until "off", through a dropped connection too, by asking again
+   * before the boot's own limit runs out.
+   */
+  setStripPreview(preview: StripPreview): void {
+    this.wantPreview = preview;
+    this.stopPreviewRefresh();
+    if (preview !== "off") {
+      this.previewTimer = setInterval(() => this.sendPreview(), PREVIEW_REFRESH_MS);
+    }
+    this.sendPreview();
+  }
+
+  private sendPreview(): void {
+    if (!this.online) return;
+    // Directly, rather than through setPending, so a refresh can't clear someone's notice.
+    this.update({ pending: { ...this.state.pending, preview: this.wantPreview } });
+    const alreadyQueued = this.queue.some((job) => job.field === "preview");
+    if (!alreadyQueued) {
+      this.enqueue({
+        line: () => commands.stripPreview(this.wantPreview),
+        field: "preview",
+        expect: "ack",
+        quiet: true,
+      });
+    }
+  }
+
+  private stopPreviewRefresh(): void {
+    if (this.previewTimer) clearInterval(this.previewTimer);
+    this.previewTimer = null;
   }
 
   /** Tells the client a slider drag has started or ended. */

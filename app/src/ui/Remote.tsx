@@ -8,7 +8,7 @@
 
 import { SIDE_NAMES, type BootsStore, type PatternTile, type RemoteView, type Side, type Target } from "../core/boots";
 import { patternDisplay } from "../core/patternNames";
-import { BrightnessStrip, joinNames, LinkDot, SideBadge, Toggle } from "./parts";
+import { joinNames, LinkDot, PixelSlider, SideBadge, Toggle } from "./parts";
 
 export function Remote({
   store,
@@ -24,7 +24,6 @@ export function Remote({
   const view = store.view();
   const names = (sides: Side[]) => joinNames(sides.map((side) => store.displayName(side)));
   const percent = view.maxBrightness > 0 ? Math.round((view.brightness / view.maxBrightness) * 100) : 0;
-  const canCalibrate = store.calibrationSides().length > 0;
 
   return (
     <>
@@ -66,8 +65,10 @@ export function Remote({
           <span className="section-label">Brightness</span>
           <span className="readout">{view.controllable ? `${percent}%` : "--"}</span>
         </div>
-        <BrightnessStrip
+        <PixelSlider
+          label="Brightness"
           value={view.brightness}
+          min={1}
           max={view.maxBrightness}
           disabled={!view.controllable}
           onStart={() => store.setDragging(true)}
@@ -84,7 +85,7 @@ export function Remote({
               onChange={(on) => store.setPower(on)}
             />
           </div>
-          <button type="button" className="dock-card dock-button" disabled={!canCalibrate} onClick={onCalibrate}>
+          <button type="button" className="dock-card dock-button" disabled={!view.controllable} onClick={onCalibrate}>
             <span className="card-name">Calibrate</span>
             <CalibrateHint view={view} names={names} />
           </button>

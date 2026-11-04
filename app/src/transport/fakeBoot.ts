@@ -11,7 +11,7 @@
  */
 
 import type { BootLink, FoundBoot, LinkEvents, RadioState, Transport } from "./transport";
-import type { Pose } from "../core/protocol";
+import type { Pose, StripPreview, StripSetting } from "../core/protocol";
 
 const STATUS_MIN_MS = 250;
 const MOTION_MS = 200;
@@ -23,6 +23,8 @@ const DEFAULT_FULL_TILT_DEG = 30;
 const MAX_NEUTRAL_DEG = 45;
 const MIN_POSE_RANGE_DEG = 10;
 const NEUTRAL_DEAD_ZONE_DEG = 3;
+const MIN_LEDS = 2;
+const PREVIEW_HOLD_MS = 60000;
 
 export interface FakeBootOptions {
   id?: string;
@@ -41,6 +43,10 @@ export interface FakeBootOptions {
   toeDeg?: number | null;
   debug?: boolean;
   saveFails?: boolean;
+  leds?: number;
+  maxLeds?: number;
+  toe?: number;
+  heel?: number;
   /** Angles a capture reads when nothing has set one, so demos give sensible results. */
   poseAngles?: Record<Pose, number>;
   /** Bytes per Bluetooth notification. The firmware's default MTU allows 20. */
@@ -91,6 +97,12 @@ export class FakeBoot {
   debug: boolean;
   saveFails: boolean;
   saves = 0;
+  leds: number;
+  readonly maxLeds: number;
+  toe: number;
+  heel: number;
+  /** What the strip is showing in place of its pattern. */
+  preview: StripPreview = "off";
 
   private events: LinkEvents | null = null;
   private readonly notificationBytes: number;
@@ -105,12 +117,13 @@ export class FakeBoot {
   private statusTimer: ReturnType<typeof setTimeout> | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private motionTimer: ReturnType<typeof setInterval> | null = null;
+  private previewTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: FakeBootOptions = {}) {
     this.id = options.id ?? "3ED1";
     this.deviceId = `fake-${this.id}`;
     this.name = `Firewalker-${this.id}`;
-    this.proto = options.proto ?? 1;
+    this.proto = options.proto ?? 2;
     this.availablePatterns = options.patterns ?? ["flow", "fire-trail"];
     this.pattern = options.pattern ?? "flow";
     this.lastLit = options.lastLit ?? (this.pattern === "off" ? "flow" : this.pattern);
@@ -123,6 +136,10 @@ export class FakeBoot {
     this.toeDeg = options.toeDeg ?? null;
     this.debug = options.debug ?? false;
     this.saveFails = options.saveFails ?? false;
+    this.maxLeds = options.maxLeds ?? 160;
+    this.leds = options.leds ?? this.maxLeds;
+    this.toe = options.toe ?? 52;
+    this.heel = options.heel ?? 132;
     this.notificationBytes = options.notificationBytes ?? 20;
     this.poseAngles = options.poseAngles ?? { neutral: 1.56, heel: -18.4, toe: 34.2 };
     this.wander = options.wander ?? false;
@@ -206,9 +223,65 @@ export class FakeBoot {
       case "identify":
         this.blinks++;
         return this.send(JSON.stringify({ t: "ack", cmd: "identify", ok: true }));
+      case "strip":
+        if (words.length !== 3) return this.ackInvalid("expected-setting-and-value");
+        return arg === "preview" ? this.handlePreview(words[2]!) : this.handleStripSetting(arg!, words[2]!);
       default:
         return this.ackInvalid("unknown-command");
     }
+  }
+
+  /** Keeps a preview going for another minute, the way each strip command does on a boot. */
+  private holdPreview(): void {
+    if (this.previewTimer) clearTimeout(this.previewTimer);
+    this.previewTimer = null;
+    if (this.preview === "off") return;
+    this.previewTimer = setTimeout(() => {
+      this.preview = "off";
+      this.queueStatus();
+    }, PREVIEW_HOLD_MS);
+  }
+
+  private handlePreview(value: string): void {
+    if (value !== "off" && value !== "leds" && value !== "toe" && value !== "heel") {
+      return this.ackInvalid("unknown-strip-preview");
+    }
+    this.preview = value;
+    this.holdPreview();
+    this.ackThenStatus("strip");
+  }
+
+  private handleStripSetting(setting: string, value: string): void {
+    if (setting !== "leds" && setting !== "toe" && setting !== "heel") {
+      return this.ackInvalid("unknown-strip-setting");
+    }
+    const pixel = Number(value);
+    if (!Number.isInteger(pixel) || pixel < 0 || pixel > 65535) return this.ackInvalid("expected-number");
+
+    const failure = this.applyStripSetting(setting, pixel);
+    if (failure) return this.send(JSON.stringify({ t: "ack", cmd: "strip", ok: false, error: failure }));
+    this.markChanged();
+    this.holdPreview();
+    this.ackThenStatus("strip");
+  }
+
+  /** The firmware's rules (applyStripSetting in firewalker_strip_map.h), failures included. */
+  private applyStripSetting(setting: StripSetting, pixel: number): string | null {
+    if (setting === "leds") {
+      if (pixel < MIN_LEDS || pixel > this.maxLeds) return "out-of-range";
+      this.leds = pixel;
+      const toeFirst = this.toe < this.heel;
+      const last = Math.min(toeFirst ? this.heel : this.toe, pixel - 1);
+      const first = Math.min(toeFirst ? this.toe : this.heel, last - 1);
+      this.toe = toeFirst ? first : last;
+      this.heel = toeFirst ? last : first;
+      return null;
+    }
+    if (pixel >= this.leds) return "out-of-range";
+    if (pixel === (setting === "toe" ? this.heel : this.toe)) return "same-pixel";
+    if (setting === "toe") this.toe = pixel;
+    else this.heel = pixel;
+    return null;
   }
 
   private select(pattern: string): void {
@@ -386,6 +459,11 @@ export class FakeBoot {
         saves: this.saves,
         debug: this.debug,
         ble: true,
+        leds: this.leds,
+        maxLeds: this.maxLeds,
+        toe: this.toe,
+        heel: this.heel,
+        preview: this.preview,
       }),
     );
   }

@@ -105,6 +105,7 @@ function BootDetails({
           <Fact label="Motion sensor" value={status.sensor === "ok" ? "OK" : "Unavailable"} tone={status.sensor === "ok" ? undefined : "bad"} />
           <Fact {...calibrationFact(status)} />
           <Fact label="Last capture" value={captureText(status.calibration)} />
+          <Fact label="Strip" value={`${status.leds} LEDs, toe ${status.toe}, heel ${status.heel}`} />
           <Fact label="Saved" value={saveText(status)} tone={status.saveFailed ? "bad" : undefined} />
           <Fact
             label="Firmware"

@@ -61,6 +61,9 @@ function fakeSetup(params: URLSearchParams): { transport: Transport; storage: Ke
   const right = new FakeBoot({
     id: "7B20",
     proto,
+    leds: 110,
+    toe: 40,
+    heel: 90,
     patterns: params.get("mismatch") ? patterns.slice(0, -1) : patterns,
     wander: true,
     sensor: params.get("sensor") === "missing" ? "unavailable" : "ok",
