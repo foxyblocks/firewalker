@@ -24,15 +24,6 @@ inline float fuseTiltStep(float fusedAngle, float accAngle, float gyroRate,
   return alpha * (fusedAngle + gyroRate * dt) + (1.0f - alpha) * accAngle;
 }
 
-// Fused angle (radians) → normalized tilt in [-1, +1], saturating at fullDeg.
-inline float normalizeTilt(float angleRad, float fullDeg) {
-  float deg = angleRad * 57.2957795f;  // rad -> deg
-  float t = deg / fullDeg;
-  if (t > 1.0f) t = 1.0f;
-  if (t < -1.0f) t = -1.0f;
-  return t;
-}
-
 // Stomp detection: acceleration-magnitude hysteresis + a refractory gap, so one
 // physical impact = one trigger (see CONTEXT.md, Hysteresis). The caller owns
 // the state and consumes `pending`.

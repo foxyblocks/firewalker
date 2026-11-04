@@ -1,5 +1,3 @@
-#if !defined(FIREWALKER_LEGACY_FEATHER)
-
 #include "firewalker_remote.h"
 
 #include <Arduino.h>
@@ -318,4 +316,3 @@ bool remoteTakeClientReady() {
 const char* remoteDeviceId() { return loadDeviceId(); }
 
 }  // namespace Firewalker
-#endif

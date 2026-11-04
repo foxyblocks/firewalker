@@ -2,8 +2,6 @@
 // the contract. The sensor library reports acceleration in g and rotation in deg/s,
 // while the fusion math and the config.h thresholds use m/s^2 and rad/s, so readings
 // convert to those units here and nowhere else.
-#if !defined(FIREWALKER_LEGACY_FEATHER)
-
 #include "firewalker_imu.h"
 
 #include <LSM6DS3.h>
@@ -164,4 +162,3 @@ void imuLog() {
 }
 
 }  // namespace Firewalker
-#endif

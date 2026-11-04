@@ -5,18 +5,8 @@
 // `Firewalker::strip` (firewalker_core.h) and push it with show(). Brightness is
 // applied at show() time, so changing it never loses the colors a pattern set.
 // src/firewalker_strip.cpp explains how the signal is generated.
-//
-// The Feather build and the prototype sketch still use the Adafruit_NeoPixel API,
-// so with FIREWALKER_ADAFRUIT_STRIP_API this header only aliases that class.
 
 #include <Arduino.h>
-
-#if defined(FIREWALKER_ADAFRUIT_STRIP_API)
-#include <Adafruit_NeoPixel.h>
-namespace Firewalker {
-using LedStrip = Adafruit_NeoPixel;
-}
-#else
 
 namespace Firewalker {
 
@@ -62,4 +52,3 @@ class LedStrip {
 };
 
 }  // namespace Firewalker
-#endif

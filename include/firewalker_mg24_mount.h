@@ -27,7 +27,6 @@ constexpr uint8_t PITCH_GYRO_AXIS = 1;
 // positive rotation about sensor Y. Negate gyro Y so its immediate prediction
 // follows that same angle instead of fighting the accelerometer correction.
 constexpr float PITCH_GYRO_SIGN = -1.0f;
-constexpr float FOREAFT_REST_DEG = 0.0f;
 
 inline float signedAxis(float x, float y, float z, uint8_t axis, float sign) {
   return ((axis == 0) ? x : (axis == 1) ? y : z) * sign;

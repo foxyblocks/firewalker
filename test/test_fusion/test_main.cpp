@@ -1,6 +1,6 @@
 // Native (off-hardware) tests for the IMU module's pure math:
-// include/firewalker_fusion.h — complementary-filter tilt fusion, tilt
-// normalization, and stomp hysteresis. Run with `pio test -e native`.
+// include/firewalker_fusion.h — complementary-filter tilt fusion and stomp
+// hysteresis. Run with `pio test -e native`.
 //
 // These pin down the behaviors the bench-calibration checklist
 // (docs/open-questions.md) tunes: filter alpha, stomp thresholds, refractory.
@@ -59,23 +59,6 @@ static void test_fusion_single_step_blend() {
   // complementary blend.
   float fused = fuseTiltStep(0.2f, 0.6f, 0.0f, 0.02f, 0.96f);
   TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.96f * 0.2f + 0.04f * 0.6f, fused);
-}
-
-// ── normalizeTilt ─────────────────────────────────────────────────────────
-
-static void test_normalize_level_is_zero() {
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, normalizeTilt(0.0f, 35.0f));
-}
-
-static void test_normalize_full_scale_at_full_deg() {
-  float rad = 35.0f / 57.2957795f;
-  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 1.0f, normalizeTilt(rad, 35.0f));
-}
-
-static void test_normalize_saturates_past_full_deg() {
-  float rad = 80.0f / 57.2957795f;
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f, normalizeTilt(rad, 35.0f));
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, -1.0f, normalizeTilt(-rad, 35.0f));
 }
 
 // ── stompStep hysteresis ──────────────────────────────────────────────────
@@ -137,9 +120,6 @@ int main(int, char**) {
   RUN_TEST(test_fusion_converges_to_accel_angle_at_rest);
   RUN_TEST(test_fusion_integrates_gyro_when_alpha_is_one);
   RUN_TEST(test_fusion_single_step_blend);
-  RUN_TEST(test_normalize_level_is_zero);
-  RUN_TEST(test_normalize_full_scale_at_full_deg);
-  RUN_TEST(test_normalize_saturates_past_full_deg);
   RUN_TEST(test_stomp_fires_once_on_spike);
   RUN_TEST(test_stomp_rearms_only_below_release);
   RUN_TEST(test_stomp_refractory_blocks_rapid_refire);

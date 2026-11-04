@@ -21,9 +21,6 @@ void setupCore(const __FlashStringHelper* modeName);
 // imu_debug motion visual).
 void renderIdleBrightness(uint8_t brightness);
 
-#if defined(FIREWALKER_LEGACY_FEATHER)
-bool debugButtonPressed();
-#else
 // What the onboard LED shows, so a shoe's state is visible with no phone or
 // serial monitor attached.
 enum class StatusLight : uint8_t {
@@ -34,6 +31,5 @@ enum class StatusLight : uint8_t {
 
 // Advances the blink pattern. Call often from the main loop.
 void updateStatusLight(StatusLight state);
-#endif
 
 }  // namespace Firewalker

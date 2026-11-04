@@ -29,6 +29,9 @@ build, and the phone app is optional once a shoe is set up.
   that native tests cover, generic BLE terminals can debug it, and adding a command doesn't
   change the GATT layout. See [`docs/remote-protocol.md`](../remote-protocol.md).
 
+- **The Adafruit NeoPixel library**: not possible. It doesn't compile on this core ("Architecture
+  not supported"). The core's own `ezWS2812gpio` derives its timing from `getCPUClock()`, which
+  misreports on this board and leaves the strip dark.
 - **CPU-timed strip pulses** (the prototype's driver): rejected once BLE was in the build.
   Measured in the firmware, about one zero pulse in 3000 stretched, some as long as a one,
   even with interrupts off, which lit stray pixels. The same driver was clean with no radio.

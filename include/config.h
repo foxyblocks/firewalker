@@ -13,14 +13,10 @@
 // Must match `monitor_speed` in platformio.ini.
 constexpr unsigned long SERIAL_BAUD = 115200;
 
-#if defined(FIREWALKER_LEGACY_FEATHER)
-#include "config_feather.h"
-#else
 // ── Strip ───────────────────────────────────────────────────────────────
 // BTF FCOB-5V-160L-W-IP30-SPI-5MM: a nominal 1m of 160 individually addressable
 // pixels, XGB1338 (WS2812B-compatible, GRB, 800 kHz). Data is on D10, which is SPI
 // MOSI. The signal comes from the SPI hardware, so it can't move to another pin freely.
-constexpr uint8_t LED_PIN = D10;
 
 // Connected pixel count and ring layout. These describe the uncut bench strip, and the
 // ring positions scale the original 40-pixel ring by four. A boot needs about 69 cm, or
@@ -80,17 +76,13 @@ static_assert(LED_BRIGHTNESS >= LED_BRIGHTNESS_MIN && LED_BRIGHTNESS <= 255,
 constexpr unsigned long STATUS_BLINK_SLOW_MS = 500;
 constexpr unsigned long STATUS_BLINK_FAST_MS = 100;
 
-#endif
-
 // ── IMU motion sensor (onboard LSM6DS3TR-C) ─────────────────────────────
 // The MG24 Sense's onboard accel + gyro, on the default I2C bus. PD5 powers it and
 // must go high before the sensor starts. src/firewalker_imu.cpp converts readings
 // to m/s^2 *including* gravity and rad/s, so at rest the total magnitude sits near
 // 9.81 and a stomp is a spike well above it.
-#if !defined(FIREWALKER_LEGACY_FEATHER)
 constexpr uint8_t       IMU_I2C_ADDR = 0x6A;
 constexpr uint8_t       IMU_ENABLE_PIN = PD5;
-#endif
 constexpr unsigned long IMU_SAMPLE_MS = 20;    // ~50 Hz accel/gyro poll
 constexpr unsigned long IMU_LOG_MS = 100;      // throttle verbose serial to ~10 Hz
 constexpr float         IMU_GRAVITY = 9.81f;   // rest |accel| baseline (m/s^2)
@@ -106,11 +98,6 @@ constexpr unsigned long IMU_REFRACTORY_MS = 250;              // min gap between
 // firm stomp spikes higher than a gentle step, so harder steps drive brighter
 // trails. The trigger itself is unchanged — this only reads how hard it hit.
 constexpr float         IMU_STOMP_FORCE_FULL = 40.0f;  // |accel| (m/s^2) → full-brightness trail
-
-// imu_debug motion visual: map movement intensity (|accel| - gravity) to the
-// idle fill brightness so the strip shows how hard the IMU is being shaken.
-constexpr float         IMU_ACCEL_DELTA_MIN = 0.5f;   // below this reads as "still"
-constexpr float         IMU_ACCEL_DELTA_MAX = 12.0f;  // saturates idle brightness here
 
 // ── Orientation fusion ───────────────────────────────────────────────────
 // Axes and signs live in include/firewalker_mg24_mount.h, shared with the native

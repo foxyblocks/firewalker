@@ -14,8 +14,6 @@
 //     LED 1 -> 1100: 615 ns high, 615 ns low
 //
 // The SPI peripheral also claims D8 (clock) and D9 (MISO), so leave those unconnected.
-#if !defined(FIREWALKER_ADAFRUIT_STRIP_API)
-
 #include "firewalker_strip.h"
 
 #include <SPI.h>
@@ -147,4 +145,3 @@ uint32_t LedStrip::ColorHSV(uint16_t hue, uint8_t sat, uint8_t val) {
 }
 
 }  // namespace Firewalker
-#endif

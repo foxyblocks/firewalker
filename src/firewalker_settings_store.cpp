@@ -1,5 +1,3 @@
-#if !defined(FIREWALKER_LEGACY_FEATHER)
-
 #include "firewalker_settings_store.h"
 
 #include <Arduino.h>
@@ -62,4 +60,3 @@ bool saveSettings(const Settings& settings) {
 uint32_t settingsWriteCount() { return writeCount; }
 
 }  // namespace Firewalker
-#endif

@@ -1,6 +1,9 @@
 # MG24 Sense and BTF FCOB strip migration
 
-Status: In progress. The BLE remote is a custom Capacitor app (FOX-269).
+Status: In progress. The Feather and prototype paths are removed, and the MG24 is the only
+target. Mounted-shoe and external-5V checks are still open, and the BLE remote is a custom
+Capacitor app (FOX-269). This spec describes the starting point as well as the goal, so its
+references to `proto/` and the Feather are history.
 Date: 2026-11-02
 
 ## Summary
