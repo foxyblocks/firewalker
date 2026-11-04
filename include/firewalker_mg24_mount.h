@@ -11,9 +11,9 @@
  *
  * Both shoes share this mapping, because they mount the controller in the same
  * orientation: accel X is fore-aft, accel Z is up, and rotation around Y changes
- * pitch. Each controller's neutral offset is captured and saved separately (see
- * firewalker_neutral.h); it changes the resting angle and cannot repair an
- * incorrect axis or gyro sign.
+ * pitch. Each controller's poses are captured and saved separately (see
+ * firewalker_calibration.h). They set where tilt lands, and can reverse its direction,
+ * but they cannot repair a wrong axis or gyro sign.
  */
 namespace Firewalker {
 namespace Mg24Mount {

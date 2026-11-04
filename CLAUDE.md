@@ -12,7 +12,7 @@ runtime-switchable **patterns**: `flow` (a slowly spectrum-cycling hue pooled to
 down-end by fused fore-aft tilt, where a stomp launches diverging trail fronts) and
 `fire-trail` (stomp-spawned fire bands). A stomp is an IMU acceleration spike. Both
 shoes run one identical firmware binary. Each controller saves its own pattern,
-brightness, and neutral calibration in flash. A **remote** controls running firmware
+brightness, and calibrated poses (neutral, heel, toe) in flash. A **remote** controls running firmware
 over BLE or the USB console with one line protocol. Out of scope: the 2-D "perimeter
 bubble" flow, multiple strips per shoe, synchronization between shoes, and the final
 battery and enclosure. Don't over-engineer ahead of working hardware.
@@ -20,7 +20,7 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
 ## Project map
 
 - `include/config.h` — all hardware/behavior knobs, named by owning module (`IMU_*`,
-  `NEUTRAL_*`, `SETTINGS_*`, `REMOTE_*`, `FLOW_*`, `FIRE_TRAIL_*`). Never hard-code
+  `CALIBRATION_*`, `TILT_LIMITS`, `SETTINGS_*`, `REMOTE_*`, `FLOW_*`, `FIRE_TRAIL_*`). Never hard-code
   these in source files.
 - `src/main.cpp` — tiny Arduino dispatcher into the selected mode.
 - `src/modes/` — compile-time builds (`final_app`, `imu_debug`, `bench`), chosen by
@@ -29,14 +29,14 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
   `Pattern` interface (`include/patterns/pattern.h`). Each pattern owns its own
   animation state and engine.
 - `src/firewalker_strip.cpp` — the strip driver behind `LedStrip`: hardware-timed, SPI + DMA on D10.
-- `src/firewalker_imu.cpp` — shared IMU service: read, complementary-filter tilt, neutral
-  offset, stomp detect.
+- `src/firewalker_imu.cpp` — shared IMU service: read, complementary-filter tilt, calibrated
+  poses, stomp detect.
 - `src/firewalker_remote.cpp` — the USB console and BLE service behind one line-based
   interface. The commands and replies are in `docs/remote-protocol.md`.
 - `src/firewalker_settings_store.cpp` — saves settings to flash (NVM3).
 - `src/firewalker_core.cpp` — shared hardware services: strip, status light, idle fill.
 - `include/firewalker_fusion.h`, `firewalker_mg24_mount.h`, `firewalker_strip_map.h`,
-  `firewalker_neutral.h`, `firewalker_settings.h`, `firewalker_remote_protocol.h` — pure,
+  `firewalker_calibration.h`, `firewalker_settings.h`, `firewalker_remote_protocol.h` — pure,
   Arduino-free logic that `test/` exercises off-hardware.
 - `tools/pio/mg24_stack.py` — PlatformIO build step: picks the core's radio stack, pins
   Arm's compiler, and makes uploads target exactly one board.

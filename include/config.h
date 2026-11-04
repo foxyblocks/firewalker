@@ -7,6 +7,8 @@
 #include <Arduino.h>
 #include <stddef.h>
 
+#include "firewalker_calibration.h"
+
 // ── Serial ──────────────────────────────────────────────────────────────
 // Must match `monitor_speed` in platformio.ini.
 constexpr unsigned long SERIAL_BAUD = 115200;
@@ -112,25 +114,31 @@ constexpr float         IMU_ACCEL_DELTA_MAX = 12.0f;  // saturates idle brightne
 
 // ── Orientation fusion ───────────────────────────────────────────────────
 // Axes and signs live in include/firewalker_mg24_mount.h, shared with the native
-// motion tests. imuTiltFwd() subtracts this controller's saved neutral offset,
-// then saturates at +/-1 at IMU_TILT_FULL_DEG, so the pool fully pours at about
-// 30 degrees toe-down or heel-down from neutral.
+// motion tests.
 constexpr float   IMU_FILTER_ALPHA  = 0.96f;  // complementary-filter weight on the gyro term
-constexpr float   IMU_TILT_FULL_DEG = 30.0f;
 
-// ── Neutral calibration ──────────────────────────────────────────────────
-// Bounds for capturing a boot's resting angle (include/firewalker_neutral.h).
-// These are starting values to tune on a mounted boot (docs/open-questions.md).
-constexpr unsigned long NEUTRAL_WINDOW_MS      = 1000;   // how long the boot must hold still
-constexpr unsigned long NEUTRAL_NO_SAMPLE_MS   = 500;    // gap in sensor samples that fails a capture
-constexpr uint16_t      NEUTRAL_MIN_SAMPLES    = 25;     // half the samples expected at 50 Hz
-// Max spread of the angle across the window. Because the offset is the window's
-// average, this also keeps tilt within about +/-0.1 (3 of IMU_TILT_FULL_DEG's 30
-// degrees) right after a capture, as long as the boot stays in the captured pose.
-constexpr float         NEUTRAL_MAX_RANGE_DEG  = 3.0f;
-constexpr float         NEUTRAL_MAX_GYRO_RADS  = 0.25f;  // about 14 deg/s of any rotation
-constexpr float         NEUTRAL_MAX_ACCEL_DEV  = 1.5f;   // m/s^2 away from gravity
-constexpr float         NEUTRAL_MAX_OFFSET_DEG = 45.0f;  // beyond this, the boot isn't near level
+// ── Tilt calibration ─────────────────────────────────────────────────────
+// How fused angles become tilt (include/firewalker_calibration.h). A side with no
+// captured heel or toe pose reaches full tilt at IMU_TILT_FULL_DEG from neutral. The dead
+// zone is in degrees and covers the capture's spread limit below, so a calibrated boot
+// rests exactly flat.
+constexpr float   IMU_TILT_FULL_DEG     = 30.0f;
+constexpr float   IMU_TILT_DEADZONE_DEG = 3.0f;
+constexpr Firewalker::TiltLimits TILT_LIMITS = {
+    IMU_TILT_FULL_DEG,
+    IMU_TILT_DEADZONE_DEG,
+    10.0f,  // a heel or toe pose must sit at least this far from neutral
+    45.0f,  // a neutral pose must sit within this of sensor level
+};
+
+// Bounds for holding a pose still. These are starting values, confirmed only on a still
+// bench so far, and may need loosening for a pose held on a foot (docs/open-questions.md).
+constexpr unsigned long CALIBRATION_WINDOW_MS    = 1000;   // how long the boot must hold still
+constexpr unsigned long CALIBRATION_NO_SAMPLE_MS = 500;    // gap in sensor samples that fails a capture
+constexpr uint16_t      CALIBRATION_MIN_SAMPLES  = 25;     // half the samples expected at 50 Hz
+constexpr float         CALIBRATION_MAX_RANGE_DEG = 3.0f;  // max spread of the angle across the window
+constexpr float         CALIBRATION_MAX_GYRO_RADS = 0.25f; // about 14 deg/s of any rotation
+constexpr float         CALIBRATION_MAX_ACCEL_DEV = 1.5f;  // m/s^2 away from gravity
 
 // ── Saved settings ───────────────────────────────────────────────────────
 // A burst of slider changes turns into one flash write: it saves after the changes
@@ -147,6 +155,8 @@ constexpr uint8_t       REMOTE_RX_QUEUE_DEPTH     = 8;     // BLE commands waiti
 constexpr size_t        REMOTE_TX_BUFFER_BYTES    = 1024;  // reply bytes waiting to go out over BLE
 constexpr size_t        REMOTE_ATT_VALUE_MAX      = 244;   // largest notification payload the firmware will send
 constexpr uint8_t       REMOTE_NOTIFICATIONS_PER_LOOP = 4; // cap per main-loop pass, so sending can't stall it
+constexpr unsigned long IDENTIFY_MS       = 1500;  // how long `identify` blinks the strip
+constexpr unsigned long IDENTIFY_BLINK_MS = 125;   // half-period of that blink
 constexpr unsigned long APP_FRAME_MS            = 16;   // shortest time between strip frames
 constexpr unsigned long APP_OFF_REFRESH_MS      = 1000; // black refresh when off, in case the strip repowers
 
@@ -187,12 +197,6 @@ constexpr float    FLOW_TRAIL_BRIGHT_MIN = 0.30f;  // trail brightness at a thre
 
 // Strip geometry (ring, toe/heel indices) lives in the Strip section above
 // (STRIP_TOE_INDEX / STRIP_HEEL_INDEX) — it's a hardware fact, not a flow knob.
-
-// Ignore tiny tilts near level (residual wobble) so the strip rests flat; past the
-// deadzone the remaining range is rescaled to still reach full pooling. Neutral
-// calibration removes the mount's resting angle; this is the small flat band on
-// top of that.
-constexpr float   FLOW_TILT_DEADZONE = 0.10f;  // normalized tilt (0..1) ≈ 3° at 30° full
 
 // ── Fire-trail pattern: gradient palette ─────────────────────────────────
 // Palette stops from the hot head to the cool tail, as plain R/G/B. The

@@ -15,7 +15,16 @@ void setUp() {}
 void tearDown() {}
 
 static Settings sampleSettings() {
-  return Settings{PatternId::FireTrail, PatternId::FireTrail, 32, true, -3.5f};
+  Settings settings = defaultSettings(32);
+  settings.pattern = PatternId::FireTrail;
+  settings.lastLitPattern = PatternId::FireTrail;
+  settings.calibration.neutralSet = true;
+  settings.calibration.neutralDeg = -3.5f;
+  settings.calibration.heelSet = true;
+  settings.calibration.heelDeg = -25.0f;
+  settings.calibration.toeSet = true;
+  settings.calibration.toeDeg = 60.0f;
+  return settings;
 }
 
 // Re-signs a record edited by a test, so only the field under test looks wrong.
@@ -27,8 +36,10 @@ static void test_defaults_are_flow_and_uncalibrated() {
   const Settings settings = defaultSettings(16);
   TEST_ASSERT_EQUAL(PatternId::Flow, settings.pattern);
   TEST_ASSERT_EQUAL(16, settings.brightness);
-  TEST_ASSERT_FALSE(settings.neutralCalibrated);
-  TEST_ASSERT_EQUAL_FLOAT(0.0f, settings.neutralOffsetDeg);
+  TEST_ASSERT_FALSE(settings.calibration.neutralSet);
+  TEST_ASSERT_FALSE(settings.calibration.heelSet);
+  TEST_ASSERT_FALSE(settings.calibration.toeSet);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, settings.calibration.neutralDeg);
 }
 
 static void test_round_trip_keeps_every_field() {
@@ -38,8 +49,12 @@ static void test_round_trip_keeps_every_field() {
   TEST_ASSERT_EQUAL(PatternId::FireTrail, out.pattern);
   TEST_ASSERT_EQUAL(PatternId::FireTrail, out.lastLitPattern);
   TEST_ASSERT_EQUAL(32, out.brightness);
-  TEST_ASSERT_TRUE(out.neutralCalibrated);
-  TEST_ASSERT_EQUAL_FLOAT(-3.5f, out.neutralOffsetDeg);
+  TEST_ASSERT_TRUE(out.calibration.neutralSet);
+  TEST_ASSERT_EQUAL_FLOAT(-3.5f, out.calibration.neutralDeg);
+  TEST_ASSERT_TRUE(out.calibration.heelSet);
+  TEST_ASSERT_EQUAL_FLOAT(-25.0f, out.calibration.heelDeg);
+  TEST_ASSERT_TRUE(out.calibration.toeSet);
+  TEST_ASSERT_EQUAL_FLOAT(60.0f, out.calibration.toeDeg);
 }
 
 static void test_off_round_trips_and_remembers_what_to_return_to() {
@@ -107,12 +122,46 @@ static void test_unusable_neutral_offset_reads_as_invalid() {
   Settings out = defaultSettings(16);
 
   Settings tooFar = sampleSettings();
-  tooFar.neutralOffsetDeg = 80.0f;
+  tooFar.calibration.neutralDeg = 80.0f;
   TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(encodeSettings(tooFar), BOUNDS, out));
 
   Settings notANumber = sampleSettings();
-  notANumber.neutralOffsetDeg = NAN;
+  notANumber.calibration.neutralDeg = NAN;
   TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(encodeSettings(notANumber), BOUNDS, out));
+}
+
+static void test_unusable_heel_or_toe_pose_reads_as_invalid() {
+  Settings out = defaultSettings(16);
+
+  Settings notANumber = sampleSettings();
+  notANumber.calibration.toeDeg = NAN;
+  TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(encodeSettings(notANumber), BOUNDS, out));
+
+  Settings pastHalfATurn = sampleSettings();
+  pastHalfATurn.calibration.heelDeg = -200.0f;
+  TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(encodeSettings(pastHalfATurn), BOUNDS, out));
+
+  Settings sameSide = sampleSettings();
+  sameSide.calibration.heelDeg = 20.0f;
+  TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(encodeSettings(sameSide), BOUNDS, out));
+}
+
+static void test_heel_and_toe_may_be_steeper_than_the_neutral_limit() {
+  Settings steep = sampleSettings();
+  steep.calibration.toeDeg = 70.0f;
+  Settings out = defaultSettings(16);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(encodeSettings(steep), BOUNDS, out));
+  TEST_ASSERT_EQUAL_FLOAT(70.0f, out.calibration.toeDeg);
+}
+
+static void test_a_backward_mounts_poses_round_trip() {
+  Settings backward = sampleSettings();
+  backward.calibration.neutralDeg = 0.0f;
+  backward.calibration.heelDeg = 20.0f;
+  backward.calibration.toeDeg = -20.0f;
+  Settings out = defaultSettings(16);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(encodeSettings(backward), BOUNDS, out));
+  TEST_ASSERT_EQUAL_FLOAT(-20.0f, out.calibration.toeDeg);
 }
 
 static void test_scheduler_stays_quiet_with_nothing_to_save() {
@@ -172,6 +221,9 @@ int main(int, char**) {
   RUN_TEST(test_off_is_not_a_valid_pattern_to_return_to);
   RUN_TEST(test_brightness_outside_the_build_limits_reads_as_invalid);
   RUN_TEST(test_unusable_neutral_offset_reads_as_invalid);
+  RUN_TEST(test_unusable_heel_or_toe_pose_reads_as_invalid);
+  RUN_TEST(test_heel_and_toe_may_be_steeper_than_the_neutral_limit);
+  RUN_TEST(test_a_backward_mounts_poses_round_trip);
   RUN_TEST(test_scheduler_stays_quiet_with_nothing_to_save);
   RUN_TEST(test_scheduler_saves_once_changes_pause);
   RUN_TEST(test_scheduler_is_not_due_when_now_predates_the_change);

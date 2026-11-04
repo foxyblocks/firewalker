@@ -1,6 +1,7 @@
 #pragma once
 
-// Pure settings logic: what each controller remembers across power cycles, how
+// Pure settings logic: what each controller remembers across power cycles (its
+// pattern, brightness, and calibrated poses), how
 // that is checked when read back from flash, and when a change is worth writing.
 // Arduino-free so test/test_settings can exercise it off-hardware. The flash
 // reads and writes themselves live in firewalker_settings_store.h.
@@ -12,6 +13,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+#include "firewalker_calibration.h"
 
 namespace Firewalker {
 
@@ -28,19 +31,18 @@ struct Settings {
   // The pattern turning back on returns to. Always Flow or FireTrail.
   PatternId lastLitPattern;
   uint8_t brightness;
-  bool neutralCalibrated;
-  float neutralOffsetDeg;
+  TiltCalibration calibration;
 };
 
 struct SettingsBounds {
   uint8_t minBrightness;
   uint8_t maxBrightness;
-  float maxNeutralOffsetDeg;
+  float maxNeutralDeg;
 };
 
-// First-boot settings: flow at the given brightness, uncalibrated, zero offset.
+// First-boot settings: flow at the given brightness, with no calibrated poses.
 inline Settings defaultSettings(uint8_t brightness) {
-  return Settings{PatternId::Flow, PatternId::Flow, brightness, false, 0.0f};
+  return Settings{PatternId::Flow, PatternId::Flow, brightness, TiltCalibration{}};
 }
 
 inline bool isPatternId(uint8_t value) {
@@ -56,14 +58,19 @@ struct SettingsRecord {
   uint8_t pattern;
   uint8_t lastLitPattern;
   uint8_t brightness;
-  uint8_t neutralCalibrated;
+  uint8_t calibratedPoses;  // the SETTINGS_POSE_* bits
   uint8_t reserved[2];
-  float neutralOffsetDeg;
+  float neutralDeg;
+  float heelDeg;
+  float toeDeg;
   uint32_t crc;
 };
 
 constexpr uint32_t SETTINGS_MAGIC = 0x46574C4B;  // "FWLK"
-constexpr uint16_t SETTINGS_VERSION = 1;
+constexpr uint16_t SETTINGS_VERSION = 2;
+constexpr uint8_t SETTINGS_POSE_NEUTRAL = 1 << 0;
+constexpr uint8_t SETTINGS_POSE_HEEL = 1 << 1;
+constexpr uint8_t SETTINGS_POSE_TOE = 1 << 2;
 
 enum class SettingsDecode : uint8_t {
   Ok,
@@ -94,8 +101,13 @@ inline SettingsRecord encodeSettings(const Settings& settings) {
   record.pattern = (uint8_t)settings.pattern;
   record.lastLitPattern = (uint8_t)settings.lastLitPattern;
   record.brightness = settings.brightness;
-  record.neutralCalibrated = settings.neutralCalibrated ? 1 : 0;
-  record.neutralOffsetDeg = settings.neutralOffsetDeg;
+  const TiltCalibration& calibration = settings.calibration;
+  record.calibratedPoses = (calibration.neutralSet ? SETTINGS_POSE_NEUTRAL : 0) |
+                           (calibration.heelSet ? SETTINGS_POSE_HEEL : 0) |
+                           (calibration.toeSet ? SETTINGS_POSE_TOE : 0);
+  record.neutralDeg = calibration.neutralDeg;
+  record.heelDeg = calibration.heelDeg;
+  record.toeDeg = calibration.toeDeg;
   record.crc = settingsCrc(&record, offsetof(SettingsRecord, crc));
   return record;
 }
@@ -112,10 +124,19 @@ inline SettingsDecode decodeSettings(const SettingsRecord& record,
 
   const bool lastLitValid = record.lastLitPattern == (uint8_t)PatternId::Flow ||
                             record.lastLitPattern == (uint8_t)PatternId::FireTrail;
-  const bool offsetValid = isfinite(record.neutralOffsetDeg) &&
-                           fabsf(record.neutralOffsetDeg) <= bounds.maxNeutralOffsetDeg;
-  if (!isPatternId(record.pattern) || !lastLitValid || !offsetValid ||
-      record.brightness < bounds.minBrightness ||
+  const bool neutralValid = isfinite(record.neutralDeg) &&
+                            fabsf(record.neutralDeg) <= bounds.maxNeutralDeg;
+  // Fused angles come from atan2, so nothing valid lies beyond half a turn.
+  const bool heelValid = isfinite(record.heelDeg) && fabsf(record.heelDeg) <= 180.0f;
+  const bool toeValid = isfinite(record.toeDeg) && fabsf(record.toeDeg) <= 180.0f;
+  const uint8_t poses = record.calibratedPoses;
+  const bool posesKnown =
+      (poses & ~(SETTINGS_POSE_NEUTRAL | SETTINGS_POSE_HEEL | SETTINGS_POSE_TOE)) == 0;
+  const bool bothSides = (poses & SETTINGS_POSE_HEEL) && (poses & SETTINGS_POSE_TOE);
+  const bool sidesOpposite = !bothSides || signOf(record.heelDeg - record.neutralDeg) !=
+                                               signOf(record.toeDeg - record.neutralDeg);
+  if (!isPatternId(record.pattern) || !lastLitValid || !neutralValid || !heelValid || !toeValid ||
+      !posesKnown || !sidesOpposite || record.brightness < bounds.minBrightness ||
       record.brightness > bounds.maxBrightness) {
     return SettingsDecode::Invalid;
   }
@@ -123,8 +144,12 @@ inline SettingsDecode decodeSettings(const SettingsRecord& record,
   out.pattern = (PatternId)record.pattern;
   out.lastLitPattern = (PatternId)record.lastLitPattern;
   out.brightness = record.brightness;
-  out.neutralCalibrated = record.neutralCalibrated != 0;
-  out.neutralOffsetDeg = record.neutralOffsetDeg;
+  out.calibration.neutralSet = (poses & SETTINGS_POSE_NEUTRAL) != 0;
+  out.calibration.neutralDeg = record.neutralDeg;
+  out.calibration.heelSet = (poses & SETTINGS_POSE_HEEL) != 0;
+  out.calibration.heelDeg = record.heelDeg;
+  out.calibration.toeSet = (poses & SETTINGS_POSE_TOE) != 0;
+  out.calibration.toeDeg = record.toeDeg;
   return SettingsDecode::Ok;
 }
 

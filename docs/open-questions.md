@@ -23,16 +23,17 @@ Both shoes mount the controller in the same orientation and share one axis map i
 `include/firewalker_mg24_mount.h`. That map has only been confirmed on the bench mount,
 so check each mounted shoe:
 
-- **Axes and signs:** does toe-down read as positive tilt? Check both a slow static tilt
-  and a quick movement with `./cli flow --motion --log-motion`. Neutral calibration
-  can't repair a wrong axis or gyro sign.
+- **Axes and signs:** does the fused angle follow the foot, both on a slow static tilt and a
+  quick movement? Check with `./cli flow --motion --log-motion`. Captured heel and toe poses
+  correct a reversed direction, but they can't repair a wrong axis or gyro sign.
 - **Stomp thresholds:** what does a real stomp and an ordinary step produce on a mounted
   shoe? Tune `IMU_STOMP_ACCEL_THRESHOLD`, `IMU_RELEASE_ACCEL_THRESHOLD`,
   `IMU_REFRACTORY_MS`, and `IMU_STOMP_FORCE_FULL`.
-- **Neutral capture bounds:** the `NEUTRAL_*` values in `include/config.h` pass on a
-  still bench. Do they also pass for a boot held still by hand, and reject a boot that's
-  really moving?
-- **Filter feel:** does `IMU_FILTER_ALPHA` and `IMU_TILT_FULL_DEG` still feel right?
+- **Worn pose captures:** the `CALIBRATION_*` values in `include/config.h` pass on a still
+  bench. Can you hold neutral, heel, and toe poses still enough while wearing the boot, and
+  do they still reject a boot that's really moving? If worn holds fail, loosen the limits
+  for heel and toe first. If that's not enough, record the extremes while rocking the foot.
+- **Filter feel:** do `IMU_FILTER_ALPHA` and `IMU_TILT_FULL_DEG` still feel right?
 
 ## Power
 

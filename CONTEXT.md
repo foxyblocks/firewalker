@@ -64,12 +64,14 @@ code, issues, and docs rather than drifting to synonyms.
 - **Hysteresis** — separate arm/release thresholds so one physical event = one
   trigger even when readings wiggle around the threshold (used for IMU stomp
   detection).
-- **Neutral** — the resting fore-aft angle a controller treats as level, in degrees.
-  Captured per controller by holding the boot still and sending `calibrate`, then saved
-  in that controller's flash. It sets where **tilt** reads zero. It doesn't change the
-  mount's axes and signs, the strip's toe and heel positions, or stomp thresholds.
+- **Pose** — a held position of the boot, captured per controller to calibrate **tilt**:
+  **neutral** (at rest, tilt 0), **heel** (heel-down, tilt -1), and **toe** (toe-down,
+  tilt +1). Each is an absolute fused angle in degrees, saved in that controller's flash.
+  Heel and toe are optional, and a skipped side uses a default range. Poses set where tilt
+  lands and which way it runs. They don't change the strip's toe and heel positions, which
+  are pixel indices, or stomp thresholds.
 - **Settings** — what each controller remembers across power cycles: its pattern,
-  brightness, and neutral. They live in the controller's own flash, never in the build,
+  brightness, and poses. They live in the controller's own flash, never in the build,
   so both shoes run the same firmware binary.
 - **Remote** — anything controlling running firmware through the line protocol in
   `docs/remote-protocol.md`: the iPhone app over BLE, or a USB serial console. Distinct

@@ -1,7 +1,7 @@
 // final_app is the shoe app, and the same binary runs on both shoes. The onboard
 // sensor drives the active pattern, the remote (BLE or the USB console) changes
-// settings, and each controller keeps its own pattern, brightness, and neutral
-// calibration in flash. Losing the phone never matters: whatever is running keeps
+// settings, and each controller keeps its own pattern, brightness, and calibrated
+// poses in flash. Losing the phone never matters: whatever is running keeps
 // running, and a reconnecting client is told the current state.
 //
 // Each loop pass reads the sensor, handles any remote commands, saves settings that
@@ -13,8 +13,8 @@
 
 #include "config.h"
 #include "firewalker_core.h"
+#include "firewalker_calibration.h"
 #include "firewalker_imu.h"
-#include "firewalker_neutral.h"
 #include "firewalker_remote.h"
 #include "firewalker_remote_protocol.h"
 #include "firewalker_settings.h"
@@ -28,11 +28,11 @@ namespace FinalAppMode {
 using namespace Firewalker;
 
 static constexpr SettingsBounds SETTINGS_BOUNDS = {LED_BRIGHTNESS_MIN, LED_BRIGHTNESS_MAX,
-                                                   NEUTRAL_MAX_OFFSET_DEG};
-static constexpr NeutralLimits NEUTRAL_LIMITS = {
-    NEUTRAL_WINDOW_MS,     NEUTRAL_NO_SAMPLE_MS,  NEUTRAL_MIN_SAMPLES,
-    NEUTRAL_MAX_RANGE_DEG, NEUTRAL_MAX_GYRO_RADS, IMU_GRAVITY,
-    NEUTRAL_MAX_ACCEL_DEV, NEUTRAL_MAX_OFFSET_DEG};
+                                                   TILT_LIMITS.maxNeutralDeg};
+static constexpr PoseCaptureLimits CAPTURE_LIMITS = {
+    CALIBRATION_WINDOW_MS,     CALIBRATION_NO_SAMPLE_MS,  CALIBRATION_MIN_SAMPLES,
+    CALIBRATION_MAX_RANGE_DEG, CALIBRATION_MAX_GYRO_RADS, IMU_GRAVITY,
+    CALIBRATION_MAX_ACCEL_DEV};
 
 static FlowPattern flow;
 static FireTrailPattern fireTrail;
@@ -42,38 +42,35 @@ static Settings settings = defaultSettings(LED_BRIGHTNESS);
 static SaveScheduler saveScheduler(SETTINGS_SAVE_QUIET_MS, SETTINGS_SAVE_MAX_MS);
 static bool saveFailed = false;
 
-static NeutralCapture neutralCapture(NEUTRAL_LIMITS);
-static NeutralState reportedNeutralState = NeutralState::Idle;
+static PoseCapture poseCapture(CAPTURE_LIMITS);
+static CalibrationPose capturedPose = CalibrationPose::Neutral;
+static CaptureState reportedCaptureState = CaptureState::Idle;
+static const char* calibrationState = "idle";  // what status reports for the latest capture
+
+static bool identifying = false;
+static unsigned long identifyStartMs = 0;
 
 static bool debugEnabled = false;
 static bool statusPending = false;
 static bool stompPending = false;         // fired since the last frame
 static bool stompSinceReport = false;     // fired since the last motion line
+static float accelPeak = 0.0f;            // highest acceleration since the last motion line
 static unsigned long lastFrameMs = 0;
 static unsigned long lastPatternUpdateMs = 0;
 static unsigned long lastStatusMs = 0;
 static unsigned long lastMotionMs = 0;
 
-static const char* calibrationText() {
-  switch (neutralCapture.state()) {
-    case NeutralState::Idle: return "idle";
-    case NeutralState::Capturing: return "capturing";
-    case NeutralState::Succeeded: return "ok";
-    default: return neutralFailureReason(neutralCapture.state());
-  }
-}
-
 static void sendStatus() {
   StatusReport report{};
   report.id = remoteDeviceId();
   report.pattern = settings.pattern;
+  report.lit = settings.lastLitPattern;
   report.brightness = settings.brightness;
   report.maxBrightness = LED_BRIGHTNESS_MAX;
   report.sensorReady = imuReady();
   report.tilt = imuTiltFwd();
-  report.neutralCalibrated = settings.neutralCalibrated;
-  report.neutralOffsetDeg = settings.neutralOffsetDeg;
-  report.calibration = calibrationText();
+  report.calibration = settings.calibration;
+  report.calibrationState = calibrationState;
   report.saved = !saveScheduler.dirty() && !saveFailed;
   report.saveFailed = saveFailed;
   report.saves = settingsWriteCount();
@@ -136,6 +133,21 @@ static void handleCommand(const Command& command) {
       sendStatus();
       return;
 
+    case CommandType::Patterns: {
+      char line[REMOTE_LINE_MAX];
+      formatPatterns(line, sizeof(line));
+      remoteSend(line);
+      return;
+    }
+
+    // Blinks the strip so you can see which boot this is. It changes no settings, so
+    // there's nothing new to report and nothing to save.
+    case CommandType::Identify:
+      identifying = true;
+      identifyStartMs = millis();
+      sendAck(command.type, true);
+      return;
+
     case CommandType::Pattern:
       selectPattern(command.pattern);
       sendAck(command.type, true);
@@ -158,16 +170,16 @@ static void handleCommand(const Command& command) {
       break;
 
     case CommandType::Calibrate:
-      if (neutralCapture.capturing()) {
+      if (poseCapture.capturing()) {
         sendAck(command.type, false, "already-capturing");
         return;
       }
+      capturedPose = command.pose;
       // Forget the last reported state, so a capture that fails the same way as the
       // previous one still sends its own calibrate line.
-      reportedNeutralState = NeutralState::Idle;
-      neutralCapture.start(millis(), imuReady());
-      sendAck(command.type, neutralCapture.capturing(),
-              neutralFailureReason(neutralCapture.state()));
+      reportedCaptureState = CaptureState::Idle;
+      poseCapture.start(millis(), imuReady());
+      sendAck(command.type, poseCapture.capturing(), captureFailureReason(poseCapture.state()));
       break;
 
     case CommandType::Debug:
@@ -178,24 +190,34 @@ static void handleCommand(const Command& command) {
   statusPending = true;
 }
 
-// Reports a capture's progress once per state change. A success applies the new
-// offset and saves it right away, because a calibration is worth more than the wear
-// of one write. A failure leaves the previous offset and saved settings alone.
-static void updateNeutralCapture() {
-  neutralCapture.poll(millis());
-  const NeutralState state = neutralCapture.state();
-  if (state == reportedNeutralState) return;
-  reportedNeutralState = state;
-
-  if (state == NeutralState::Succeeded) {
-    settings.neutralOffsetDeg = neutralCapture.offsetDeg();
-    settings.neutralCalibrated = true;
-    imuSetNeutralOffsetDeg(settings.neutralOffsetDeg);
-    saveNow();
-  }
+// Reports a capture's progress once per state change. A pose that holds still and passes
+// its checks is applied and saved right away, because a calibration is worth more than the
+// wear of one write. Any failure leaves the previous calibration alone, in use and in flash.
+static void updatePoseCapture() {
+  poseCapture.poll(millis());
+  const CaptureState state = poseCapture.state();
+  if (state == reportedCaptureState) return;
+  reportedCaptureState = state;
 
   char line[REMOTE_LINE_MAX];
-  formatCalibration(line, sizeof(line), state, settings.neutralOffsetDeg, imuTiltFwd());
+  if (state == CaptureState::Capturing) {
+    calibrationState = "capturing";
+    formatCalibrationCapturing(line, sizeof(line), capturedPose);
+  } else {
+    const float angleDeg = poseCapture.meanDeg();
+    const char* failure = (state == CaptureState::Succeeded)
+                              ? applyPose(settings.calibration, capturedPose, angleDeg, TILT_LIMITS)
+                              : captureFailureReason(state);
+    if (failure) {
+      calibrationState = failure;
+      formatCalibrationFailed(line, sizeof(line), capturedPose, failure);
+    } else {
+      calibrationState = "ok";
+      imuSetCalibration(settings.calibration);
+      saveNow();
+      formatCalibrationOk(line, sizeof(line), capturedPose, angleDeg, imuTiltFwd());
+    }
+  }
   remoteSend(line);
   statusPending = true;
 }
@@ -206,16 +228,33 @@ static void sendMotionIfDue(unsigned long now) {
   lastMotionMs = now;
 
   char line[REMOTE_LINE_MAX];
-  formatMotion(line, sizeof(line), imuTiltFwd(), imuRawAngleDeg(), imuLatest().mag,
+  formatMotion(line, sizeof(line), imuTiltFwd(), imuRawAngleDeg(), imuLatest().mag, accelPeak,
                imuGyroMagnitude(), stompSinceReport, imuStompStrength());
   remoteSend(line, RemotePriority::Telemetry);
   stompSinceReport = false;
+  accelPeak = 0.0f;
 }
 
 // Draws one frame, at most every APP_FRAME_MS so the strip can't take all of the
 // loop's time from the sensor and the radio. With the strip off, a black frame now
 // and then keeps it dark if the strip's power was cycled separately.
 static void renderIfDue(unsigned long now) {
+  // An identify blink takes over the strip briefly, then the pattern starts back up.
+  if (identifying) {
+    stompPending = false;
+    const unsigned long elapsed = now - identifyStartMs;
+    if (elapsed >= IDENTIFY_MS) {
+      identifying = false;
+      showPattern(settings.pattern);
+    } else if ((now - lastFrameMs) >= APP_FRAME_MS) {
+      lastFrameMs = now;
+      const uint32_t color = ((elapsed / IDENTIFY_BLINK_MS) % 2 == 0) ? 0xFFFFFF : 0x000000;
+      for (uint16_t i = 0; i < LED_COUNT; i++) strip.setPixelColor(i, color);
+      strip.show();
+    }
+    return;
+  }
+
   if (!activePattern) {
     if ((now - lastFrameMs) >= APP_OFF_REFRESH_MS) {
       lastFrameMs = now;
@@ -246,7 +285,7 @@ void setup() {
   Serial.println(loaded);
 
   imuBegin();
-  imuSetNeutralOffsetDeg(settings.neutralCalibrated ? settings.neutralOffsetDeg : 0.0f);
+  imuSetCalibration(settings.calibration);
 
   remoteBegin();
   strip.setBrightness(settings.brightness);
@@ -260,9 +299,10 @@ void loop() {
       stompPending = true;
       stompSinceReport = true;
     }
-    neutralCapture.addSample(millis(), imuRawAngleDeg(), imuGyroMagnitude(), imuLatest().mag);
+    if (imuLatest().mag > accelPeak) accelPeak = imuLatest().mag;
+    poseCapture.addSample(millis(), imuRawAngleDeg(), imuGyroMagnitude(), imuLatest().mag);
   }
-  updateNeutralCapture();
+  updatePoseCapture();
 
   char line[REMOTE_COMMAND_MAX + 1];
   while (remoteNextLine(line, sizeof(line))) {
@@ -282,9 +322,9 @@ void loop() {
 
   renderIfDue(now);
 
-  updateStatusLight(neutralCapture.capturing() ? StatusLight::Calibrating
-                    : imuReady()               ? StatusLight::Running
-                                               : StatusLight::SensorMissing);
+  updateStatusLight((poseCapture.capturing() || identifying) ? StatusLight::Calibrating
+                    : imuReady()                             ? StatusLight::Running
+                                                             : StatusLight::SensorMissing);
   remoteUpdate();
 }
 

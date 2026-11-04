@@ -29,7 +29,7 @@ bool debugButtonPressed();
 enum class StatusLight : uint8_t {
   Running,        // solid
   SensorMissing,  // slow blink: patterns run, but motion input is unavailable
-  Calibrating,    // fast blink: hold the boot still
+  Calibrating,    // fast blink: hold the boot still, or this is the boot being identified
 };
 
 // Advances the blink pattern. Call often from the main loop.

@@ -2,11 +2,13 @@
 
 #include <Arduino.h>
 
+#include "firewalker_calibration.h"
+
 // Shared motion service used by the app and diagnostics. src/firewalker_imu.cpp
 // reads the MG24 Sense's onboard LSM6DS3TR-C and owns:
 //   * the raw accel/gyro sample,
 //   * a fused fore-aft tilt (complementary filter of accel "down" + gyro rate),
-//   * this controller's neutral offset, which sets where tilt reads zero,
+//   * this controller's calibrated poses, which set where tilt reads -1, 0, and +1,
 //   * stomp detection (acceleration-magnitude spike with hysteresis).
 // Thresholds and filter settings live in config.h. The mount's axes live in
 // firewalker_mg24_mount.h, shared with the native fast-rotation tests. The pure
@@ -33,21 +35,20 @@ bool imuUpdate();
 
 const ImuSample& imuLatest();
 
-// Fused fore-aft tilt relative to the neutral offset, normalized to ~[-1, +1]
-// (+ = toe-down), saturating at IMU_TILT_FULL_DEG. Drives the flow pattern.
+// Fused fore-aft tilt from -1 (heel pose) through 0 (neutral) to +1 (toe pose), mapped by
+// the calibration. Reads exactly 0 inside the dead zone. Drives the flow pattern.
 float imuTiltFwd();
 
-// Fused fore-aft angle in degrees with no neutral offset applied, which is what a
-// neutral capture averages.
+// Fused fore-aft angle in degrees before any calibration, which is what a pose capture
+// averages.
 float imuRawAngleDeg();
 
 // Angular rate magnitude of the latest sample, rad/s. Zero when no motion.
 float imuGyroMagnitude();
 
-// The resting angle to treat as level, in degrees. Starts at zero. The caller owns
-// saving it; see firewalker_settings.h.
-void imuSetNeutralOffsetDeg(float degrees);
-float imuNeutralOffsetDeg();
+// The poses tilt is measured against. Starts uncalibrated. The caller owns saving them;
+// see firewalker_settings.h.
+void imuSetCalibration(const TiltCalibration& calibration);
 
 // True exactly once per detected stomp (consume-on-read).
 bool imuTakeStomp();

@@ -2,7 +2,7 @@
 // accel and gyro, the fused fore-aft angle, and stomp events over USB serial, and
 // mirrors the live tilt as strip brightness so the axis mapping can be confirmed by
 // eye. Use it to check firewalker_mg24_mount.h and the stomp thresholds in config.h.
-// It applies no saved neutral offset, so tilt here is relative to sensor level.
+// It applies no saved calibration, so tilt here is relative to sensor level.
 
 #include "modes/imu_debug.h"
 

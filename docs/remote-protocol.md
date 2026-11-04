@@ -45,11 +45,13 @@ aren't JSON.
 | Command | Effect |
 |---|---|
 | `status` | Reports the current state |
+| `patterns` | Lists the patterns this boot can show |
 | `pattern flow`, `pattern fire-trail`, `pattern off` | Selects a pattern and remembers it |
 | `power on`, `power off` | Off blanks the strip. On returns to the last lit pattern |
 | `brightness <n>` | Sets brightness, from 1 to `maxBrightness` |
-| `calibrate` | Captures this boot's neutral pose; hold it still for one second |
+| `calibrate neutral`, `calibrate heel`, `calibrate toe` | Captures one pose; hold it still for one second. A bare `calibrate` means neutral |
 | `debug on`, `debug off` | Starts or stops live motion lines |
+| `identify` | Blinks the strip for about 1.5 seconds, to show which boot this is. Changes no settings |
 
 Each controller keeps its own settings, and a command only affects the controller
 that receives it. `off` blanks the pixels but doesn't disconnect their power, so the
@@ -67,9 +69,20 @@ Sent once per command, except `status`, which replies with a status line directl
 ```
 
 Errors are `empty`, `too-long`, `too-many-arguments`, `expected-one-argument`,
-`unknown-command`, `unknown-pattern`, `expected-on-or-off`, `expected-0-to-255`,
-`out-of-range`, and `already-capturing`, plus the calibration reasons below. A
-command the firmware can't parse reports `"cmd":"unknown"`.
+`unknown-command`, `unknown-pattern`, `unknown-pose`, `expected-on-or-off`,
+`expected-0-to-255`, `out-of-range`, and `already-capturing`, plus `sensor-unavailable`
+for a capture that can't start. A command the firmware can't parse reports
+`"cmd":"unknown"`.
+
+### `patterns`
+
+Sent in reply to `patterns`. Off isn't listed, because it's the absence of a pattern, not
+a pattern to choose. Names are at most 12 characters, so `pattern <name>` always fits in a
+default 20-byte write.
+
+```json
+{"t":"patterns","list":["flow","fire-trail"]}
+```
 
 ### `status`
 
@@ -77,17 +90,20 @@ Sent in reply to `status`, when a client subscribes, and after any change. Chang
 are reported at most every 250 ms, so a slider drag gets one line per interval.
 
 ```json
-{"t":"status","id":"3ED1","pattern":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.02,"calibrated":true,"neutralDeg":1.56,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true}
+{"t":"status","proto":1,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true}
 ```
 
 | Field | Meaning |
 |---|---|
+| `proto` | The protocol version, so an app can tell when a boot's firmware needs updating |
 | `id` | Four hex digits identifying this controller |
-| `pattern` | `flow`, `fire-trail`, or `off` |
+| `pattern` | The current pattern, or `off` |
+| `lit` | The pattern `power on` returns to, even while the strip is off |
 | `brightness`, `maxBrightness` | The current level and the highest this build accepts |
 | `sensor` | `ok` or `unavailable` |
-| `tilt` | Fused fore-aft tilt from -1 (heel-down) to +1 (toe-down), relative to neutral |
-| `calibrated`, `neutralDeg` | Whether a neutral has been captured, and its offset in degrees |
+| `tilt` | Fused fore-aft tilt: -1 at the heel pose, 0 at neutral, +1 at the toe pose |
+| `calibrated`, `neutralDeg` | Whether a neutral has been captured, and its angle in degrees |
+| `heelDeg`, `toeDeg` | Those poses' angles in degrees, or `null` until captured |
 | `calibration` | The latest capture: `idle`, `capturing`, `ok`, or a failure reason |
 | `saved` | Every current setting is in flash, so it will survive a power cycle |
 | `saveFailed` | The latest flash write failed |
@@ -101,12 +117,12 @@ update, and `saves` lets a test confirm that.
 
 ### `calibrate`
 
-Reports a capture's progress.
+Reports a capture's progress. `angleDeg` is the angle the firmware saved for that pose.
 
 ```json
-{"t":"calibrate","state":"capturing"}
-{"t":"calibrate","state":"ok","neutralDeg":1.56,"tilt":0.00}
-{"t":"calibrate","state":"failed","reason":"motion"}
+{"t":"calibrate","pose":"heel","state":"capturing"}
+{"t":"calibrate","pose":"heel","state":"ok","angleDeg":-18.40,"tilt":-1.00}
+{"t":"calibrate","pose":"heel","state":"failed","reason":"motion"}
 ```
 
 | Reason | Meaning |
@@ -114,31 +130,49 @@ Reports a capture's progress.
 | `motion` | The boot moved during the capture |
 | `no-samples` | The sensor stopped delivering fresh samples |
 | `sensor-unavailable` | The motion sensor isn't available |
-| `out-of-range` | The boot held still, but too far from level to be a neutral pose |
+| `out-of-range` | A neutral pose too far from level, more than 45 degrees |
+| `too-close` | A heel or toe pose less than 10 degrees from neutral |
+| `wrong-side` | Heel and toe on the same side of neutral |
 
 A failed capture leaves the previous calibration in place, both in use and in flash.
 
-A capture sets where tilt reads zero. It doesn't change which direction counts as
-toe-down, the strip's toe and heel positions, or the stomp thresholds. The firmware
-never captures on its own at startup, because a boot may be tilted then.
+#### How the poses work
 
-The window, stillness bounds, and limits are the `NEUTRAL_*` values in
-[`config.h`](../include/config.h). A successful capture leaves tilt within about
-±0.1 for as long as the boot stays in the captured pose.
+Take them while wearing the boot, so they capture what that foot really does. Capture
+neutral first, because heel and toe are checked against it. Each controller stores its own,
+and the firmware never captures on its own at startup, because a boot may be tilted then.
+
+- Tilt maps heel to -1, neutral to 0, and toe to +1, so patterns don't need to know about
+  calibration. Each side scales on its own range.
+- Heel and toe are optional. A side with no captured pose reaches full tilt 30 degrees from
+  neutral, so a neutral-only boot works.
+- Direction comes from the poses, so a controller mounted backward corrects itself once
+  heel or toe is captured.
+- Retaking neutral keeps heel and toe, unless the new neutral lands past one of them or
+  within 10 degrees of it. That side then returns to its default.
+- Tilt reads exactly 0 within 3 degrees of neutral, so a calibrated boot rests flat.
+
+A capture sets where tilt lands. It doesn't change the strip's toe and heel positions or the
+stomp thresholds, because steps and stomps are quick spikes rather than held angles. Watch
+`accelPeak` in motion lines to tune those.
+
+The window, stillness bounds, and limits are in [`config.h`](../include/config.h)
+(`CALIBRATION_*` and `TILT_LIMITS`). They've only been confirmed on a still bench so far.
 
 ### `motion`
 
 Sent about five times a second while debug is on.
 
 ```json
-{"t":"motion","tilt":0.05,"angleDeg":1.42,"accel":10.18,"gyro":0.03,"stomp":false,"strength":0.00}
+{"t":"motion","tilt":0.05,"angleDeg":1.42,"accel":10.18,"accelPeak":10.31,"gyro":0.03,"stomp":false,"strength":0.00}
 ```
 
 | Field | Meaning |
 |---|---|
 | `tilt` | Same as in status |
-| `angleDeg` | Fused fore-aft angle before the neutral offset |
-| `accel` | Total acceleration, m/s², including gravity |
+| `angleDeg` | Fused fore-aft angle before calibration |
+| `accel` | Total acceleration at this moment, m/s², including gravity |
+| `accelPeak` | The highest total acceleration since the previous motion line, which catches a step's spike |
 | `gyro` | Total rotation rate, rad/s |
 | `stomp` | A stomp fired since the previous motion line |
 | `strength` | The latest stomp's force from 0 to 1 |

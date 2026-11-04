@@ -155,11 +155,11 @@ controls below describe what the remote needs to do.
 
 | Remote control | Firmware action |
 |---|---|
-| Flow button | Select flow and remember it |
-| Fire-trail button | Select fire-trail and remember it |
+| Pattern buttons, listed by the boot | Select that pattern and remember it |
 | On/Off toggle button | turn light strip on and off      |
 | Brightness slider | Update brightness and coalesce saved changes |
-| Calibrate neutral button | Capture a stable neutral pose for this controller |
+| Calibrate buttons | Capture a stable neutral, heel, or toe pose for this controller |
+| Identify button | Blink the strip to show which boot this is, changing no settings |
 | Debug output switch | Enable/disable bounded motion/status notifications |
 | Status screen | Report the actual settings, calibration, and sensor state |
 
@@ -203,9 +203,10 @@ for live control of a running shoe.
 4. Reject captures with significant motion, no fresh sensor samples, or an
    unavailable sensor. Report a useful reason and retain the previous valid offset.
 
-This action adjusts the resting-angle offset. The configured motion axes and
-signs still define toe-down versus heel-down; one neutral pose does not discover
-that mapping, change the strip's toe/heel positions, or tune stomp thresholds.
+The app plan added heel and toe poses, captured the same way while wearing the boot
+(`calibrate heel`, `calibrate toe`). Tilt then maps heel to -1, neutral to 0, and toe to +1,
+and direction comes from those poses. A skipped side uses a 30° default, so neutral alone
+still works. Poses don't change the strip's toe/heel positions or tune stomp thresholds.
 Do not automatically recalibrate at startup, since a boot may be tilted then.
 
 The implementation must document its sampling window, stillness bounds, timeout,

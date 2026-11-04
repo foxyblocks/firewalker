@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "firewalker_neutral.h"
+#include "firewalker_calibration.h"
 #include "firewalker_settings.h"
 
 namespace Firewalker {
@@ -27,21 +27,32 @@ namespace Firewalker {
 // Long enough for any valid command, so a longer line is rejected rather than cut.
 constexpr size_t REMOTE_COMMAND_MAX = 48;
 // Long enough for the largest status line.
-constexpr size_t REMOTE_LINE_MAX = 320;
+constexpr size_t REMOTE_LINE_MAX = 400;
+// Reported in status, so an app can tell when a boot's firmware needs updating. Raise it
+// when a change would break a client written against the current protocol.
+constexpr uint8_t REMOTE_PROTOCOL_VERSION = 1;
+
+// The patterns a client can select, as the `patterns` command lists them. Off isn't one:
+// it's the absence of a pattern. Keep each name to 12 characters, so `pattern <name>` fits
+// in a default 20-byte BLE write.
+constexpr PatternId SELECTABLE_PATTERNS[] = {PatternId::Flow, PatternId::FireTrail};
 
 enum class CommandType : uint8_t {
   Invalid,
   Status,
+  Patterns,
   Pattern,
   Power,
   Brightness,
   Calibrate,
   Debug,
+  Identify,
 };
 
 struct Command {
   CommandType type = CommandType::Invalid;
   PatternId pattern = PatternId::Flow;  // for Pattern
+  CalibrationPose pose = CalibrationPose::Neutral;  // for Calibrate
   bool on = false;                      // for Power and Debug
   int32_t value = 0;                    // for Brightness
   const char* error = nullptr;          // for Invalid: why it was rejected
@@ -56,9 +67,20 @@ inline const char* patternName(PatternId pattern) {
   return "unknown";
 }
 
+inline const char* poseName(CalibrationPose pose) {
+  switch (pose) {
+    case CalibrationPose::Neutral: return "neutral";
+    case CalibrationPose::Heel: return "heel";
+    case CalibrationPose::Toe: return "toe";
+  }
+  return "unknown";
+}
+
 inline const char* commandName(CommandType type) {
   switch (type) {
     case CommandType::Status: return "status";
+    case CommandType::Patterns: return "patterns";
+    case CommandType::Identify: return "identify";
     case CommandType::Pattern: return "pattern";
     case CommandType::Power: return "power";
     case CommandType::Brightness: return "brightness";
@@ -119,12 +141,37 @@ inline Command parseCommand(const char* line) {
   const char* verb = words[0];
   const char* arg = words[1];
 
-  if (strcmp(verb, "status") == 0 || strcmp(verb, "calibrate") == 0) {
+  const bool isStatus = strcmp(verb, "status") == 0;
+  const bool isPatterns = strcmp(verb, "patterns") == 0;
+  const bool isIdentify = strcmp(verb, "identify") == 0;
+  if (isStatus || isPatterns || isIdentify) {
     if (count != 1) {
       command.error = "too-many-arguments";
       return command;
     }
-    command.type = (verb[0] == 's') ? CommandType::Status : CommandType::Calibrate;
+    command.type = isStatus     ? CommandType::Status
+                   : isPatterns ? CommandType::Patterns
+                                : CommandType::Identify;
+    return command;
+  }
+
+  // A bare `calibrate` means neutral, the pose every boot needs first.
+  if (strcmp(verb, "calibrate") == 0) {
+    if (count > 2) {
+      command.error = "too-many-arguments";
+      return command;
+    }
+    if (arg == nullptr || strcmp(arg, "neutral") == 0) {
+      command.pose = CalibrationPose::Neutral;
+    } else if (strcmp(arg, "heel") == 0) {
+      command.pose = CalibrationPose::Heel;
+    } else if (strcmp(arg, "toe") == 0) {
+      command.pose = CalibrationPose::Toe;
+    } else {
+      command.error = "unknown-pose";
+      return command;
+    }
+    command.type = CommandType::Calibrate;
     return command;
   }
 
@@ -196,31 +243,49 @@ inline void formatAck(char* out, size_t size, CommandType type, bool ok,
   }
 }
 
-inline const char* neutralFailureReason(NeutralState state) {
+// Why a capture itself failed. applyPose has its own reasons for a pose it rejects.
+inline const char* captureFailureReason(CaptureState state) {
   switch (state) {
-    case NeutralState::FailedMotion: return "motion";
-    case NeutralState::FailedNoSamples: return "no-samples";
-    case NeutralState::FailedUnavailable: return "sensor-unavailable";
-    case NeutralState::FailedOutOfRange: return "out-of-range";
+    case CaptureState::FailedMotion: return "motion";
+    case CaptureState::FailedNoSamples: return "no-samples";
+    case CaptureState::FailedUnavailable: return "sensor-unavailable";
     default: return "none";
   }
 }
 
-// The state a capture just reached: "capturing", "ok", or "failed" with a reason.
-inline void formatCalibration(char* out, size_t size, NeutralState state, float offsetDeg,
-                              float tilt) {
-  if (state == NeutralState::Capturing) {
-    snprintf(out, size, "{\"t\":\"calibrate\",\"state\":\"capturing\"}");
-  } else if (state == NeutralState::Succeeded) {
-    char offsetText[16];
-    char tiltText[16];
-    formatFixed2(offsetText, sizeof(offsetText), offsetDeg);
-    formatFixed2(tiltText, sizeof(tiltText), tilt);
-    snprintf(out, size, "{\"t\":\"calibrate\",\"state\":\"ok\",\"neutralDeg\":%s,\"tilt\":%s}",
-             offsetText, tiltText);
-  } else {
-    snprintf(out, size, "{\"t\":\"calibrate\",\"state\":\"failed\",\"reason\":\"%s\"}",
-             neutralFailureReason(state));
+inline void formatCalibrationCapturing(char* out, size_t size, CalibrationPose pose) {
+  snprintf(out, size, "{\"t\":\"calibrate\",\"pose\":\"%s\",\"state\":\"capturing\"}",
+           poseName(pose));
+}
+
+inline void formatCalibrationOk(char* out, size_t size, CalibrationPose pose, float angleDeg,
+                                float tilt) {
+  char angleText[16];
+  char tiltText[16];
+  formatFixed2(angleText, sizeof(angleText), angleDeg);
+  formatFixed2(tiltText, sizeof(tiltText), tilt);
+  snprintf(out, size,
+           "{\"t\":\"calibrate\",\"pose\":\"%s\",\"state\":\"ok\",\"angleDeg\":%s,\"tilt\":%s}",
+           poseName(pose), angleText, tiltText);
+}
+
+inline void formatCalibrationFailed(char* out, size_t size, CalibrationPose pose,
+                                    const char* reason) {
+  snprintf(out, size, "{\"t\":\"calibrate\",\"pose\":\"%s\",\"state\":\"failed\",\"reason\":\"%s\"}",
+           poseName(pose), reason);
+}
+
+inline void formatPatterns(char* out, size_t size) {
+  int written = snprintf(out, size, "{\"t\":\"patterns\",\"list\":[");
+  bool first = true;
+  for (PatternId pattern : SELECTABLE_PATTERNS) {
+    if (written < 0 || (size_t)written >= size) return;
+    written += snprintf(out + written, size - written, "%s\"%s\"", first ? "" : ",",
+                        patternName(pattern));
+    first = false;
+  }
+  if (written >= 0 && (size_t)written < size) {
+    snprintf(out + written, size - written, "]}");
   }
 }
 
@@ -229,56 +294,75 @@ inline void formatCalibration(char* out, size_t size, NeutralState state, float 
 struct StatusReport {
   const char* id;
   PatternId pattern;
+  PatternId lit;  // the pattern turning on returns to, even while the strip is off
   uint8_t brightness;
   uint8_t maxBrightness;
   bool sensorReady;
   float tilt;
-  bool neutralCalibrated;
-  float neutralOffsetDeg;
-  const char* calibration;  // "idle", "capturing", "ok", or a failure reason
-  bool saved;               // the current settings are all in flash
-  bool saveFailed;          // the most recent flash write failed
-  uint32_t saves;           // flash writes since boot
+  TiltCalibration calibration;
+  const char* calibrationState;  // "idle", "capturing", "ok", or a failure reason
+  bool saved;                    // the current settings are all in flash
+  bool saveFailed;               // the most recent flash write failed
+  uint32_t saves;                // flash writes since boot
   bool debug;
   bool bleConnected;
 };
 
-inline void formatStatus(char* out, size_t size, const StatusReport& report) {
-  char tiltText[16];
-  char offsetText[16];
-  formatFixed2(tiltText, sizeof(tiltText), report.tilt);
-  formatFixed2(offsetText, sizeof(offsetText), report.neutralOffsetDeg);
-  snprintf(out, size,
-           "{\"t\":\"status\",\"id\":\"%s\",\"pattern\":\"%s\",\"brightness\":%u,"
-           "\"maxBrightness\":%u,\"sensor\":\"%s\",\"tilt\":%s,\"calibrated\":%s,"
-           "\"neutralDeg\":%s,\"calibration\":\"%s\",\"saved\":%s,\"saveFailed\":%s,"
-           "\"saves\":%lu,\"debug\":%s,\"ble\":%s}",
-           report.id, patternName(report.pattern), (unsigned)report.brightness,
-           (unsigned)report.maxBrightness, report.sensorReady ? "ok" : "unavailable", tiltText,
-           report.neutralCalibrated ? "true" : "false", offsetText, report.calibration,
-           report.saved ? "true" : "false", report.saveFailed ? "true" : "false",
-           (unsigned long)report.saves, report.debug ? "true" : "false",
-           report.bleConnected ? "true" : "false");
+// Writes a pose's angle, or `null` if it hasn't been captured.
+inline void formatOptionalAngle(char* out, size_t size, bool isSet, float angleDeg) {
+  if (isSet) {
+    formatFixed2(out, size, angleDeg);
+  } else {
+    snprintf(out, size, "null");
+  }
 }
 
-// One line of live motion, sent while debug is on. `stomp` means a stomp fired
-// since the previous motion line.
+inline void formatStatus(char* out, size_t size, const StatusReport& report) {
+  char tiltText[16];
+  char neutralText[16];
+  char heelText[16];
+  char toeText[16];
+  formatFixed2(tiltText, sizeof(tiltText), report.tilt);
+  formatFixed2(neutralText, sizeof(neutralText), report.calibration.neutralDeg);
+  formatOptionalAngle(heelText, sizeof(heelText), report.calibration.heelSet,
+                      report.calibration.heelDeg);
+  formatOptionalAngle(toeText, sizeof(toeText), report.calibration.toeSet, report.calibration.toeDeg);
+  snprintf(out, size,
+           "{\"t\":\"status\",\"proto\":%u,\"id\":\"%s\",\"pattern\":\"%s\",\"lit\":\"%s\","
+           "\"brightness\":%u,\"maxBrightness\":%u,\"sensor\":\"%s\",\"tilt\":%s,"
+           "\"calibrated\":%s,\"neutralDeg\":%s,\"heelDeg\":%s,\"toeDeg\":%s,"
+           "\"calibration\":\"%s\",\"saved\":%s,\"saveFailed\":%s,\"saves\":%lu,"
+           "\"debug\":%s,\"ble\":%s}",
+           (unsigned)REMOTE_PROTOCOL_VERSION, report.id, patternName(report.pattern),
+           patternName(report.lit), (unsigned)report.brightness, (unsigned)report.maxBrightness,
+           report.sensorReady ? "ok" : "unavailable", tiltText,
+           report.calibration.neutralSet ? "true" : "false", neutralText, heelText, toeText,
+           report.calibrationState, report.saved ? "true" : "false",
+           report.saveFailed ? "true" : "false", (unsigned long)report.saves,
+           report.debug ? "true" : "false", report.bleConnected ? "true" : "false");
+}
+
+// One line of live motion, sent while debug is on. `accelPeak` is the highest
+// acceleration since the previous line, which catches a step's spike that a line's own
+// instant would miss. `stomp` means a stomp fired since the previous line.
 inline void formatMotion(char* out, size_t size, float tilt, float angleDeg, float accel,
-                         float gyro, bool stomp, float strength) {
+                         float accelPeak, float gyro, bool stomp, float strength) {
   char tiltText[16];
   char angleText[16];
   char accelText[16];
+  char peakText[16];
   char gyroText[16];
   char strengthText[16];
   formatFixed2(tiltText, sizeof(tiltText), tilt);
   formatFixed2(angleText, sizeof(angleText), angleDeg);
   formatFixed2(accelText, sizeof(accelText), accel);
+  formatFixed2(peakText, sizeof(peakText), accelPeak);
   formatFixed2(gyroText, sizeof(gyroText), gyro);
   formatFixed2(strengthText, sizeof(strengthText), strength);
   snprintf(out, size,
-           "{\"t\":\"motion\",\"tilt\":%s,\"angleDeg\":%s,\"accel\":%s,\"gyro\":%s,"
-           "\"stomp\":%s,\"strength\":%s}",
-           tiltText, angleText, accelText, gyroText, stomp ? "true" : "false", strengthText);
+           "{\"t\":\"motion\",\"tilt\":%s,\"angleDeg\":%s,\"accel\":%s,\"accelPeak\":%s,"
+           "\"gyro\":%s,\"stomp\":%s,\"strength\":%s}",
+           tiltText, angleText, accelText, peakText, gyroText, stomp ? "true" : "false", strengthText);
 }
 
 }  // namespace Firewalker

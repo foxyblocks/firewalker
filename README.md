@@ -13,7 +13,7 @@ board's onboard motion sensor drives two patterns:
   and several can stack at once.
 
 Both shoes run the same firmware. Each one remembers its own pattern, brightness, and
-neutral calibration across power cycles, and can be controlled without reflashing
+calibrated poses across power cycles, and can be controlled without reflashing
 from an iPhone app over BLE or from a computer over USB.
 
 ## Hardware
@@ -54,10 +54,14 @@ Type commands into the USB console, or send the same commands over BLE:
 
 ```text
 status
+patterns
 pattern fire-trail
 pattern off
 brightness 32
-calibrate
+calibrate neutral
+calibrate heel
+calibrate toe
+identify
 debug on
 ```
 
@@ -65,9 +69,11 @@ Replies are JSON lines. [`docs/remote-protocol.md`](docs/remote-protocol.md) has
 full reference, including the BLE service an iPhone app connects to. The app itself is
 tracked in [FOX-269](https://linear.app/foxyblocks/issue/FOX-269).
 
-To calibrate neutral, hold the boot still in its resting position and send `calibrate`.
-The firmware samples for one second and treats that pose as level from then on. If the
-boot moves, it reports why and keeps the previous calibration. Do this once per boot.
+To calibrate a boot, wear it and hold each pose still while you send its command: first
+`calibrate neutral` at rest, then optionally `calibrate heel` and `calibrate toe`. The
+firmware samples for one second and maps those poses to tilt -1, 0, and +1 from then on. A
+skipped side reaches full tilt 30 degrees from neutral. If the boot moves or a pose can't
+work, it reports why and keeps the previous calibration. Do this once per boot.
 
 ## Bench tests
 

@@ -105,15 +105,8 @@ void FlowPattern::update(const PatternInput& in) {
   while (hue_ >= 65536.0f) hue_ -= 65536.0f;
   uint16_t hueU = (uint16_t)hue_;
 
-  // Deadzone + rescale: rest flat near level; a firm tilt reaches full pooling.
-  float tilt = in.tiltFwd;
-  float at = fabsf(tilt);
-  if (at <= FLOW_TILT_DEADZONE) {
-    tilt = 0.0f;
-  } else {
-    float scaled = (at - FLOW_TILT_DEADZONE) / (1.0f - FLOW_TILT_DEADZONE);
-    tilt = (tilt < 0.0f) ? -scaled : scaled;
-  }
+  // The motion service reports exactly 0 inside its dead zone, so that's what level means.
+  const float tilt = in.tiltFwd;
 
   // A tilted stomp pours directional trails from the down-point; a flat stomp
   // has no down direction, so it flashes the whole strip white instead.
@@ -138,7 +131,7 @@ void FlowPattern::update(const PatternInput& in) {
   // far each survivor brightens toward full. Each pixel's litFrac fades across
   // its own one-pixel span (pxW) as the edge sweeps past, so pixels extinguish
   // one-by-one from the up-end. At level (at 0) every pixel is lit at baseline.
-  at = fabsf(tilt);                                  // post-deadzone magnitude / fill edge
+  const float at = fabsf(tilt);                      // magnitude / fill edge
   const bool  toeDown   = (tilt >= 0.0f);
   const float pxW       = 1.0f / (float)stripPlainArcLen(STRIP_TOE_INDEX, STRIP_HEEL_INDEX);
   const float litBright = FLOW_BASELINE + at * (1.0f - FLOW_BASELINE);  // survivors → full

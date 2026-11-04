@@ -37,6 +37,9 @@ build, and the phone app is optional once a shoe is set up.
 
 ## Consequences
 
+- Tilt is calibrated per boot from up to three held poses, because a worn boot's real range
+  differs by foot and by side. This replaces a fixed 30 degrees each way, which now only
+  applies to a side with no captured pose.
 - D10 has to stay the SPI data pin, and D8 and D9 are claimed along with it.
 - USB stays a full control and log channel: the MG24's USB port carries the sketch's
   `Serial` in both directions, through the onboard debug chip. Bench work and motion logs

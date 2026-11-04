@@ -26,7 +26,7 @@ static ImuSample latest = {0, 0, 0, 0, 0, 0, IMU_GRAVITY};
 // Fused fore-aft angle in radians. Zero is sensor level, not the boot's neutral.
 static float fusedAngle = 0.0f;
 static bool firstSample = true;
-static float neutralOffsetDeg = 0.0f;
+static TiltCalibration tiltCalibration;
 
 static StompState stomp;
 
@@ -111,8 +111,7 @@ const ImuSample& imuLatest() { return latest; }
 
 float imuTiltFwd() {
   if (!ready) return 0.0f;
-  float trimmed = fusedAngle - neutralOffsetDeg * DEGREES_TO_RADIANS;
-  return normalizeTilt(trimmed, IMU_TILT_FULL_DEG);
+  return tiltFromAngle(imuRawAngleDeg(), tiltCalibration, TILT_LIMITS);
 }
 
 float imuRawAngleDeg() { return fusedAngle * 57.2957795f; }
@@ -121,9 +120,7 @@ float imuGyroMagnitude() {
   return sqrtf(latest.gx * latest.gx + latest.gy * latest.gy + latest.gz * latest.gz);
 }
 
-void imuSetNeutralOffsetDeg(float degrees) { neutralOffsetDeg = degrees; }
-
-float imuNeutralOffsetDeg() { return neutralOffsetDeg; }
+void imuSetCalibration(const TiltCalibration& calibration) { tiltCalibration = calibration; }
 
 bool imuTakeStomp() {
   if (!stomp.pending) return false;

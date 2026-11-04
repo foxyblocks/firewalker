@@ -17,10 +17,18 @@ static constexpr nvm3_ObjectKey_t SETTINGS_KEY = 0xF100;
 static uint32_t writeCount = 0;
 
 const char* loadSettings(const SettingsBounds& bounds, Settings& out) {
+  uint32_t objectType = 0;
+  size_t objectSize = 0;
+  const Ecode_t info = nvm3_getObjectInfo(nvm3_defaultHandle, SETTINGS_KEY, &objectType, &objectSize);
+  if (info == ECODE_NVM3_ERR_KEY_NOT_FOUND) return "absent";
+  if (info != ECODE_NVM3_OK) return "read-failed";
+  // A record from a firmware with a different layout can't be read into this one.
+  if (objectSize != sizeof(SettingsRecord)) return "unsupported";
+
   SettingsRecord record;
-  const Ecode_t status = nvm3_readData(nvm3_defaultHandle, SETTINGS_KEY, &record, sizeof(record));
-  if (status == ECODE_NVM3_ERR_KEY_NOT_FOUND) return "absent";
-  if (status != ECODE_NVM3_OK) return "read-failed";
+  if (nvm3_readData(nvm3_defaultHandle, SETTINGS_KEY, &record, sizeof(record)) != ECODE_NVM3_OK) {
+    return "read-failed";
+  }
 
   switch (decodeSettings(record, bounds, out)) {
     case SettingsDecode::Ok: return "loaded";
