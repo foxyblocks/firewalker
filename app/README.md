@@ -89,6 +89,7 @@ home.
 | What you see | Try this |
 | --- | --- |
 | A boot isn't listed | It's connected to something else, or it's off. Disconnect the other device. |
+| Chrome's picker stays empty or closes by itself | Allow Chrome under macOS Settings, Privacy & Security, Bluetooth, and keep its window in front. |
 | Reconnecting never finishes | Check the boot has power. In Chrome after a reload, add it again from Boots. |
 | "It moved" every time | The capture needs one still second. Brace against something and try again. |
 | "Needs a firmware update" | That boot's firmware doesn't have the pattern. Flash the current build. |
