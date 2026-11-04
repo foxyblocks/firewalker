@@ -32,6 +32,7 @@ Open <http://localhost:5173/?boot=fake&paired=1>. These options set up a scenari
 | `sensor=missing` | Right's motion sensor is unavailable |
 | `save=fail` | Left's flash writes fail |
 | `offline=1` | Right is out of range |
+| `capture=moving` | Left moves during every capture |
 
 ### In Chrome with real boots
 

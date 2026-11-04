@@ -77,7 +77,7 @@ function BootDetails({
   const { status, motion } = state;
   const online = state.link === "online";
   const [renaming, setRenaming] = useState(false);
-  const [draftName, setDraftName] = useState(store.displayName(side));
+  const [draftName, setDraftName] = useState(store.known(side)?.nickname ?? "");
   const [confirmingForget, setConfirmingForget] = useState(false);
   const debugOn = state.pending.debug ?? status?.debug ?? false;
   const tilt = motion?.tilt ?? status?.tilt ?? 0;
@@ -157,6 +157,7 @@ function BootDetails({
             value={draftName}
             maxLength={12}
             autoFocus
+            placeholder={side === "left" ? "Left" : "Right"}
             aria-label="Boot name"
             onChange={(event) => setDraftName(event.target.value)}
           />
