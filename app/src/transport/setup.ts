@@ -14,6 +14,7 @@
  *   &sensor=missing                Right's motion sensor is unavailable
  *   &save=fail                     Left's flash writes fail
  *   &offline=1                     Right is out of range
+ *   &access=lost                   the browser lost access to both, as a reload can do
  *   &capture=moving                Left moves during every capture
  */
 
@@ -61,12 +62,16 @@ function fakeSetup(params: URLSearchParams): { transport: Transport; storage: Ke
   const right = new FakeBoot({
     id: "7B20",
     proto,
+    leds: 110,
+    toe: 40,
+    heel: 90,
     patterns: params.get("mismatch") ? patterns.slice(0, -1) : patterns,
     wander: true,
     sensor: params.get("sensor") === "missing" ? "unavailable" : "ok",
     poseAngles: { neutral: -0.8, heel: -22.5, toe: 41 },
   });
   if (params.get("offline")) right.reachable = false;
+  if (params.get("access") === "lost") left.accessLost = right.accessLost = true;
   left.moving = params.get("capture") === "moving";
 
   const saved: Record<string, string> = {};

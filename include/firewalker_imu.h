@@ -39,6 +39,11 @@ const ImuSample& imuLatest();
 // the calibration. Reads exactly 0 inside the dead zone. Drives the flow pattern.
 float imuTiltFwd();
 
+// Fused fore-aft angle in degrees from the neutral pose, with toe-down positive. It has no
+// dead zone and doesn't stop at the poses, so a tolerance in degrees means the same on any
+// boot. Reads 0 with no sensor. Drives the fire-trail pattern.
+float imuTiltDeg();
+
 // Fused fore-aft angle in degrees before any calibration, which is what a pose capture
 // averages.
 float imuRawAngleDeg();

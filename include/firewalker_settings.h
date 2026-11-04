@@ -1,7 +1,7 @@
 #pragma once
 
 // Pure settings logic: what each controller remembers across power cycles (its
-// pattern, brightness, and calibrated poses), how
+// pattern, brightness, calibrated poses, and strip layout), how
 // that is checked when read back from flash, and when a change is worth writing.
 // Arduino-free so test/test_settings can exercise it off-hardware. The flash
 // reads and writes themselves live in firewalker_settings_store.h.
@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include "firewalker_calibration.h"
+#include "firewalker_strip_map.h"
 
 namespace Firewalker {
 
@@ -32,17 +33,20 @@ struct Settings {
   PatternId lastLitPattern;
   uint8_t brightness;
   TiltCalibration calibration;
+  StripLayout strip;
 };
 
 struct SettingsBounds {
   uint8_t minBrightness;
   uint8_t maxBrightness;
   float maxNeutralDeg;
+  uint16_t maxStripPixels;
 };
 
-// First-boot settings: flow at the given brightness, with no calibrated poses.
-inline Settings defaultSettings(uint8_t brightness) {
-  return Settings{PatternId::Flow, PatternId::Flow, brightness, TiltCalibration{}};
+// First-boot settings: flow at the given brightness, with no calibrated poses, on the
+// strip layout this build starts from.
+inline Settings defaultSettings(uint8_t brightness, const StripLayout& strip) {
+  return Settings{PatternId::Flow, PatternId::Flow, brightness, TiltCalibration{}, strip};
 }
 
 inline bool isPatternId(uint8_t value) {
@@ -59,6 +63,25 @@ struct SettingsRecord {
   uint8_t lastLitPattern;
   uint8_t brightness;
   uint8_t calibratedPoses;  // the SETTINGS_POSE_* bits
+  uint16_t stripCount;
+  float neutralDeg;
+  float heelDeg;
+  float toeDeg;
+  uint16_t stripToe;
+  uint16_t stripHeel;
+  uint32_t crc;
+};
+
+// The record boots saved before the strip layout became a setting. Flash still holds one
+// of these on a boot's first start after that update, so it's read rather than discarded:
+// otherwise updating the firmware would throw away that boot's calibrated poses.
+struct SettingsRecordV2 {
+  uint32_t magic;
+  uint16_t version;
+  uint8_t pattern;
+  uint8_t lastLitPattern;
+  uint8_t brightness;
+  uint8_t calibratedPoses;
   uint8_t reserved[2];
   float neutralDeg;
   float heelDeg;
@@ -66,8 +89,15 @@ struct SettingsRecord {
   uint32_t crc;
 };
 
+// The store tells the versions apart by size, and a V2 record's size is fixed by what's
+// already in flash.
+static_assert(sizeof(SettingsRecordV2) == 28, "SettingsRecordV2 must match saved records");
+static_assert(sizeof(SettingsRecord) != sizeof(SettingsRecordV2),
+              "Record versions must differ in size");
+
 constexpr uint32_t SETTINGS_MAGIC = 0x46574C4B;  // "FWLK"
-constexpr uint16_t SETTINGS_VERSION = 2;
+constexpr uint16_t SETTINGS_VERSION = 3;
+constexpr uint16_t SETTINGS_VERSION_V2 = 2;
 constexpr uint8_t SETTINGS_POSE_NEUTRAL = 1 << 0;
 constexpr uint8_t SETTINGS_POSE_HEEL = 1 << 1;
 constexpr uint8_t SETTINGS_POSE_TOE = 1 << 2;
@@ -101,6 +131,9 @@ inline SettingsRecord encodeSettings(const Settings& settings) {
   record.pattern = (uint8_t)settings.pattern;
   record.lastLitPattern = (uint8_t)settings.lastLitPattern;
   record.brightness = settings.brightness;
+  record.stripCount = settings.strip.count;
+  record.stripToe = settings.strip.toe;
+  record.stripHeel = settings.strip.heel;
   const TiltCalibration& calibration = settings.calibration;
   record.calibratedPoses = (calibration.neutralSet ? SETTINGS_POSE_NEUTRAL : 0) |
                            (calibration.heelSet ? SETTINGS_POSE_HEEL : 0) |
@@ -112,16 +145,10 @@ inline SettingsRecord encodeSettings(const Settings& settings) {
   return record;
 }
 
-// Checks a record read back from flash. On Ok, `out` holds the saved settings; on
-// anything else `out` is untouched, so the caller can keep its defaults.
-inline SettingsDecode decodeSettings(const SettingsRecord& record,
-                                     const SettingsBounds& bounds, Settings& out) {
-  if (record.magic != SETTINGS_MAGIC ||
-      record.crc != settingsCrc(&record, offsetof(SettingsRecord, crc))) {
-    return SettingsDecode::Corrupt;
-  }
-  if (record.version != SETTINGS_VERSION) return SettingsDecode::Unsupported;
-
+// Whether the fields every record version shares hold usable values. A template because
+// the versions share field names but not offsets.
+template <typename Record>
+inline bool sharedFieldsValid(const Record& record, const SettingsBounds& bounds) {
   const bool lastLitValid = record.lastLitPattern == (uint8_t)PatternId::Flow ||
                             record.lastLitPattern == (uint8_t)PatternId::FireTrail;
   const bool neutralValid = isfinite(record.neutralDeg) &&
@@ -135,12 +162,14 @@ inline SettingsDecode decodeSettings(const SettingsRecord& record,
   const bool bothSides = (poses & SETTINGS_POSE_HEEL) && (poses & SETTINGS_POSE_TOE);
   const bool sidesOpposite = !bothSides || signOf(record.heelDeg - record.neutralDeg) !=
                                                signOf(record.toeDeg - record.neutralDeg);
-  if (!isPatternId(record.pattern) || !lastLitValid || !neutralValid || !heelValid || !toeValid ||
-      !posesKnown || !sidesOpposite || record.brightness < bounds.minBrightness ||
-      record.brightness > bounds.maxBrightness) {
-    return SettingsDecode::Invalid;
-  }
+  return isPatternId(record.pattern) && lastLitValid && neutralValid && heelValid && toeValid &&
+         posesKnown && sidesOpposite && record.brightness >= bounds.minBrightness &&
+         record.brightness <= bounds.maxBrightness;
+}
 
+template <typename Record>
+inline void readSharedFields(const Record& record, Settings& out) {
+  const uint8_t poses = record.calibratedPoses;
   out.pattern = (PatternId)record.pattern;
   out.lastLitPattern = (PatternId)record.lastLitPattern;
   out.brightness = record.brightness;
@@ -150,6 +179,40 @@ inline SettingsDecode decodeSettings(const SettingsRecord& record,
   out.calibration.heelDeg = record.heelDeg;
   out.calibration.toeSet = (poses & SETTINGS_POSE_TOE) != 0;
   out.calibration.toeDeg = record.toeDeg;
+}
+
+// Checks a record read back from flash. On Ok, `out` holds the saved settings; on
+// anything else `out` is untouched, so the caller can keep its defaults.
+inline SettingsDecode decodeSettings(const SettingsRecord& record,
+                                     const SettingsBounds& bounds, Settings& out) {
+  if (record.magic != SETTINGS_MAGIC ||
+      record.crc != settingsCrc(&record, offsetof(SettingsRecord, crc))) {
+    return SettingsDecode::Corrupt;
+  }
+  if (record.version != SETTINGS_VERSION) return SettingsDecode::Unsupported;
+
+  const StripLayout strip = {record.stripCount, record.stripToe, record.stripHeel};
+  if (!sharedFieldsValid(record, bounds) || !stripLayoutValid(strip, bounds.maxStripPixels)) {
+    return SettingsDecode::Invalid;
+  }
+
+  readSharedFields(record, out);
+  out.strip = strip;
+  return SettingsDecode::Ok;
+}
+
+// Checks an older record the same way. It has no layout, so `out.strip` keeps the default
+// it holds on entry, and the next save rewrites flash in the current format.
+inline SettingsDecode decodeSettingsV2(const SettingsRecordV2& record,
+                                       const SettingsBounds& bounds, Settings& out) {
+  if (record.magic != SETTINGS_MAGIC ||
+      record.crc != settingsCrc(&record, offsetof(SettingsRecordV2, crc))) {
+    return SettingsDecode::Corrupt;
+  }
+  if (record.version != SETTINGS_VERSION_V2) return SettingsDecode::Unsupported;
+  if (!sharedFieldsValid(record, bounds)) return SettingsDecode::Invalid;
+
+  readSharedFields(record, out);
   return SettingsDecode::Ok;
 }
 

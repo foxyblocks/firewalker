@@ -21,12 +21,13 @@ const pair = async (
   const left = new FakeBoot({ id: "3ED1", ...leftOptions });
   const right = new FakeBoot({ id: "7B20", ...rightOptions });
   const storage = memoryStorage();
-  const store = new BootsStore(new FakeTransport([left, right]), storage);
+  const transport = new FakeTransport([left, right]);
+  const store = new BootsStore(transport, storage);
   await store.load();
   store.assign({ deviceId: left.deviceId, name: left.name }, "left");
   store.assign({ deviceId: right.deviceId, name: right.name }, "right");
   await settle();
-  return { left, right, store, storage };
+  return { left, right, store, storage, transport };
 };
 
 beforeEach(() => vi.useFakeTimers());
@@ -352,6 +353,18 @@ describe("the save and warning summary", () => {
     expect(store.view().uncalibrated).toEqual(["right"]);
   });
 
+  it("names boots the browser lost access to, apart from ones reconnecting", async () => {
+    const { store, left, right } = await pair();
+    await store.client("left")!.disconnect();
+    left.accessLost = true;
+    store.client("left")!.connect();
+    right.dropLink();
+    right.reachable = false;
+    await settle();
+    expect(store.view().accessLost).toEqual(["left"]);
+    expect(store.view().offline).toEqual(["right"]);
+  });
+
   it("names a boot whose firmware is too old for this app", async () => {
     const { store } = await pair({}, { proto: 0 });
     expect(store.view().outdated).toEqual(["right"]);
@@ -363,5 +376,56 @@ describe("the save and warning summary", () => {
     store.selectPattern("fire-trail");
     await vi.advanceTimersByTimeAsync(2100);
     expect(store.view().noAnswer).toEqual(["right"]);
+  });
+});
+
+describe("restoring browser access", () => {
+  // Chrome without its permissions flag forgets a boot on reload, and hands out a new handle
+  // when it's picked again, so only the name says which saved boot it is.
+  const lostAfterReload = async () => {
+    const paired = await pair();
+    paired.store.rename("left", "Stompy");
+    await paired.store.client("left")!.disconnect();
+    paired.left.accessLost = true;
+    paired.store.client("left")!.connect();
+    await settle();
+    return paired;
+  };
+
+  it("reconnects the picked boot on the same side, under its own name", async () => {
+    const { store, left } = await lostAfterReload();
+    const staleId = store.known("left")!.deviceId;
+
+    await store.restoreAccess();
+    await settle();
+
+    expect(store.known("left")!.deviceId).toBe(left.deviceId);
+    expect(store.known("left")!.deviceId).not.toBe(staleId);
+    expect(store.displayName("left")).toBe("Stompy");
+    expect(store.client("left")!.getState().link).toBe("online");
+    expect(store.view().accessLost).toEqual([]);
+  });
+
+  it("saves the new handle, so the next launch finds it", async () => {
+    const { store, storage, left } = await lostAfterReload();
+    await store.restoreAccess();
+    const saved = JSON.parse((await storage.get("boots"))!) as { side: string; deviceId: string }[];
+    expect(saved.find((boot) => boot.side === "left")!.deviceId).toBe(left.deviceId);
+  });
+
+  it("leaves everything alone when the picker is cancelled", async () => {
+    const { store, transport } = await lostAfterReload();
+    vi.spyOn(transport, "pick").mockResolvedValueOnce(null);
+    await store.restoreAccess();
+    await settle();
+    expect(store.view().accessLost).toEqual(["left"]);
+  });
+
+  it("ignores a boot that isn't one of yours", async () => {
+    const { store, transport } = await lostAfterReload();
+    vi.spyOn(transport, "pick").mockResolvedValueOnce({ deviceId: "stranger", name: "Firewalker-0000" });
+    await store.restoreAccess();
+    await settle();
+    expect(store.view().accessLost).toEqual(["left"]);
   });
 });

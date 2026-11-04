@@ -3,6 +3,7 @@
 #include <Arduino.h>
 
 #include "firewalker_strip.h"
+#include "firewalker_strip_map.h"
 
 // Shared hardware services: the main strip, the onboard status LED, and a solid
 // idle fill. Sensor logic lives in firewalker_imu; visual behaviors, including
@@ -12,6 +13,13 @@ namespace Firewalker {
 
 // The main shoe strip. Patterns draw to it directly.
 extern LedStrip strip;
+
+// The ring layout in use: the build's default until a mode applies a saved one. Patterns
+// read it when they enter, so call a pattern's enter() again after changing it.
+const StripLayout& stripLayout();
+
+// Puts a layout into use, including the strip's pixel count. Expects a valid layout.
+void setStripLayout(const StripLayout& layout);
 
 // Starts USB serial, lights the status LED, starts the strip with every pixel
 // blanked at the default brightness, and logs a one-line banner. Call first.

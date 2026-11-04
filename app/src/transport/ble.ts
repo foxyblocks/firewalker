@@ -5,20 +5,50 @@
  * boots get found:
  * - iOS scans and reports boots as they appear.
  * - Chrome shows its own picker, one boot per tap, because scanning sits behind a flag.
+ *
+ * They also differ after a restart. iOS reconnects to a saved boot by itself. A browser only
+ * remembers a boot across a page reload behind a flag
+ * (`chrome://flags/#enable-web-bluetooth-new-permissions-backend`), and even then it can't
+ * connect until it has heard that boot advertise, because it reports the boot as out of range
+ * until then. Without the flag, a reload forgets every boot, and `open` reports AccessLostError
+ * so that the app can offer the picker rather than retry forever.
  */
 
 import { Capacitor } from "@capacitor/core";
 import { BleClient, dataViewToText, textToDataView } from "@capacitor-community/bluetooth-le";
 import { BOOT_NAME_PREFIX, BOOT_RX, BOOT_SERVICE, BOOT_TX } from "../core/protocol";
-import type { BootLink, FoundBoot, LinkEvents, RadioState, Transport } from "./transport";
+import { AccessLostError, type BootLink, type FoundBoot, type LinkEvents, type RadioState, type Transport } from "./transport";
 
 const CONNECT_TIMEOUT_MS = 8000;
+
+/**
+ * Resolves once the browser hears this boot advertise, and rejects after `timeoutMs`. A boot
+ * connected to something else stops advertising, so this also keeps from waiting out a
+ * full connection attempt on a boot that can't take one.
+ */
+function waitForAdvertisement(device: BluetoothDevice, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const watching = new AbortController();
+    const finish = (settle: () => void) => {
+      clearTimeout(timer);
+      device.removeEventListener("advertisementreceived", onHeard);
+      watching.abort();
+      settle();
+    };
+    const onHeard = () => finish(resolve);
+    const timer = setTimeout(() => finish(() => reject(new Error("The boot isn't advertising"))), timeoutMs);
+    device.addEventListener("advertisementreceived", onHeard);
+    device.watchAdvertisements({ signal: watching.signal }).catch((error: unknown) => finish(() => reject(error)));
+  });
+}
 
 export class BleTransport implements Transport {
   readonly simulated = false;
   readonly finding = Capacitor.isNativePlatform() ? ("scan" as const) : ("picker" as const);
 
   private started: Promise<void> | null = null;
+  /** Boots picked since this page loaded, which a browser can reach whatever it remembers. */
+  private readonly pickedThisLoad = new Set<string>();
 
   constructor() {
     // The plugin's default queue runs one call at a time across all devices, so a connect
@@ -83,6 +113,7 @@ export class BleTransport implements Transport {
   async pick(): Promise<FoundBoot | null> {
     try {
       const device = await BleClient.requestDevice({ services: [BOOT_SERVICE] });
+      this.pickedThisLoad.add(device.deviceId);
       return { deviceId: device.deviceId, name: device.name ?? "Firewalker" };
     } catch {
       return null;
@@ -92,6 +123,7 @@ export class BleTransport implements Transport {
   async open(deviceId: string, events: LinkEvents): Promise<BootLink> {
     // After a relaunch, iOS has to be told about a saved device before connecting to it.
     if (Capacitor.isNativePlatform()) await BleClient.getDevices([deviceId]);
+    else await this.prepareInBrowser(deviceId);
 
     await BleClient.connect(deviceId, () => events.onClosed(), { timeout: CONNECT_TIMEOUT_MS });
     try {
@@ -107,5 +139,19 @@ export class BleTransport implements Transport {
       write: (line) => BleClient.write(deviceId, BOOT_SERVICE, BOOT_RX, textToDataView(line)),
       close: () => BleClient.disconnect(deviceId),
     };
+  }
+
+  /** Gets a boot ready for the plugin to connect to in a browser, as the file header explains. */
+  private async prepareInBrowser(deviceId: string): Promise<void> {
+    // The type says this always exists, but it's missing in a browser without the flag.
+    const remembered = navigator.bluetooth.getDevices ? await navigator.bluetooth.getDevices() : undefined;
+    if (!remembered) {
+      if (!this.pickedThisLoad.has(deviceId)) throw new AccessLostError();
+      return;
+    }
+    const device = remembered.find((candidate) => candidate.id === deviceId);
+    if (!device) throw new AccessLostError();
+    await BleClient.getDevices([deviceId]);
+    await waitForAdvertisement(device, CONNECT_TIMEOUT_MS);
   }
 }

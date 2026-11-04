@@ -94,7 +94,13 @@ function BootDetails({
         <span className="card-name">{store.bootName(side)}</span>
         <span className="save-line">
           <LinkDot link={state.link} />
-          {state.link === "online" ? "Connected" : state.link === "connecting" ? "Connecting" : "Reconnecting"}
+          {state.link === "online"
+            ? "Connected"
+            : state.link === "connecting"
+              ? "Connecting"
+              : state.link === "needs-access"
+                ? "Needs reconnecting"
+                : "Reconnecting"}
         </span>
       </div>
 
@@ -105,6 +111,7 @@ function BootDetails({
           <Fact label="Motion sensor" value={status.sensor === "ok" ? "OK" : "Unavailable"} tone={status.sensor === "ok" ? undefined : "bad"} />
           <Fact {...calibrationFact(status)} />
           <Fact label="Last capture" value={captureText(status.calibration)} />
+          <Fact label="Strip" value={`${status.leds} LEDs, toe ${status.toe}, heel ${status.heel}`} />
           <Fact label="Saved" value={saveText(status)} tone={status.saveFailed ? "bad" : undefined} />
           <Fact
             label="Firmware"

@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include "firewalker_calibration.h"
+#include "firewalker_strip_map.h"
 
 // ── Serial ──────────────────────────────────────────────────────────────
 // Must match `monitor_speed` in platformio.ini.
@@ -18,11 +19,13 @@ constexpr unsigned long SERIAL_BAUD = 115200;
 // pixels, XGB1338 (WS2812B-compatible, GRB, 800 kHz). Data is on D10, which is SPI
 // MOSI. The signal comes from the SPI hardware, so it can't move to another pin freely.
 
-// Connected pixel count and ring layout. These describe the uncut bench strip, and the
-// ring positions scale the original 40-pixel ring by four. A boot needs about 69 cm, or
-// about 110 pixels, so set all three once the strip is cut (see docs/open-questions.md).
-// The cli tool reads them from here too. Test builds override them with build flags, and
-// every source file sees the same values.
+// The uncut bench strip, and where its ring layout starts. FIREWALKER_LED_COUNT sizes the
+// frame buffers, so it's the most pixels this build can drive. Each controller then saves
+// the count, toe, and heel that fit its own boot, set from the remote while looking at the
+// strip (docs/remote-protocol.md), so a cut strip needs no firmware change. The toe and heel
+// here scale the original 40-pixel ring by four, and only apply until a boot saves its own.
+// The cli tool reads these too. Test builds override them with build flags, and every source
+// file sees the same values.
 #ifndef FIREWALKER_LED_COUNT
 #define FIREWALKER_LED_COUNT 160
 #endif
@@ -32,17 +35,16 @@ constexpr unsigned long SERIAL_BAUD = 115200;
 #ifndef FIREWALKER_STRIP_HEEL_INDEX
 #define FIREWALKER_STRIP_HEEL_INDEX 132
 #endif
-constexpr uint16_t LED_COUNT = FIREWALKER_LED_COUNT;
+constexpr uint16_t STRIP_MAX_PIXELS = FIREWALKER_LED_COUNT;
 
 // The strip is a closed loop around the foot perimeter: pixel 0 starts directly
-// under the controller, then the indices run forward to the toe apex, back along
-// the other side to the heel, and return to the start. The pure index-to-fore-aft
-// math lives in include/firewalker_strip_map.h (tested in test/test_strip_map).
-constexpr uint16_t STRIP_TOE_INDEX  = FIREWALKER_STRIP_TOE_INDEX;
-constexpr uint16_t STRIP_HEEL_INDEX = FIREWALKER_STRIP_HEEL_INDEX;
-static_assert(LED_COUNT > 0 && STRIP_TOE_INDEX < STRIP_HEEL_INDEX &&
-                  STRIP_HEEL_INDEX < LED_COUNT,
-              "Strip layout must satisfy toe < heel < pixel count");
+// under the controller, then the indices run around the foot and return to the
+// start. The pure index-to-fore-aft math and the rules for a valid layout live in
+// include/firewalker_strip_map.h (tested in test/test_strip_map).
+constexpr Firewalker::StripLayout STRIP_DEFAULT_LAYOUT = {
+    STRIP_MAX_PIXELS, FIREWALKER_STRIP_TOE_INDEX, FIREWALKER_STRIP_HEEL_INDEX};
+static_assert(Firewalker::stripLayoutValid(STRIP_DEFAULT_LAYOUT, STRIP_MAX_PIXELS),
+              "Strip layout needs at least 2 pixels, with toe and heel on different pixels");
 
 // Signal timing. src/firewalker_strip.cpp turns each LED bit into four bits of SPI at
 // this rate, which sets every pulse width. 3.25 MHz divides evenly from the board's
@@ -70,6 +72,17 @@ constexpr uint8_t LED_BRIGHTNESS_MIN = 1;
 constexpr uint8_t LED_BRIGHTNESS_MAX = FIREWALKER_LED_BRIGHTNESS_MAX;
 static_assert(LED_BRIGHTNESS >= LED_BRIGHTNESS_MIN && LED_BRIGHTNESS <= 255,
               "Default brightness must be at least LED_BRIGHTNESS_MIN");
+
+// What the strip shows while a remote sets its layout (`strip preview`): the ring in blue,
+// with the toe and heel pixels in their own colors. These are the app's slider colors, and
+// the fixed brightness means the markers are easy to find even on a boot turned down low. A
+// preview ends by itself this long after the latest strip command, so a phone that goes
+// away can't leave a boot stuck showing it.
+constexpr uint32_t      STRIP_PREVIEW_LEDS_COLOR = 0x0000FF;  // blue
+constexpr uint32_t      STRIP_PREVIEW_TOE_COLOR  = 0xFFC800;  // yellow
+constexpr uint32_t      STRIP_PREVIEW_HEEL_COLOR = 0x8000FF;  // purple
+constexpr uint8_t       STRIP_PREVIEW_BRIGHTNESS = LED_BRIGHTNESS_MAX;
+constexpr unsigned long STRIP_PREVIEW_HOLD_MS    = 60000;
 
 // ── Onboard status LED ───────────────────────────────────────────────────
 // Half-periods of the onboard LED's blink patterns (firewalker_core.h StatusLight).
@@ -184,8 +197,8 @@ constexpr uint16_t FLOW_TRAIL_PREV_HUE   = 7300;   // tail hue step back (~40° 
 constexpr uint8_t  FLOW_MAX_FRONTS       = 16;     // 4 per stomp; supports ~4 concurrent stomps
 constexpr float    FLOW_TRAIL_BRIGHT_MIN = 0.30f;  // trail brightness at a threshold-force stomp (→1.0 at IMU_STOMP_FORCE_FULL)
 
-// Strip geometry (ring, toe/heel indices) lives in the Strip section above
-// (STRIP_TOE_INDEX / STRIP_HEEL_INDEX) — it's a hardware fact, not a flow knob.
+// Strip geometry (ring, toe/heel indices) is a saved setting, not a flow knob. See the
+// Strip section above.
 
 // ── Fire-trail pattern: gradient palette ─────────────────────────────────
 // Palette stops from the hot head to the cool tail, as plain R/G/B. The
@@ -202,11 +215,21 @@ constexpr uint8_t FIRE[][3] = {
 constexpr uint8_t FIRE_STOPS = sizeof(FIRE) / sizeof(FIRE[0]);
 
 // ── Fire-trail pattern: band animation ───────────────────────────────────
-// Each stomp spawns a trail: a band of FIRE_TRAIL_LEN lit pixels that travels
-// bottom -> top at one pixel per FIRE_TRAIL_STEP_MS. It "wipes in" as it emerges
-// from the bottom and "wipes out" as it slides off the top — no hold in between.
-// Stomps stack: multiple trails run at once, each behind the previous, up to
-// FIRE_TRAIL_MAX (further stomps are ignored until a slot frees up).
-constexpr unsigned long FIRE_TRAIL_STEP_MS = 10;  // ms per one-pixel advance
-constexpr uint8_t       FIRE_TRAIL_LEN     = 30;  // band length in pixels (the wipe-in/out width)
-constexpr uint8_t       FIRE_TRAIL_MAX     = 12;  // max simultaneous trails on the strip
+// Each stomp spawns a trail from whichever part of the boot is down, running along both
+// sides of the foot to the opposite part: toe to heel, heel to toe, or outward from the
+// middle of each side. Its bands are FIRE_TRAIL_LEN lit pixels. They "wipe in" as they emerge
+// from the origin and "wipe out" at the far end, with no hold in between. Stomps stack:
+// multiple trails run at once, up to FIRE_TRAIL_MAX (further stomps are ignored until a slot
+// frees up).
+constexpr uint8_t FIRE_TRAIL_LEN = 30;  // band length in pixels (the wipe-in/out width)
+constexpr uint8_t FIRE_TRAIL_MAX = 12;  // max simultaneous trails on the strip
+
+// How fast bands travel, in pixels per second. Example: at 200, a band crosses one side of a
+// 107-pixel ring (about 54 pixels) in about a quarter of a second.
+constexpr float FIRE_TRAIL_SPEED_PXPS = 200.0f;
+static_assert(FIRE_TRAIL_SPEED_PXPS > 0.0f, "A trail that never moves would never finish");
+
+// What counts as flat: a stomp within this many degrees of the neutral pose, either way,
+// starts from the middle. Further than that starts from the toe or heel. Each stomp logs its
+// angle over USB, for tuning on a real foot (see open-questions.md).
+constexpr float FIRE_TRAIL_FLAT_DEG = 8.0f;

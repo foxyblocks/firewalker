@@ -57,11 +57,11 @@ static inline uint8_t* encodeChannel(uint8_t* out, uint8_t value) {
 // bit always reads as a one and that pixel sticks on bright green. The trailing one leaves
 // D10 low for the latch. Neither is long enough for the strip to treat as a latch mid-frame.
 size_t LedStrip::encodedSize() const {
-  return (size_t)count_ * ENCODED_BYTES_PER_PIXEL + 2;
+  return (size_t)capacity_ * ENCODED_BYTES_PER_PIXEL + 2;
 }
 
 void LedStrip::begin() {
-  if (!pixels_) pixels_ = (uint8_t*)calloc((size_t)count_ * 3, 1);
+  if (!pixels_) pixels_ = (uint8_t*)calloc((size_t)capacity_ * 3, 1);
   if (!encoded_) encoded_ = (uint8_t*)calloc(encodedSize(), 1);
 
   // This transaction never ends, because the strip is the only thing on this bus.
@@ -69,8 +69,13 @@ void LedStrip::begin() {
   SPI.beginTransaction(SPISettings(STRIP_SPI_HZ, MSBFIRST, SPI_MODE1));
 }
 
+void LedStrip::setPixelCount(uint16_t count) {
+  count_ = (count > capacity_) ? capacity_ : count;
+  if (pixels_) memset(&pixels_[(size_t)count_ * 3], 0, (size_t)(capacity_ - count_) * 3);
+}
+
 void LedStrip::clear() {
-  if (pixels_) memset(pixels_, 0, (size_t)count_ * 3);
+  if (pixels_) memset(pixels_, 0, (size_t)capacity_ * 3);
 }
 
 void LedStrip::setPixelColor(uint16_t index, uint32_t color) {
@@ -90,7 +95,7 @@ void LedStrip::show() {
 
   uint8_t* out = encoded_;
   *out++ = 0;
-  for (uint16_t i = 0; i < count_; i++) {
+  for (uint16_t i = 0; i < capacity_; i++) {
     const uint8_t* pixel = &pixels_[(size_t)i * 3];
     out = encodeChannel(out, scaleChannel(pixel[1], brightness_));  // G
     out = encodeChannel(out, scaleChannel(pixel[0], brightness_));  // R

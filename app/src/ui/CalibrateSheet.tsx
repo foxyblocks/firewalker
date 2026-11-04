@@ -1,7 +1,10 @@
 /**
- * The guided Calibrate flow, meant to be done wearing the boots: neutral, then heel down,
- * then toe down. The firmware does the capture and keeps the results, so this only walks
- * you through it and shows each boot's outcome.
+ * The Calibrate sheet, with two jobs on two tabs. Poses teaches a boot how your foot moves,
+ * and it's the flow below. Strip tells a boot where its pixels are (StripSetup.tsx).
+ *
+ * The poses flow is meant to be done wearing the boots: neutral, then heel down, then toe
+ * down. The firmware does the capture and keeps the results, so this only walks you through
+ * it and shows each boot's outcome.
  *
  * Tapping Capture starts a short countdown so you can settle into the pose with the phone
  * still in your hand, and a buzz at the end means you don't need to watch the screen. The
@@ -18,6 +21,7 @@ import { calibrationSteps, failureMessage, POSE_INSTRUCTIONS, POSE_NAMES, type C
 import type { Pose, StatusReply } from "../core/protocol";
 import { buzz } from "./haptics";
 import { joinNames, TiltStrip } from "./parts";
+import { StripSetup } from "./StripSetup";
 
 const COUNTDOWN_SECONDS = 3;
 const TILT_REFRESH_MS = 500;
@@ -26,9 +30,63 @@ type Phase = { kind: "ready" } | { kind: "countdown"; seconds: number } | { kind
 
 const resultKey = (side: Side, pose: Pose) => `${side}:${pose}`;
 
+type Tab = "poses" | "strip";
+const TABS: { id: Tab; name: string }[] = [
+  { id: "poses", name: "Poses" },
+  { id: "strip", name: "Strip" },
+];
+
 export function CalibrateSheet({ store, onClose }: { store: BootsStore; onClose: () => void }) {
   // The plan is fixed when the sheet opens, so a boot dropping mid-flow can't reorder it.
-  const [sides] = useState(() => store.calibrationSides());
+  const [poseSides] = useState(() => store.calibrationSides());
+  // A boot with no working sensor can't take poses, but it can still set its strip.
+  const [tab, setTab] = useState<Tab>(poseSides.length > 0 ? "poses" : "strip");
+  // A capture in progress holds the tabs, because leaving would lose sight of its result.
+  const [capturing, setCapturing] = useState(false);
+  const sides = tab === "poses" ? poseSides : store.targetSides();
+  const title =
+    sides.length > 1 ? "Calibrate both" : `Calibrate ${joinNames(sides.map((side) => store.displayName(side)))}`;
+
+  return (
+    <div className="sheet-backdrop">
+      <section className="sheet" role="dialog" aria-modal="true" aria-label={title}>
+        <h2 className="screen-title">{title}</h2>
+        <div className="tabs tabs-sheet" role="tablist" aria-label="What to calibrate">
+          {TABS.map(({ id, name }) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              className={`tab${tab === id ? " tab-on" : ""}`}
+              disabled={capturing || (id === "poses" && poseSides.length === 0)}
+              onClick={() => setTab(id)}
+            >
+              <span className="tab-name">{name}</span>
+            </button>
+          ))}
+        </div>
+        {tab === "poses" ? (
+          <PoseSteps store={store} sides={poseSides} onBusy={setCapturing} onClose={onClose} />
+        ) : (
+          <StripSetup store={store} onClose={onClose} />
+        )}
+      </section>
+    </div>
+  );
+}
+
+function PoseSteps({
+  store,
+  sides,
+  onBusy,
+  onClose,
+}: {
+  store: BootsStore;
+  sides: Side[];
+  onBusy: (busy: boolean) => void;
+  onClose: () => void;
+}) {
   const multiple = sides.length > 1;
   const steps = useMemo(() => calibrationSteps(sides), [sides]);
   const [index, setIndex] = useState(0);
@@ -86,82 +144,75 @@ export function CalibrateSheet({ store, onClose }: { store: BootsStore; onClose:
 
   const liveTilt = watched?.getState().status?.tilt ?? 0;
   const busy = phase.kind !== "ready";
-  const title = multiple
-    ? "Calibrate both"
-    : `Calibrate ${joinNames(sides.map((side) => store.displayName(side)))}`;
+  useEffect(() => onBusy(busy), [busy, onBusy]);
 
   return (
-    <div className="sheet-backdrop">
-      <section className="sheet" role="dialog" aria-modal="true" aria-label={title}>
-        <header className="sheet-head">
-          <h2 className="screen-title">{title}</h2>
-          <span className="scanning">{done ? "All done" : `Step ${index + 1} of ${steps.length}`}</span>
-        </header>
+    <>
+      <p className="sheet-help">
+        {done
+          ? "All done, and saved on the boot. Rock your foot and watch the lights follow."
+          : `Step ${index + 1} of ${steps.length}. ${POSE_INSTRUCTIONS[step.pose]}`}
+      </p>
 
-        <p className="sheet-help">
-          {done ? "Saved on the boot. Rock your foot and watch the lights follow." : POSE_INSTRUCTIONS[step.pose]}
-        </p>
+      <ol className="steps">
+        {steps.map((candidate, position) => (
+          <StepRow
+            key={stepName(candidate)}
+            name={stepName(candidate)}
+            active={position === index}
+            disabled={busy}
+            outcomes={candidate.sides.map((side) => ({
+              side,
+              name: store.displayName(side),
+              result: results[resultKey(side, candidate.pose)],
+              saved: savedAngle(store.client(side)?.getState().status, candidate.pose),
+            }))}
+            capturing={position === index && phase.kind === "capturing"}
+            onSelect={() => setIndex(position)}
+          />
+        ))}
+      </ol>
 
-        <ol className="steps">
-          {steps.map((candidate, position) => (
-            <StepRow
-              key={stepName(candidate)}
-              name={stepName(candidate)}
-              active={position === index}
-              disabled={busy}
-              outcomes={candidate.sides.map((side) => ({
-                side,
-                name: store.displayName(side),
-                result: results[resultKey(side, candidate.pose)],
-                saved: savedAngle(store.client(side)?.getState().status, candidate.pose),
-              }))}
-              capturing={position === index && phase.kind === "capturing"}
-              onSelect={() => setIndex(position)}
-            />
-          ))}
-        </ol>
-
-        <div className="strip-block">
-          <TiltStrip tilt={liveTilt} />
-          <div className="strip-ends">
-            <span>Heel</span>
-            <span>Neutral</span>
-            <span>Toe</span>
-          </div>
+      <div className="strip-block">
+        <TiltStrip tilt={liveTilt} />
+        <div className="strip-ends">
+          <span>Heel</span>
+          <span>Neutral</span>
+          <span>Toe</span>
         </div>
+      </div>
 
-        {done ? (
-          <button type="button" className="button button-primary button-wide" onClick={onClose}>
-            Done
+      {done ? (
+        <button type="button" className="button button-primary button-wide" onClick={onClose}>
+          Done
+        </button>
+      ) : (
+        <>
+          <button
+            type="button"
+            className={`button button-primary button-wide${phase.kind === "capturing" ? " button-capturing" : ""}`}
+            disabled={busy}
+            onClick={() => startCountdown(step, COUNTDOWN_SECONDS)}
+          >
+            {phase.kind === "countdown"
+              ? `Hold it in ${phase.seconds}`
+              : phase.kind === "capturing"
+                ? "Stay there"
+                : `Capture ${POSE_NAMES[step.pose].toLowerCase()}`}
           </button>
-        ) : (
-          <>
-            <button
-              type="button"
-              className={`button button-primary button-wide${phase.kind === "capturing" ? " button-capturing" : ""}`}
-              disabled={busy}
-              onClick={() => startCountdown(step, COUNTDOWN_SECONDS)}
-            >
-              {phase.kind === "countdown"
-                ? `Hold it in ${phase.seconds}`
-                : phase.kind === "capturing"
-                  ? "Stay there"
-                  : `Capture ${POSE_NAMES[step.pose].toLowerCase()}`}
-            </button>
-            <div className="sheet-foot">
-              {step.pose !== "neutral" && (
-                <button type="button" className="link" disabled={busy} onClick={() => setIndex(index + 1)}>
-                  Skip this pose
-                </button>
-              )}
-              <button type="button" className="link" disabled={busy} onClick={onClose}>
-                Close
+          <div className="sheet-foot">
+            {step.pose !== "neutral" && (
+              <button type="button" className="link" disabled={busy} onClick={() => setIndex(index + 1)}>
+                Skip this pose
               </button>
-            </div>
-          </>
-        )}
-      </section>
-    </div>
+            )}
+            <button type="button" className="link" disabled={busy} onClick={onClose}>
+              Close
+            </button>
+          </div>
+        </>
+      )}
+    </>
   );
 }
 

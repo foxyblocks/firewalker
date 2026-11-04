@@ -21,9 +21,12 @@ export const BOOT_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
 export const BOOT_NAME_PREFIX = "Firewalker-";
 
 /** The oldest firmware protocol this app works with. */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export type Pose = "neutral" | "heel" | "toe";
+
+/** The strip layout values a boot saves: its pixel count, and the pixels at the toe and heel. */
+export type StripSetting = "leds" | "toe" | "heel";
 
 export interface StatusReply {
   t: "status";
@@ -44,6 +47,11 @@ export interface StatusReply {
   lit: string; // the pattern `power on` brings back
   heelDeg: number | null; // null until that pose is captured
   toeDeg: number | null; // null until that pose is captured
+  leds: number; // how many pixels the boot's ring has
+  maxLeds: number; // the longest strip this build can drive
+  toe: number; // the pixel at the toe
+  heel: number; // the pixel at the heel
+  preview: boolean; // the strip is showing its layout in place of its pattern
 }
 
 export interface AckReply {
@@ -91,6 +99,8 @@ export const commands = {
   calibrate: (pose: Pose) => `calibrate ${pose}`,
   debug: (on: boolean) => `debug ${on ? "on" : "off"}`,
   identify: () => "identify",
+  strip: (setting: StripSetting, value: number) => `strip ${setting} ${Math.round(value)}`,
+  stripPreview: (on: boolean) => `strip preview ${on ? "on" : "off"}`,
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> =>

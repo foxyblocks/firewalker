@@ -8,7 +8,7 @@
 
 import { SIDE_NAMES, type BootsStore, type PatternTile, type RemoteView, type Side, type Target } from "../core/boots";
 import { patternDisplay } from "../core/patternNames";
-import { BrightnessStrip, joinNames, LinkDot, SideBadge, Toggle } from "./parts";
+import { joinNames, LinkDot, PixelSlider, SideBadge, Toggle } from "./parts";
 
 export function Remote({
   store,
@@ -24,7 +24,6 @@ export function Remote({
   const view = store.view();
   const names = (sides: Side[]) => joinNames(sides.map((side) => store.displayName(side)));
   const percent = view.maxBrightness > 0 ? Math.round((view.brightness / view.maxBrightness) * 100) : 0;
-  const canCalibrate = store.calibrationSides().length > 0;
 
   return (
     <>
@@ -43,7 +42,7 @@ export function Remote({
       <TargetTabs store={store} onBoots={onBoots} />
 
       <main className="scroll">
-        <Banners view={view} names={names} />
+        <Banners view={view} names={names} onRestoreAccess={() => void store.restoreAccess()} />
         <div className="section-head">
           <span className="section-label">Pattern</span>
           <SaveLine view={view} names={names} />
@@ -66,8 +65,10 @@ export function Remote({
           <span className="section-label">Brightness</span>
           <span className="readout">{view.controllable ? `${percent}%` : "--"}</span>
         </div>
-        <BrightnessStrip
+        <PixelSlider
+          label="Brightness"
           value={view.brightness}
+          min={1}
           max={view.maxBrightness}
           disabled={!view.controllable}
           onStart={() => store.setDragging(true)}
@@ -84,7 +85,7 @@ export function Remote({
               onChange={(on) => store.setPower(on)}
             />
           </div>
-          <button type="button" className="dock-card dock-button" disabled={!canCalibrate} onClick={onCalibrate}>
+          <button type="button" className="dock-card dock-button" disabled={!view.controllable} onClick={onCalibrate}>
             <span className="card-name">Calibrate</span>
             <CalibrateHint view={view} names={names} />
           </button>
@@ -189,7 +190,15 @@ function CalibrateHint({ view, names }: { view: RemoteView; names: (sides: Side[
   );
 }
 
-function Banners({ view, names }: { view: RemoteView; names: (sides: Side[]) => string }) {
+function Banners({
+  view,
+  names,
+  onRestoreAccess,
+}: {
+  view: RemoteView;
+  names: (sides: Side[]) => string;
+  onRestoreAccess: () => void;
+}) {
   const banners: { tone: "bad" | "warn"; text: string }[] = [];
   if (view.outdated.length > 0) {
     banners.push({ tone: "bad", text: `${names(view.outdated)}: update this boot's firmware to use it with this app.` });
@@ -214,9 +223,17 @@ function Banners({ view, names }: { view: RemoteView; names: (sides: Side[]) => 
     const { name } = patternDisplay(view.needsUpdate.pattern);
     banners.push({ tone: "warn", text: `${names(view.needsUpdate.sides)} needs a firmware update for ${name}.` });
   }
-  if (banners.length === 0) return null;
+  if (banners.length === 0 && view.accessLost.length === 0) return null;
   return (
     <div className="banners">
+      {view.accessLost.length > 0 && (
+        <div className="banner banner-warn banner-action" role="status">
+          <span>This browser can't reach {names(view.accessLost)} since the page reloaded. Pick each boot once to get it back.</span>
+          <button type="button" className="button" onClick={onRestoreAccess}>
+            Reconnect
+          </button>
+        </div>
+      )}
       {banners.map((banner) => (
         <p key={banner.text} className={`banner banner-${banner.tone}`} role="status">
           {banner.text}

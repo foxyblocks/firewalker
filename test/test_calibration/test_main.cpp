@@ -466,6 +466,40 @@ static void test_retaking_neutral_keeps_a_backward_mounts_direction() {
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.0f, tiltFromAngle(-20.0f, calibration, LIMITS));
 }
 
+// ── degrees from neutral ──────────────────────────────────────────────────
+
+static void test_degrees_from_neutral_are_positive_toward_the_toe() {
+  TiltCalibration calibration;
+  calibration.neutralSet = true;
+  calibration.neutralDeg = 4.0f;
+  calibration.toeSet = true;
+  calibration.toeDeg = 34.0f;
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 6.0f, degreesFromNeutral(10.0f, calibration));
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, -6.0f, degreesFromNeutral(-2.0f, calibration));
+}
+
+static void test_degrees_from_neutral_correct_a_backward_controller() {
+  TiltCalibration calibration;
+  calibration.neutralSet = true;
+  calibration.neutralDeg = 4.0f;
+  calibration.toeSet = true;
+  calibration.toeDeg = -26.0f;  // toe-down makes the angle fall on this mount
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 6.0f, degreesFromNeutral(-2.0f, calibration));
+}
+
+static void test_degrees_from_neutral_keep_going_past_the_poses() {
+  // Tilt stops at 1 at the pose, but a tolerance in degrees has to see the real angle.
+  TiltCalibration calibration;
+  calibration.neutralSet = true;
+  calibration.toeSet = true;
+  calibration.toeDeg = 12.0f;
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 40.0f, degreesFromNeutral(40.0f, calibration));
+}
+
+static void test_uncalibrated_degrees_measure_from_sensor_level() {
+  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 5.0f, degreesFromNeutral(5.0f, TiltCalibration{}));
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_still_boot_captures_its_angle);
@@ -509,5 +543,9 @@ int main(int, char**) {
   RUN_TEST(test_neutral_landing_past_a_pose_resets_that_side);
   RUN_TEST(test_neutral_landing_too_near_a_pose_resets_that_side);
   RUN_TEST(test_retaking_neutral_keeps_a_backward_mounts_direction);
+  RUN_TEST(test_degrees_from_neutral_are_positive_toward_the_toe);
+  RUN_TEST(test_degrees_from_neutral_correct_a_backward_controller);
+  RUN_TEST(test_degrees_from_neutral_keep_going_past_the_poses);
+  RUN_TEST(test_uncalibrated_degrees_measure_from_sensor_level);
   return UNITY_END();
 }

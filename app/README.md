@@ -32,14 +32,17 @@ Open <http://localhost:5173/?boot=fake&paired=1>. These options set up a scenari
 | `sensor=missing` | Right's motion sensor is unavailable |
 | `save=fail` | Left's flash writes fail |
 | `offline=1` | Right is out of range |
+| `access=lost` | The browser lost access to both, as a reload can do |
 | `capture=moving` | Left moves during every capture |
 
 ### In Chrome with real boots
 
 Open <http://localhost:5173> in Chrome, not Safari, which has no Web Bluetooth. Allow Chrome
 under macOS Settings, Privacy & Security, Bluetooth. Chrome shows its own picker, one boot
-per tap, and asks again after a page reload unless you turn on
-`chrome://flags/#enable-web-bluetooth-new-permissions-backend`.
+per tap. After a page reload, a banner offers Reconnect, which asks you to pick each boot once
+and keeps its label. To skip that, turn on
+`chrome://flags/#enable-web-bluetooth-new-permissions-backend` (`arc://flags` in Arc), and boots
+reconnect by themselves.
 
 Each boot holds one connection at a time, so a boot connected to the Mac is invisible to
 the iPhone until the Mac lets go.
@@ -82,6 +85,11 @@ home.
 - **Calibrate:** do this wearing the boots. Neutral with your weight even, heel down with
   toes up, toe down with heel up, each as far as you want the full effect. Stay in the pose
   for the two seconds after the countdown. A little wobble is fine. Heel and toe are optional.
+- **Calibrate, Strip tab:** tells each boot how long its strip is and where the toe and heel
+  are, while you look at the strip, one boot at a time. The strip shows all three at once: a
+  blue line for the LED count, one yellow pixel at the toe, and one purple pixel at the heel.
+  Slide until the blue reaches the end, then move each marker to the right spot. The minus and
+  plus buttons land on the exact pixel, and each change saves on the boot.
 - **Status:** what a boot actually reports, plus live debug numbers.
 
 ## Troubleshooting
@@ -90,7 +98,7 @@ home.
 | --- | --- |
 | A boot isn't listed | It's connected to something else, or it's off. Disconnect the other device. |
 | Chrome's picker stays empty or closes by itself | Allow Chrome under macOS Settings, Privacy & Security, Bluetooth, and keep its window in front. |
-| Reconnecting never finishes | Check the boot has power. In Chrome after a reload, add it again from Boots. |
+| Reconnecting never finishes | Check the boot has power, and that nothing else is connected to it. |
 | "It kept moving" every time | A capture collects for two seconds and tolerates a wobble, but not rocking back and forth. Settle into the pose before the countdown ends. |
 | "Update this boot's firmware" or "Needs a firmware update" | That boot's firmware is too old for this app or doesn't have that pattern. Flash the current build. |
 
@@ -102,6 +110,7 @@ home.
 | `src/core/boot.ts` | One boot's connection, command queue, and last report |
 | `src/core/boots.ts` | The pair: labels, the Both tab, and pattern tiles |
 | `src/core/calibration.ts` | The order of calibration poses, and failure messages |
+| `src/core/stripSetup.ts` | Where the LED count, toe, and heel sliders can land |
 | `src/core/patternNames.ts` | Friendly names, with generated ones for new patterns |
 | `src/transport/transport.ts` | The seam between the app and the radio |
 | `src/transport/ble.ts` | The real radio, for iOS and Chrome |

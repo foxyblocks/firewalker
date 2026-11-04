@@ -7,19 +7,20 @@ MG24 Sense (see `docs/adr/0004-mg24-sense-and-ble-remote.md`).
 **Current phase: the MG24 migration (FOX-271, `specs/mg24-migration-spec.md`).** Drive
 one BTF FCOB strip (WS2812B-compatible, 160 pixels per meter) on D10 from the board's
 onboard motion sensor. The strip is a closed ring around the foot, about 69 cm or 110
-pixels. The firmware assumes the uncut 160 pixels until it's cut to length. The app (`final_app`) runs
+pixels. Each controller saves its own pixel count, toe, and heel, set from a remote, and
+starts from the uncut 160 pixels. The app (`final_app`) runs
 runtime-switchable **patterns**: `flow` (a slowly spectrum-cycling hue pooled toward the
 down-end by fused fore-aft tilt, where a stomp launches diverging trail fronts) and
 `fire-trail` (stomp-spawned fire bands). A stomp is an IMU acceleration spike. Both
 shoes run one identical firmware binary. Each controller saves its own pattern,
-brightness, and calibrated poses (neutral, heel, toe) in flash. A **remote** controls running firmware
+brightness, calibrated poses (neutral, heel, toe), and strip layout in flash. A **remote** controls running firmware
 over BLE or the USB console with one line protocol. Out of scope: the 2-D "perimeter
 bubble" flow, multiple strips per shoe, synchronization between shoes, and the final
 battery and enclosure. Don't over-engineer ahead of working hardware.
 
 ## Project map
 
-- `include/config.h` — all hardware/behavior knobs, named by owning module (`IMU_*`,
+- `include/config.h` — all hardware/behavior knobs, named by owning module (`STRIP_*`, `IMU_*`,
   `CALIBRATION_*`, `TILT_LIMITS`, `SETTINGS_*`, `REMOTE_*`, `FLOW_*`, `FIRE_TRAIL_*`). Never hard-code
   these in source files.
 - `src/main.cpp` — tiny Arduino dispatcher into the selected mode.

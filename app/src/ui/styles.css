@@ -397,8 +397,24 @@ dd {
 }
 
 .pixel-lit {
-  background: var(--ember);
-  box-shadow: 0 0 9px rgb(255 106 31 / 75%);
+  background: var(--pixel, var(--ember));
+  box-shadow: 0 0 9px var(--pixel-glow, rgb(255 106 31 / 75%));
+}
+
+/* The colors a boot's strip previews, matching STRIP_PREVIEW_*_COLOR in include/config.h. */
+.led-blue {
+  --pixel: #3d7dff;
+  --pixel-glow: rgb(61 125 255 / 75%);
+}
+
+.led-yellow {
+  --pixel: #ffc800;
+  --pixel-glow: rgb(255 200 0 / 75%);
+}
+
+.led-purple {
+  --pixel: #a64dff;
+  --pixel-glow: rgb(166 77 255 / 75%);
 }
 
 .strip-tilt {
@@ -510,6 +526,16 @@ dd {
   border-radius: 6px;
   background: var(--surface);
   font-size: 12.5px;
+}
+
+.banner-action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.banner-action .button {
+  flex: none;
 }
 
 .banner-bad {
@@ -710,13 +736,6 @@ dd {
   animation: rise 200ms ease;
 }
 
-.sheet-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .sheet-help {
   color: var(--ink-quiet);
 }
@@ -775,6 +794,63 @@ dd {
 .strip-block {
   padding: 2px 2px 4px;
 }
+
+.tabs-sheet {
+  padding: 0;
+}
+
+.tabs-sheet .tab {
+  min-height: 40px;
+  font-size: 17px;
+}
+
+.strip-cards {
+  display: grid;
+  gap: 8px;
+}
+
+.strip-card {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+
+.strip-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.step-button {
+  width: 44px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.step-button:active {
+  background: var(--line);
+}
+
+.strip-number {
+  min-width: 3.2ch;
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
 
 .sheet-foot {
   display: flex;

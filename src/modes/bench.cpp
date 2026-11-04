@@ -22,7 +22,7 @@
 #define BENCH_TEST 2
 #endif
 #ifndef BENCH_LIT_PIXELS
-#define BENCH_LIT_PIXELS LED_COUNT
+#define BENCH_LIT_PIXELS STRIP_MAX_PIXELS
 #endif
 #ifndef BENCH_MOTION
 #define BENCH_MOTION 0
@@ -98,10 +98,12 @@ void loop() {
   input.dt = now - lastFrameMs;
   lastFrameMs = now;
   input.tiltFwd = BENCH_TILT;
+  input.tiltDeg = BENCH_TILT * IMU_TILT_FULL_DEG;  // a simulated full tilt is the default range
   input.stompStrength = 1.0f;
 #if BENCH_MOTION
   imuUpdate();
   input.tiltFwd = imuTiltFwd();
+  input.tiltDeg = imuTiltDeg();
   input.stomp = imuTakeStomp();
   input.stompStrength = imuStompStrength();
 #if BENCH_LOG_MOTION

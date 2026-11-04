@@ -538,3 +538,217 @@ describe("blinking a boot", () => {
   });
 
 });
+
+describe("the strip layout", () => {
+  const LAYOUT = { leds: 110, toe: 40, heel: 90 };
+
+  it("shows the layout the boot reports", async () => {
+    const { client } = setup(LAYOUT);
+    client.connect();
+    await settle();
+    expect(state(client).status).toMatchObject({ leds: 110, maxLeds: 160, toe: 40, heel: 90 });
+  });
+
+  it("sets a value, showing it as pending until the boot confirms", async () => {
+    const { boot, client } = setup(LAYOUT);
+    client.connect();
+    await settle();
+
+    client.setStrip("toe", 45);
+    expect(state(client).pending.toe).toBe(45);
+    expect(state(client).status?.toe).toBe(40);
+
+    await settle();
+    expect(boot.received).toContain("strip toe 45");
+    expect(state(client).status?.toe).toBe(45);
+    expect(state(client).pending.toe).toBeUndefined();
+  });
+
+  it("keeps a whole drag to one queue slot and ends on the last value", async () => {
+    const { boot, client } = setup(LAYOUT);
+    client.connect();
+    await settle();
+    boot.received.length = 0;
+    boot.replyDelayMs = 100;
+
+    client.setDragging(true);
+    for (let leds = 111; leds <= 130; leds++) client.setStrip("leds", leds);
+    await settle();
+    client.setDragging(false);
+    await settle();
+
+    expect(boot.received).toEqual(["strip leds 111", "strip leds 130", "status"]);
+    expect(boot.leds).toBe(130);
+    expect(state(client).pending.leds).toBeUndefined();
+  });
+
+  it("doesn't jump back under the finger while dragging", async () => {
+    const { client } = setup(LAYOUT);
+    client.connect();
+    await settle();
+
+    client.setDragging(true);
+    client.setStrip("leds", 130);
+    await settle();
+    expect(state(client).status?.leds).toBe(130);
+    expect(state(client).pending.leds).toBe(130);
+  });
+
+  it("saves one flash write for a drag", async () => {
+    const { boot, client } = setup(LAYOUT);
+    client.connect();
+    await settle();
+
+    client.setDragging(true);
+    for (let leds = 111; leds <= 120; leds++) {
+      client.setStrip("leds", leds);
+      await vi.advanceTimersByTimeAsync(50);
+    }
+    client.setDragging(false);
+    await vi.advanceTimersByTimeAsync(1500);
+
+    expect(boot.saves).toBe(1);
+    expect(state(client).status?.saved).toBe(true);
+  });
+
+  it("reports where cutting the count moved a marker", async () => {
+    const { client } = setup({ leds: 160, toe: 52, heel: 132 });
+    client.connect();
+    await settle();
+
+    client.setStrip("leds", 110);
+    await settle();
+    expect(state(client).status).toMatchObject({ leds: 110, toe: 52, heel: 109 });
+  });
+
+  it("returns to the reported value when the boot rejects one", async () => {
+    const { client } = setup(LAYOUT);
+    client.connect();
+    await settle();
+
+    client.setStrip("toe", 90);
+    await settle();
+    expect(state(client).pending.toe).toBeUndefined();
+    expect(state(client).status?.toe).toBe(40);
+    expect(state(client).notice).toBe("same-pixel");
+  });
+});
+
+describe("the strip preview", () => {
+  it("asks the boot to show it", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+
+    client.setStripPreview(true);
+    await settle();
+    expect(boot.preview).toBe(true);
+    expect(state(client).status?.preview).toBe(true);
+  });
+
+  it("stays up for as long as it's wanted, past the boot's own limit", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+
+    client.setStripPreview(true);
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(boot.preview).toBe(true);
+  });
+
+  it("stops when it's no longer wanted, and stops asking", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+
+    client.setStripPreview(true);
+    await settle();
+    client.setStripPreview(false);
+    await settle();
+    expect(boot.preview).toBe(false);
+
+    boot.received.length = 0;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(boot.received.filter((line) => line.startsWith("strip"))).toEqual([]);
+  });
+
+  it("ends by itself on the boot when the phone goes away", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+
+    client.setStripPreview(true);
+    await settle();
+    boot.dropLink();
+    boot.reachable = false;
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(boot.preview).toBe(false);
+  });
+
+  it("comes back after the connection drops", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+
+    client.setStripPreview(true);
+    await settle();
+    boot.dropLink();
+    boot.reachable = false;
+    await vi.advanceTimersByTimeAsync(61_000);
+    expect(boot.preview).toBe(false);
+
+    boot.reachable = true;
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(state(client).link).toBe("online");
+    expect(boot.preview).toBe(true);
+  });
+
+  it("clears one left running by an earlier session", async () => {
+    const { boot, client } = setup();
+    boot.preview = true;
+    client.connect();
+    await settle();
+    expect(boot.preview).toBe(false);
+  });
+
+  it("stops asking once the boot is forgotten", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+    client.setStripPreview(true);
+    await settle();
+
+    await client.disconnect();
+    boot.received.length = 0;
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(boot.received).toEqual([]);
+  });
+});
+
+describe("losing browser access", () => {
+  it("says so instead of retrying a connection that can't work", async () => {
+    const { boot, client } = setup();
+    boot.accessLost = true;
+    client.connect();
+    await settle();
+    expect(state(client).link).toBe("needs-access");
+
+    // Nothing here can fix it, so it stays put even once the boot could be reached.
+    boot.accessLost = false;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(state(client).link).toBe("needs-access");
+    expect(boot.connected).toBe(false);
+  });
+
+  it("keeps retrying an ordinary failure to connect", async () => {
+    const { boot, client } = setup();
+    boot.reachable = false;
+    client.connect();
+    await settle();
+    expect(state(client).link).toBe("reconnecting");
+
+    boot.reachable = true;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(state(client).link).toBe("online");
+  });
+});
