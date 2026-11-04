@@ -213,9 +213,6 @@ func validate(o *options, c *testConfig) error {
 		if c.logMotion && o.buildOnly {
 			return fmt.Errorf("--log-motion needs an upload, so it can't be combined with --build-only")
 		}
-		if c.test == testFireTrail && c.tilt != 0 {
-			return fmt.Errorf("fire-trail does not use tilt; use flow --tilt instead")
-		}
 	}
 	if c.lit == -1 {
 		c.lit = o.pixels

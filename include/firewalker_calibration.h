@@ -51,6 +51,14 @@ inline float toeDirection(const TiltCalibration& calibration) {
   return 1.0f;
 }
 
+// How far a fused angle sits from the neutral pose, in degrees, with toe-down positive. Tilt
+// below is scaled to each side's pose and stops there, so the same tilt can be very different
+// angles on two boots. Use this one for a tolerance in degrees, which should mean the same on
+// any boot. Example: neutral at 4 and toe-down at 34 put an angle of 10 at +6.
+inline float degreesFromNeutral(float angleDeg, const TiltCalibration& calibration) {
+  return (angleDeg - calibration.neutralDeg) * toeDirection(calibration);
+}
+
 // Converts a fused angle into tilt from -1 (heel pose) through 0 (neutral) to +1 (toe
 // pose), saturating beyond the poses. The dead zone is in degrees so it covers the same
 // angle however short a side is, which lets a calibrated boot rest exactly flat even if it

@@ -112,6 +112,11 @@ float imuTiltFwd() {
   return tiltFromAngle(imuRawAngleDeg(), tiltCalibration, TILT_LIMITS);
 }
 
+float imuTiltDeg() {
+  if (!ready) return 0.0f;
+  return degreesFromNeutral(imuRawAngleDeg(), tiltCalibration);
+}
+
 float imuRawAngleDeg() { return fusedAngle * 57.2957795f; }
 
 float imuGyroMagnitude() {

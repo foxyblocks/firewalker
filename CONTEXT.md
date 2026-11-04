@@ -16,8 +16,9 @@ code, issues, and docs rather than drifting to synonyms.
   **fire-trail**). One firmware holds the active pattern, and the **remote**
   switches between them live or turns the strip off. _Avoid_: "light mode",
   "animation mode".
-- **Fire-trail** — the Pattern where each **stomp** spawns a **trail** (a fire
-  gradient band) that climbs the strip; several stack at once.
+- **Fire-trail** — the Pattern where each **stomp** spawns a **trail** from whichever
+  part of the boot is down, running along both sides of the foot to the opposite part;
+  several stack at once.
 - **Flow** — the Pattern where the strip shares one hue that slowly rotates
   through the spectrum and "pools": at level it glows a flat dim baseline, and
   as the foot tilts brightness drains from the up-end and concentrates into a
@@ -48,9 +49,11 @@ code, issues, and docs rather than drifting to synonyms.
 - **Brightness** — the global 0–255 scale applied to every channel when a frame is
   sent. Each controller saves its own, up to `LED_BRIGHTNESS_MAX`. Trades visibility
   against current draw, and isn't a current limit; see the power budget.
-- **Trail** — a band of `FIRE_TRAIL_LEN` pixels spawned by a stomp that travels
-  bottom→top, **wiping in** at the bottom and **out** at the top (no hold).
-  Several run at once (`FIRE_TRAIL_MAX`), each behind the previous.
+- **Trail** — the bands of fire one stomp spawns, each `FIRE_TRAIL_LEN` pixels long.
+  Toe down runs one band per side from the toe to the heel, heel down runs them from the
+  heel to the toe, and flat runs four outward from the middle of each side. Bands **wipe
+  in** at their origin and **out** at the far end (no hold). Several trails run at once
+  (`FIRE_TRAIL_MAX`).
 - **Fire gradient** — a trail's color ramp: a hot head cooling through the
   `FIRE[]` stops to a red tail, precomputed once per `FIRE_TRAIL_LEN`.
 - **Stomp** — a trigger event: a foot impact. Detected from an **IMU**

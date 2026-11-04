@@ -9,8 +9,9 @@ board's onboard motion sensor drives two patterns:
 - **flow**: the strip shares one hue that slowly rotates through the spectrum and
   "pools" toward whichever end of the foot tilts down. A stomp launches trails from
   the down-point, or flashes the strip white if the foot is level.
-- **fire-trail**: each stomp launches a fire-gradient band that climbs the strip,
-  and several can stack at once.
+- **fire-trail**: each stomp launches fire-gradient bands from whichever part of the
+  boot is down. They run along both sides of the foot to the opposite part, or outward
+  from the middle if the foot is level, and several can stack at once.
 
 Both shoes run the same firmware. Each one remembers its own pattern, brightness, and
 calibrated poses across power cycles, and can be controlled without reflashing
@@ -87,7 +88,8 @@ settings or a shoe's saved settings. It needs [Go](https://go.dev) and PlatformI
 ./cli flow --stomp-every 2s                           # timed flashes and trails
 ./cli flow --motion                                   # onboard tilt and stomp input
 ./cli flow --motion --log-motion                      # same, and stream motion over USB
-./cli fire-trail --stomp-every 1s                     # repeat fire trails without motion
+./cli fire-trail --stomp-every 1s                     # repeat fire trails from the middle
+./cli fire-trail --tilt=1                             # trails from the toe (-1 for the heel)
 ./cli fire-trail --motion                             # real stomps trigger fire trails
 ./cli color --lit 20 --brightness 16 --interval 500ms # cycle white/red/green/blue
 ./cli color --color '#ff8000' --lit 10                # fixed orange, other pixels black

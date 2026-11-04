@@ -310,6 +310,7 @@ static void renderIfDue(unsigned long now) {
 
   PatternInput input;
   input.tiltFwd = imuTiltFwd();
+  input.tiltDeg = imuTiltDeg();
   input.stomp = stompPending;
   input.stompStrength = imuStompStrength();
   input.dt = now - lastPatternUpdateMs;
