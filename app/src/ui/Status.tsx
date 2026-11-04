@@ -94,7 +94,13 @@ function BootDetails({
         <span className="card-name">{store.bootName(side)}</span>
         <span className="save-line">
           <LinkDot link={state.link} />
-          {state.link === "online" ? "Connected" : state.link === "connecting" ? "Connecting" : "Reconnecting"}
+          {state.link === "online"
+            ? "Connected"
+            : state.link === "connecting"
+              ? "Connecting"
+              : state.link === "needs-access"
+                ? "Needs reconnecting"
+                : "Reconnecting"}
         </span>
       </div>
 

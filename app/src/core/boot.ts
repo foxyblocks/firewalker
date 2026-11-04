@@ -24,7 +24,7 @@ import {
   type StatusReply,
   type StripSetting,
 } from "./protocol";
-import type { BootLink, Transport } from "../transport/transport";
+import { AccessLostError, type BootLink, type Transport } from "../transport/transport";
 
 const COMMAND_TIMEOUT_MS = 2000;
 const FIRST_STATUS_WAIT_MS = 2000;
@@ -40,7 +40,8 @@ const PREVIEW_REFRESH_MS = 20000;
 // These follow a finger, so a status line mustn't move them mid-drag.
 const SLIDER_FIELDS: ReadonlySet<keyof Pending> = new Set(["brightness", "leds", "toe", "heel"]);
 
-export type LinkState = "idle" | "connecting" | "online" | "reconnecting";
+/** "needs-access" means only a tap can bring it back, so nothing retries (AccessLostError). */
+export type LinkState = "idle" | "connecting" | "online" | "reconnecting" | "needs-access";
 
 export interface Pending {
   pattern?: string;
@@ -206,9 +207,13 @@ export class BootClient {
       this.link = link;
       if (this.state.link === "online") this.pump();
       else this.scheduleFirstStatusAsk();
-    } catch {
+    } catch (error) {
       this.opening = false;
-      if (this.wanted) this.scheduleReconnect();
+      if (error instanceof AccessLostError) {
+        if (generation === this.generation) this.update({ link: "needs-access" });
+      } else if (this.wanted) {
+        this.scheduleReconnect();
+      }
     }
   }
 

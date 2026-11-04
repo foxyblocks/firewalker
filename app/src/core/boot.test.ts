@@ -724,3 +724,31 @@ describe("the strip preview", () => {
     expect(boot.received).toEqual([]);
   });
 });
+
+describe("losing browser access", () => {
+  it("says so instead of retrying a connection that can't work", async () => {
+    const { boot, client } = setup();
+    boot.accessLost = true;
+    client.connect();
+    await settle();
+    expect(state(client).link).toBe("needs-access");
+
+    // Nothing here can fix it, so it stays put even once the boot could be reached.
+    boot.accessLost = false;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(state(client).link).toBe("needs-access");
+    expect(boot.connected).toBe(false);
+  });
+
+  it("keeps retrying an ordinary failure to connect", async () => {
+    const { boot, client } = setup();
+    boot.reachable = false;
+    client.connect();
+    await settle();
+    expect(state(client).link).toBe("reconnecting");
+
+    boot.reachable = true;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(state(client).link).toBe("online");
+  });
+});

@@ -42,7 +42,7 @@ export function Remote({
       <TargetTabs store={store} onBoots={onBoots} />
 
       <main className="scroll">
-        <Banners view={view} names={names} />
+        <Banners view={view} names={names} onRestoreAccess={() => void store.restoreAccess()} />
         <div className="section-head">
           <span className="section-label">Pattern</span>
           <SaveLine view={view} names={names} />
@@ -190,7 +190,15 @@ function CalibrateHint({ view, names }: { view: RemoteView; names: (sides: Side[
   );
 }
 
-function Banners({ view, names }: { view: RemoteView; names: (sides: Side[]) => string }) {
+function Banners({
+  view,
+  names,
+  onRestoreAccess,
+}: {
+  view: RemoteView;
+  names: (sides: Side[]) => string;
+  onRestoreAccess: () => void;
+}) {
   const banners: { tone: "bad" | "warn"; text: string }[] = [];
   if (view.outdated.length > 0) {
     banners.push({ tone: "bad", text: `${names(view.outdated)}: update this boot's firmware to use it with this app.` });
@@ -215,9 +223,17 @@ function Banners({ view, names }: { view: RemoteView; names: (sides: Side[]) => 
     const { name } = patternDisplay(view.needsUpdate.pattern);
     banners.push({ tone: "warn", text: `${names(view.needsUpdate.sides)} needs a firmware update for ${name}.` });
   }
-  if (banners.length === 0) return null;
+  if (banners.length === 0 && view.accessLost.length === 0) return null;
   return (
     <div className="banners">
+      {view.accessLost.length > 0 && (
+        <div className="banner banner-warn banner-action" role="status">
+          <span>This browser can't reach {names(view.accessLost)} since the page reloaded. Pick each boot once to get it back.</span>
+          <button type="button" className="button" onClick={onRestoreAccess}>
+            Reconnect
+          </button>
+        </div>
+      )}
       {banners.map((banner) => (
         <p key={banner.text} className={`banner banner-${banner.tone}`} role="status">
           {banner.text}

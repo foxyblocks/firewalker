@@ -7,6 +7,18 @@
  * on the iPhone and Web Bluetooth in Chrome. `fakeBoot.ts` implements it in memory.
  */
 
+/**
+ * The browser no longer lets this page reach a boot, which is what a page reload does in a
+ * browser that can't remember boots. Retrying can't fix it, because only the system picker
+ * can grant access again (`Transport.pick`, which needs a tap).
+ */
+export class AccessLostError extends Error {
+  constructor() {
+    super("The browser no longer has access to this boot");
+    this.name = "AccessLostError";
+  }
+}
+
 export interface FoundBoot {
   /** This device's handle for the boot. On iOS it only means something on this phone. */
   deviceId: string;
@@ -47,6 +59,9 @@ export interface Transport {
   stopScan(): Promise<void>;
   /** Shows the system's picker. Resolves null if the person cancels. */
   pick(): Promise<FoundBoot | null>;
-  /** Connects to a boot and subscribes to its replies. Rejects if it can't reach it. */
+  /**
+   * Connects to a boot and subscribes to its replies. Rejects if it can't reach it, with
+   * AccessLostError when trying again won't help.
+   */
   open(deviceId: string, events: LinkEvents): Promise<BootLink>;
 }

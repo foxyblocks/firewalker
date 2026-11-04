@@ -58,6 +58,8 @@ export interface RemoteView {
   /** A pattern just chosen that some boots can't run. */
   needsUpdate?: { pattern: string; sides: Side[] };
   offline: Side[];
+  /** Chosen boots this browser can't reach until they're picked again (`restoreAccess`). */
+  accessLost: Side[];
   saving: boolean;
   saveFailed: Side[];
   sensorMissing: Side[];
@@ -195,6 +197,23 @@ export class BootsStore {
 
     this.fixTarget();
     this.persist();
+    this.notify();
+  }
+
+  /**
+   * Shows the system picker to get a boot back after a browser lost access to it, so this has
+   * to run from a tap. The picked boot's name says which saved boot it is, because the browser
+   * can hand out a new handle, and the boot keeps its side and your name for it. A boot that
+   * isn't one of yours is ignored, since Boots is where new ones get labeled.
+   */
+  async restoreAccess(): Promise<void> {
+    const found = await this.transport.pick();
+    const boot = found && this.knownBoots.find((candidate) => candidate.name === found.name);
+    if (!found || !boot) return;
+    this.stopClient(boot.side);
+    boot.deviceId = found.deviceId;
+    this.persist();
+    this.startClient(boot);
     this.notify();
   }
 
@@ -347,7 +366,8 @@ export class BootsStore {
       brightness: first?.pending.brightness ?? first?.status?.brightness ?? 0,
       maxBrightness: online.length > 0 ? Math.min(...online.map(({ state }) => state.status!.maxBrightness)) : 0,
       needsUpdate: this.needsUpdate,
-      offline: sidesWhere((state) => state.link !== "online"),
+      offline: sidesWhere((state) => state.link !== "online" && state.link !== "needs-access"),
+      accessLost: sidesWhere((state) => state.link === "needs-access"),
       saving: online.some(({ state }) => state.status!.saved === false && !state.status!.saveFailed),
       saveFailed: sidesWhere((state) => state.link === "online" && state.status?.saveFailed === true),
       sensorMissing: sidesWhere((state) => state.link === "online" && state.status?.sensor === "unavailable"),

@@ -10,7 +10,8 @@ import type { LinkState } from "../core/boot";
 const STRIP_PIXELS = 26;
 
 export function LinkDot({ link }: { link?: LinkState }) {
-  const tone = link === "online" ? "good" : link ? "wait" : "none";
+  // A boot waiting on a tap isn't on its way back by itself, so it doesn't pulse.
+  const tone = link === "online" ? "good" : link && link !== "needs-access" ? "wait" : "none";
   return <span className={`dot dot-${tone}`} aria-hidden="true" />;
 }
 

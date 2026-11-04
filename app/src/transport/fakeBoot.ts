@@ -10,7 +10,7 @@
  * side and docs/remote-protocol.md.
  */
 
-import type { BootLink, FoundBoot, LinkEvents, RadioState, Transport } from "./transport";
+import { AccessLostError, type BootLink, type FoundBoot, type LinkEvents, type RadioState, type Transport } from "./transport";
 import type { Pose, StripSetting } from "../core/protocol";
 
 const STATUS_MIN_MS = 250;
@@ -57,7 +57,7 @@ export interface FakeBootOptions {
 
 export class FakeBoot {
   readonly id: string;
-  readonly deviceId: string;
+  deviceId: string;
   readonly name: string;
   readonly proto: number;
   readonly availablePatterns: string[];
@@ -66,6 +66,8 @@ export class FakeBoot {
   readonly received: string[] = [];
   /** How many `identify` blinks it has shown. */
   blinks = 0;
+  /** The browser can't reach this boot until it's picked again, as after a page reload. */
+  accessLost = false;
   /** Set false to take the boot out of range. */
   reachable = true;
   /** Ignores all commands, as a boot with a stuck radio would. */
@@ -546,11 +548,18 @@ export class FakeTransport implements Transport {
 
   async pick(): Promise<FoundBoot | null> {
     const boot = this.boots.find((candidate) => candidate.reachable && !candidate.connected);
-    return boot ? { deviceId: boot.deviceId, name: boot.name } : null;
+    if (!boot) return null;
+    // A browser that can't remember boots grants access again under a new handle.
+    if (boot.accessLost) {
+      boot.accessLost = false;
+      boot.deviceId = `${boot.deviceId}-again`;
+    }
+    return { deviceId: boot.deviceId, name: boot.name };
   }
 
   async open(deviceId: string, events: LinkEvents): Promise<BootLink> {
     const boot = this.boots.find((candidate) => candidate.deviceId === deviceId);
+    if (boot?.accessLost) throw new AccessLostError();
     if (!boot || !boot.reachable || boot.connected) throw new Error("Boot not reachable");
     boot.attach(events);
     if (this.openDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.openDelayMs));
