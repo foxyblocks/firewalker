@@ -94,6 +94,15 @@ func TestValidateRejectsConflictingFlags(t *testing.T) {
 	}
 }
 
+// Fire-trail starts from the part of the boot that's down, so a simulated tilt picks its origin.
+func TestValidateAllowsFireTrailTilt(t *testing.T) {
+	o, c := validConfig(testFireTrail)
+	c.tilt = -1
+	if err := validate(o, c); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestValidateDefaultsLayoutFromStripLength(t *testing.T) {
 	o, c := validConfig(testFlow)
 	if err := validate(o, c); err != nil {

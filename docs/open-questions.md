@@ -28,6 +28,9 @@ so check each mounted shoe:
 - **Stomp thresholds:** what does a real stomp and an ordinary step produce on a mounted
   shoe? Tune `IMU_STOMP_ACCEL_THRESHOLD`, `IMU_RELEASE_ACCEL_THRESHOLD`,
   `IMU_REFRACTORY_MS`, and `IMU_STOMP_FORCE_FULL`.
+- **Fire-trail origin:** do real stomps start from the part of the boot that's down? Each
+  stomp logs its tilt and origin over USB, so tune `FIRE_TRAIL_END_TILT` if a flat stomp reads
+  as toe or heel, or a heel strike reads as flat.
 - **Worn pose captures:** does `CALIBRATION_MAX_SPREAD_DEG` in `include/config.h` let you
   capture neutral, heel, and toe while wearing the boot, and still reject a foot rocking back
   and forth?

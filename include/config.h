@@ -215,11 +215,17 @@ constexpr uint8_t FIRE[][3] = {
 constexpr uint8_t FIRE_STOPS = sizeof(FIRE) / sizeof(FIRE[0]);
 
 // ── Fire-trail pattern: band animation ───────────────────────────────────
-// Each stomp spawns a trail: a band of FIRE_TRAIL_LEN lit pixels that travels
-// bottom -> top at one pixel per FIRE_TRAIL_STEP_MS. It "wipes in" as it emerges
-// from the bottom and "wipes out" as it slides off the top — no hold in between.
-// Stomps stack: multiple trails run at once, each behind the previous, up to
+// Each stomp spawns a trail from whichever part of the boot is down, running along both
+// sides of the foot to the opposite part: toe to heel, heel to toe, or outward from the
+// middle of each side. Its bands are FIRE_TRAIL_LEN lit pixels moving one pixel per
+// FIRE_TRAIL_STEP_MS. They "wipe in" as they emerge from the origin and "wipe out" at the far
+// end, with no hold in between. Stomps stack: multiple trails run at once, up to
 // FIRE_TRAIL_MAX (further stomps are ignored until a slot frees up).
 constexpr unsigned long FIRE_TRAIL_STEP_MS = 10;  // ms per one-pixel advance
 constexpr uint8_t       FIRE_TRAIL_LEN     = 30;  // band length in pixels (the wipe-in/out width)
 constexpr uint8_t       FIRE_TRAIL_MAX     = 12;  // max simultaneous trails on the strip
+
+// How far a stomp's tilt must be from neutral to start at the toe or heel instead of the
+// middle, where 1.0 is the boot's captured toe or heel pose. A starting point to tune on a
+// real foot (see open-questions.md). The serial log shows the tilt of each stomp.
+constexpr float         FIRE_TRAIL_END_TILT = 0.25f;
