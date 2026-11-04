@@ -81,19 +81,24 @@ describe("connecting", () => {
     expect(state(client).patterns).toEqual(["flow", "pattern-3"]);
   });
 
+  it("asks again if the pattern list never arrived", async () => {
+    const { boot, client } = setup({ patterns: ["flow", "pattern-3"] });
+    boot.ignoring = ["patterns"];
+    client.connect();
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(state(client).patterns).toEqual([]);
+
+    boot.ignoring = [];
+    client.requestStatus();
+    await settle();
+    expect(state(client).patterns).toEqual(["flow", "pattern-3"]);
+  });
+
   it("uses the pattern list the boot reports", async () => {
     const { client } = setup({ patterns: ["flow", "fire-trail", "pattern-3"] });
     client.connect();
     await settle();
     expect(state(client).patterns).toEqual(["flow", "fire-trail", "pattern-3"]);
-  });
-
-  it("falls back to flow and fire-trail on firmware without the command", async () => {
-    const { client } = setup({ firmware: "older" });
-    client.connect();
-    await settle();
-    expect(state(client).patterns).toEqual(["flow", "fire-trail"]);
-    expect(state(client).notice).toBeUndefined();
   });
 
   it("turns off debug left on from an earlier session", async () => {
@@ -273,7 +278,7 @@ describe("calibrating", () => {
     await vi.advanceTimersByTimeAsync(2100);
 
     await expect(result).resolves.toEqual({ ok: true, pose: "neutral", angleDeg: 1.56 });
-    expect(boot.received).toContain("calibrate");
+    expect(boot.received).toContain("calibrate neutral");
     expect(state(client).capture).toBeUndefined();
   });
 
@@ -281,7 +286,6 @@ describe("calibrating", () => {
     const { boot, client } = setup({ calibrated: true, neutralDeg: 1.56 });
     client.connect();
     await settle();
-    expect(state(client).supportsPoses).toBe(true);
 
     const heel = client.calibrate("heel");
     await vi.advanceTimersByTimeAsync(2100);
@@ -291,13 +295,6 @@ describe("calibrating", () => {
     const toe = client.calibrate("toe");
     await vi.advanceTimersByTimeAsync(2100);
     await expect(toe).resolves.toEqual({ ok: true, pose: "toe", angleDeg: 34.2 });
-  });
-
-  it("hides heel and toe on firmware without them", async () => {
-    const { client } = setup({ firmware: "older" });
-    client.connect();
-    await settle();
-    expect(state(client).supportsPoses).toBe(false);
   });
 
   it("reports a boot that never settled, keeping the previous calibration", async () => {
@@ -502,20 +499,13 @@ describe("debug and live tilt", () => {
     expect(state(client).motion).toBeUndefined();
   });
 
-  it("reports the planned peak reading, and goes without it on current firmware", async () => {
-    const planned = setup();
-    planned.client.connect();
+  it("includes the peak reading in motion lines", async () => {
+    const { client } = setup();
+    client.connect();
     await settle();
-    planned.client.setDebug(true);
+    client.setDebug(true);
     await vi.advanceTimersByTimeAsync(500);
-    expect(state(planned.client).motion?.accelPeak).toBeGreaterThan(0);
-
-    const current = setup({ firmware: "older" });
-    current.client.connect();
-    await settle();
-    current.client.setDebug(true);
-    await vi.advanceTimersByTimeAsync(500);
-    expect(state(current.client).motion?.accelPeak).toBeUndefined();
+    expect(state(client).motion?.accelPeak).toBeGreaterThan(0);
   });
 
   it("polls status for tilt while something is watching, then stops", async () => {
@@ -536,7 +526,7 @@ describe("debug and live tilt", () => {
 });
 
 describe("blinking a boot", () => {
-  it("uses identify on firmware that has it", async () => {
+  it("asks the boot to identify itself, leaving its pattern alone", async () => {
     const { boot, client } = setup();
     client.connect();
     await settle();
@@ -547,52 +537,4 @@ describe("blinking a boot", () => {
     expect(boot.pattern).toBe("flow");
   });
 
-  it("flips the lights off and back on otherwise, leaving them as they were", async () => {
-    const { boot, client } = setup({ firmware: "older" });
-    client.connect();
-    await settle();
-    boot.received.length = 0;
-
-    client.blink();
-    await vi.advanceTimersByTimeAsync(1500);
-    expect(boot.received).toEqual(["power off", "power on"]);
-    expect(boot.pattern).toBe("flow");
-  });
-
-  it("flips on and back off when the boot starts off", async () => {
-    const { boot, client } = setup({ firmware: "older", pattern: "off" });
-    client.connect();
-    await settle();
-    boot.received.length = 0;
-
-    client.blink();
-    await vi.advanceTimersByTimeAsync(1500);
-    expect(boot.received).toEqual(["power on", "power off"]);
-    expect(boot.pattern).toBe("off");
-  });
-});
-
-describe("the pattern On will bring back", () => {
-  it("comes from the boot when it reports one", async () => {
-    const { client } = setup({ pattern: "off", lastLit: "fire-trail" });
-    client.connect();
-    await settle();
-    expect(state(client).litPattern).toBe("fire-trail");
-  });
-
-  it("is the last lit pattern the app saw on older firmware", async () => {
-    const { client } = setup({ firmware: "older", pattern: "fire-trail" });
-    client.connect();
-    await settle();
-    client.setPower(false);
-    await settle();
-    expect(state(client).litPattern).toBe("fire-trail");
-  });
-
-  it("is unknown when older firmware is off from the start", async () => {
-    const { client } = setup({ firmware: "older", pattern: "off" });
-    client.connect();
-    await settle();
-    expect(state(client).litPattern).toBeUndefined();
-  });
 });

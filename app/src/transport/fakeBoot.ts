@@ -8,11 +8,6 @@
  * changes becomes one flash write, replies split across 20-byte notifications, and a
  * capture takes two seconds and can fail. See src/modes/final_app.cpp on the firmware
  * side and docs/remote-protocol.md.
- *
- * Two firmware generations are modeled, because the app has to work on both:
- * - "current" has `patterns`, `identify`, `proto`, `lit`, `accelPeak`, and heel and toe
- *   calibration.
- * - "older" has none of those, and only understands plain `calibrate`.
  */
 
 import type { BootLink, FoundBoot, LinkEvents, RadioState, Transport } from "./transport";
@@ -31,8 +26,9 @@ const NEUTRAL_DEAD_ZONE_DEG = 3;
 
 export interface FakeBootOptions {
   id?: string;
-  firmware?: "older" | "current";
-  /** What this boot can run. Only "current" firmware can report it. */
+  /** The protocol version it reports. Older than the app's, it should be told to update. */
+  proto?: number;
+  /** What this boot can run. */
   patterns?: string[];
   pattern?: string;
   lastLit?: string;
@@ -57,7 +53,7 @@ export class FakeBoot {
   readonly id: string;
   readonly deviceId: string;
   readonly name: string;
-  readonly firmware: "older" | "current";
+  readonly proto: number;
   readonly availablePatterns: string[];
 
   /** Every command received, for tests to inspect. */
@@ -114,7 +110,7 @@ export class FakeBoot {
     this.id = options.id ?? "3ED1";
     this.deviceId = `fake-${this.id}`;
     this.name = `Firewalker-${this.id}`;
-    this.firmware = options.firmware ?? "current";
+    this.proto = options.proto ?? 1;
     this.availablePatterns = options.patterns ?? ["flow", "fire-trail"];
     this.pattern = options.pattern ?? "flow";
     this.lastLit = options.lastLit ?? (this.pattern === "off" ? "flow" : this.pattern);
@@ -168,13 +164,11 @@ export class FakeBoot {
     const words = line.split(/\s+/);
     const verb = words[0] ?? "";
     const arg = words[1];
-    const isCurrent = this.firmware === "current";
 
     switch (verb) {
       case "status":
         return this.sendStatus();
       case "patterns":
-        if (!isCurrent) return this.ackInvalid("unknown-command");
         return this.send(JSON.stringify({ t: "patterns", list: this.availablePatterns }));
       case "pattern":
         if (!arg) return this.ackInvalid("expected-one-argument");
@@ -200,7 +194,6 @@ export class FakeBoot {
         return this.ackThenStatus("brightness");
       }
       case "calibrate":
-        if (arg && !isCurrent) return this.ackInvalid("too-many-arguments");
         if (arg && arg !== "neutral" && arg !== "heel" && arg !== "toe") {
           return this.ackInvalid("unknown-pose");
         }
@@ -211,7 +204,6 @@ export class FakeBoot {
         this.startMotion();
         return this.ackThenStatus("debug");
       case "identify":
-        if (!isCurrent) return this.ackInvalid("unknown-command");
         this.blinks++;
         return this.send(JSON.stringify({ t: "ack", cmd: "identify", ok: true }));
       default:
@@ -288,9 +280,7 @@ export class FakeBoot {
       this.send(
         this.calibrateLine(
           pose,
-          this.firmware === "current"
-            ? { state: "ok", angleDeg: angle, tilt: this.tiltAt(angle) }
-            : { state: "ok", neutralDeg: angle, tilt: 0 },
+          { state: "ok", angleDeg: angle, tilt: this.tiltAt(angle) },
         ),
       );
     }
@@ -341,8 +331,7 @@ export class FakeBoot {
   }
 
   private calibrateLine(pose: Pose, fields: Record<string, unknown>): string {
-    const withPose = this.firmware === "current" ? { pose } : {};
-    return JSON.stringify({ t: "calibrate", ...withPose, ...fields });
+    return JSON.stringify({ t: "calibrate", pose, ...fields });
   }
 
   private markChanged(): void {
@@ -376,13 +365,13 @@ export class FakeBoot {
 
   private sendStatus(): void {
     this.lastStatusAt = Date.now();
-    const planned =
-      this.firmware === "current"
-        ? { proto: 1, lit: this.lastLit, heelDeg: this.heelDeg, toeDeg: this.toeDeg }
-        : {};
     this.send(
       JSON.stringify({
         t: "status",
+        proto: this.proto,
+        lit: this.lastLit,
+        heelDeg: this.heelDeg,
+        toeDeg: this.toeDeg,
         id: this.id,
         pattern: this.pattern,
         brightness: this.brightness,
@@ -397,7 +386,6 @@ export class FakeBoot {
         saves: this.saves,
         debug: this.debug,
         ble: true,
-        ...planned,
       }),
     );
   }
@@ -416,17 +404,16 @@ export class FakeBoot {
   private sendMotion(): void {
     const angle = this.liveAngle();
     const accel = 9.81 + Math.abs(Math.sin(Date.now() / 300)) * 2;
-    const planned = this.firmware === "current" ? { accelPeak: round2(accel + 1.4) } : {};
     this.send(
       JSON.stringify({
         t: "motion",
         tilt: round2(this.tiltAt(angle)),
         angleDeg: round2(angle),
         accel: round2(accel),
+        accelPeak: round2(accel + 1.4),
         gyro: 0.03,
         stomp: false,
         strength: 0,
-        ...planned,
       }),
     );
   }

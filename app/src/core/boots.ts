@@ -12,6 +12,7 @@
  */
 
 import { BootClient, type BootState } from "./boot";
+import { PROTOCOL_VERSION } from "./protocol";
 import type { FoundBoot, Transport } from "../transport/transport";
 
 export type Side = "left" | "right";
@@ -62,6 +63,8 @@ export interface RemoteView {
   sensorMissing: Side[];
   uncalibrated: Side[];
   noAnswer: Side[];
+  /** Chosen boots whose firmware is too old for this app. */
+  outdated: Side[];
   /** True when at least one chosen boot can take a command. */
   controllable: boolean;
 }
@@ -350,6 +353,7 @@ export class BootsStore {
       sensorMissing: sidesWhere((state) => state.link === "online" && state.status?.sensor === "unavailable"),
       uncalibrated: sidesWhere((state) => state.link === "online" && state.status?.calibrated === false),
       noAnswer: sidesWhere((state) => state.notice === "no-answer"),
+      outdated: sidesWhere((state) => state.status !== undefined && (state.status.proto ?? 0) < PROTOCOL_VERSION),
       controllable: online.length > 0,
     };
   }
@@ -359,7 +363,7 @@ export class BootsStore {
 function shownPattern(state: BootState): string | undefined {
   if (state.pending.pattern !== undefined) return state.pending.pattern;
   if (state.pending.power === false) return "off";
-  if (state.pending.power === true) return state.litPattern;
+  if (state.pending.power === true) return state.status?.lit;
   return state.status?.pattern;
 }
 

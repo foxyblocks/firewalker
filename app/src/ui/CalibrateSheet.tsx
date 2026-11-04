@@ -30,10 +30,7 @@ export function CalibrateSheet({ store, onClose }: { store: BootsStore; onClose:
   // The plan is fixed when the sheet opens, so a boot dropping mid-flow can't reorder it.
   const [sides] = useState(() => store.calibrationSides());
   const multiple = sides.length > 1;
-  const steps = useMemo(
-    () => calibrationSteps(sides, (side) => store.client(side)?.getState().supportsPoses ?? false),
-    [store, sides],
-  );
+  const steps = useMemo(() => calibrationSteps(sides), [sides]);
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>({ kind: "ready" });
   const [results, setResults] = useState<Record<string, CaptureResult>>({});

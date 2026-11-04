@@ -10,8 +10,8 @@
  * This file is pure: no Bluetooth, no timers, no React. `boot.ts` builds the
  * connection behavior on top of it, and `fakeBoot.ts` speaks the same text.
  *
- * Fields marked "newer firmware" aren't on every boot yet, so they're optional and the
- * app checks for them before relying on them.
+ * The app only supports firmware speaking PROTOCOL_VERSION or newer. A boot on anything
+ * older gets a message asking you to update it, rather than a degraded experience.
  */
 
 // The Nordic UART Service UUIDs the firmware advertises and listens on.
@@ -20,9 +20,8 @@ export const BOOT_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 export const BOOT_TX = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
 export const BOOT_NAME_PREFIX = "Firewalker-";
 
-// Offered until a boot says what it has. Firmware without the `patterns` command has
-// exactly these two, so the fallback is accurate rather than a guess.
-export const DEFAULT_PATTERNS = ["flow", "fire-trail"];
+/** The oldest firmware protocol this app works with. */
+export const PROTOCOL_VERSION = 1;
 
 export type Pose = "neutral" | "heel" | "toe";
 
@@ -41,10 +40,10 @@ export interface StatusReply {
   saveFailed: boolean;
   saves: number;
   debug: boolean;
-  proto?: number; // newer firmware: which protocol this firmware speaks
-  lit?: string; // newer firmware: the pattern `power on` brings back
-  heelDeg?: number | null; // newer firmware: null until that pose is captured
-  toeDeg?: number | null; // newer firmware: null until that pose is captured
+  proto?: number; // missing on firmware too old for this app
+  lit: string; // the pattern `power on` brings back
+  heelDeg: number | null; // null until that pose is captured
+  toeDeg: number | null; // null until that pose is captured
 }
 
 export interface AckReply {
@@ -57,9 +56,8 @@ export interface AckReply {
 export interface CalibrateReply {
   t: "calibrate";
   state: "capturing" | "ok" | "failed";
-  pose?: Pose; // newer firmware: missing means neutral
-  neutralDeg?: number;
-  angleDeg?: number; // newer firmware: the angle saved for this pose
+  pose: Pose;
+  angleDeg?: number; // the angle saved for this pose, when state is "ok"
   tilt?: number;
   reason?: string;
 }
@@ -72,7 +70,7 @@ export interface MotionReply {
   gyro: number;
   stomp: boolean;
   strength: number;
-  accelPeak?: number; // newer firmware: highest acceleration since the previous line
+  accelPeak: number; // highest acceleration since the previous line
 }
 
 export interface PatternsReply {
@@ -90,9 +88,7 @@ export const commands = {
   pattern: (id: string) => `pattern ${id}`,
   power: (on: boolean) => `power ${on ? "on" : "off"}`,
   brightness: (level: number) => `brightness ${Math.round(level)}`,
-  // Plain `calibrate` means neutral on every firmware, including builds from before
-  // heel and toe existed, which reject `calibrate neutral`.
-  calibrate: (pose: Pose) => (pose === "neutral" ? "calibrate" : `calibrate ${pose}`),
+  calibrate: (pose: Pose) => `calibrate ${pose}`,
   debug: (on: boolean) => `debug ${on ? "on" : "off"}`,
   identify: () => "identify",
 };

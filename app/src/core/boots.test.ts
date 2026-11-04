@@ -246,6 +246,15 @@ describe("the pattern tiles", () => {
     expect(store.view().controllable).toBe(false);
   });
 
+  it("shows which pattern turning on will bring back, before the boot confirms", async () => {
+    const { store } = await pair({ pattern: "off", lastLit: "fire-trail" }, { pattern: "off", lastLit: "flow" });
+    store.setPower(true);
+    expect(store.view().tiles).toEqual([
+      { id: "flow", runningOn: ["right"], missingOn: [] },
+      { id: "fire-trail", runningOn: ["left"], missingOn: [] },
+    ]);
+  });
+
   it("shows a pending choice right away", async () => {
     const { store } = await pair();
     store.selectPattern("fire-trail");
@@ -341,6 +350,11 @@ describe("the save and warning summary", () => {
   it("lists the boots not calibrated yet", async () => {
     const { store } = await pair({ calibrated: true }, { calibrated: false });
     expect(store.view().uncalibrated).toEqual(["right"]);
+  });
+
+  it("names a boot whose firmware is too old for this app", async () => {
+    const { store } = await pair({}, { proto: 0 });
+    expect(store.view().outdated).toEqual(["right"]);
   });
 
   it("names a boot that didn't answer", async () => {

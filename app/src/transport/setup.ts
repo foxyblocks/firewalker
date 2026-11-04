@@ -10,7 +10,7 @@
  *   ?boot=fake&paired=1            skip Find boots with both boots already labeled
  *   &patterns=6                    how many patterns the boots have
  *   &mismatch=1                    Right lacks the last pattern
- *   &firmware=older                firmware without the newer commands
+ *   &proto=0                       firmware too old for this app
  *   &sensor=missing                Right's motion sensor is unavailable
  *   &save=fail                     Left's flash writes fail
  *   &offline=1                     Right is out of range
@@ -20,7 +20,6 @@
 import { Capacitor } from "@capacitor/core";
 import { Preferences } from "@capacitor/preferences";
 import type { KeyValueStore } from "../core/boots";
-import { DEFAULT_PATTERNS } from "../core/protocol";
 import { BleTransport } from "./ble";
 import { FakeBoot, FakeTransport } from "./fakeBoot";
 import type { Transport } from "./transport";
@@ -47,15 +46,12 @@ function memoryStorage(initial: Record<string, string> = {}): KeyValueStore {
 }
 
 function fakeSetup(params: URLSearchParams): { transport: Transport; storage: KeyValueStore } {
-  const firmware = params.get("firmware") === "older" ? "older" : "current";
-  const count = Number(params.get("patterns") ?? DEFAULT_PATTERNS.length);
-  const patterns = [
-    ...DEFAULT_PATTERNS,
-    ...Array.from({ length: Math.max(0, count - DEFAULT_PATTERNS.length) }, (_, index) => `pattern-${index + 3}`),
-  ];
+  const proto = params.get("proto") === null ? undefined : Number(params.get("proto"));
+  const extraPatterns = Math.max(0, Number(params.get("patterns") ?? 2) - 2);
+  const patterns = ["flow", "fire-trail", ...Array.from({ length: extraPatterns }, (_, index) => `pattern-${index + 3}`)];
   const left = new FakeBoot({
     id: "3ED1",
-    firmware,
+    proto,
     patterns,
     wander: true,
     calibrated: true,
@@ -64,7 +60,7 @@ function fakeSetup(params: URLSearchParams): { transport: Transport; storage: Ke
   });
   const right = new FakeBoot({
     id: "7B20",
-    firmware,
+    proto,
     patterns: params.get("mismatch") ? patterns.slice(0, -1) : patterns,
     wander: true,
     sensor: params.get("sensor") === "missing" ? "unavailable" : "ok",

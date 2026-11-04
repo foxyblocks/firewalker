@@ -191,6 +191,9 @@ function CalibrateHint({ view, names }: { view: RemoteView; names: (sides: Side[
 
 function Banners({ view, names }: { view: RemoteView; names: (sides: Side[]) => string }) {
   const banners: { tone: "bad" | "warn"; text: string }[] = [];
+  if (view.outdated.length > 0) {
+    banners.push({ tone: "bad", text: `${names(view.outdated)}: update this boot's firmware to use it with this app.` });
+  }
   if (view.saveFailed.length > 0) {
     banners.push({ tone: "bad", text: `Not saved on ${names(view.saveFailed)}. This won't survive a power cycle.` });
   }

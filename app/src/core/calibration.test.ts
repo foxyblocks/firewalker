@@ -1,10 +1,8 @@
 import { calibrationSteps, failureMessage } from "./calibration";
 
 describe("calibrationSteps", () => {
-  const allSupported = () => true;
-
   it("walks one boot through neutral, heel, and toe", () => {
-    expect(calibrationSteps(["left"], allSupported)).toEqual([
+    expect(calibrationSteps(["left"])).toEqual([
       { pose: "neutral", sides: ["left"] },
       { pose: "heel", sides: ["left"] },
       { pose: "toe", sides: ["left"] },
@@ -12,7 +10,7 @@ describe("calibrationSteps", () => {
   });
 
   it("takes neutral together on Both, then heel and toe one boot at a time", () => {
-    expect(calibrationSteps(["left", "right"], allSupported)).toEqual([
+    expect(calibrationSteps(["left", "right"])).toEqual([
       { pose: "neutral", sides: ["left", "right"] },
       { pose: "heel", sides: ["left"] },
       { pose: "toe", sides: ["left"] },
@@ -21,19 +19,6 @@ describe("calibrationSteps", () => {
     ]);
   });
 
-  it("offers only neutral on firmware without heel and toe", () => {
-    expect(calibrationSteps(["left", "right"], () => false)).toEqual([
-      { pose: "neutral", sides: ["left", "right"] },
-    ]);
-  });
-
-  it("skips heel and toe only for the boot that can't do them", () => {
-    expect(calibrationSteps(["left", "right"], (side) => side === "right")).toEqual([
-      { pose: "neutral", sides: ["left", "right"] },
-      { pose: "heel", sides: ["right"] },
-      { pose: "toe", sides: ["right"] },
-    ]);
-  });
 });
 
 describe("failureMessage", () => {

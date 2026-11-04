@@ -18,10 +18,9 @@ export interface CalibrationStep {
  * you're standing on both, then heel and toe go one boot at a time, which is steadier
  * than rocking back on both feet.
  */
-export function calibrationSteps(sides: Side[], supportsPoses: (side: Side) => boolean): CalibrationStep[] {
+export function calibrationSteps(sides: Side[]): CalibrationStep[] {
   const steps: CalibrationStep[] = [{ pose: "neutral", sides }];
   for (const side of sides) {
-    if (!supportsPoses(side)) continue;
     steps.push({ pose: "heel", sides: [side] }, { pose: "toe", sides: [side] });
   }
   return steps;

@@ -15,7 +15,6 @@
 
 import {
   commands,
-  DEFAULT_PATTERNS,
   LineSplitter,
   parseLine,
   type BootReply,
@@ -34,7 +33,6 @@ const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
 // A capture collects for two seconds, so anything past this means a lost result.
 const CAPTURE_RESULT_WAIT_MS = 4000;
-const BLINK_MS = 600;
 
 export type LinkState = "idle" | "connecting" | "online" | "reconnecting";
 
@@ -63,10 +61,6 @@ export interface BootState {
   capture?: { pose: Pose };
   /** Why the last command failed: a firmware error code, or "no-answer". */
   notice?: string;
-  /** Whether this firmware can capture heel and toe. */
-  supportsPoses: boolean;
-  /** The pattern turning on will bring back, when known. */
-  litPattern?: string;
 }
 
 // `field` ties a command to the pending value it settles. `expect` says which reply
@@ -82,7 +76,7 @@ interface Job {
 }
 
 export class BootClient {
-  private state: BootState = { link: "idle", patterns: DEFAULT_PATTERNS, pending: {}, supportsPoses: false };
+  private state: BootState = { link: "idle", patterns: [], pending: {} };
   private readonly listeners = new Set<() => void>();
   private readonly splitter = new LineSplitter();
 
@@ -311,17 +305,16 @@ export class BootClient {
       status,
       link: "online",
       notice: this.state.notice === "no-answer" ? undefined : this.state.notice,
-      supportsPoses: status.heelDeg !== undefined,
-      litPattern: status.lit ?? (status.pattern !== "off" ? status.pattern : this.state.litPattern),
       motion: status.debug ? this.state.motion : undefined,
       pending: this.settlePending(),
     });
 
+    // A reconnect may follow a firmware update, so the list is worth refreshing. An empty
+    // list means the last request went unanswered, so this also retries that. A boot whose
+    // request goes unanswered keeps the list it has.
+    if (firstSinceConnecting || this.state.patterns.length === 0) this.askForPatterns();
     if (firstSinceConnecting) {
       this.reconnectDelay = RECONNECT_MIN_MS;
-      // A boot that can't answer this keeps the list it already has, which starts as the
-      // two patterns every firmware has.
-      this.enqueue({ line: commands.patterns, expect: "patterns", quiet: true });
       // Debug stays on after a disconnect, so clean up after an earlier session.
       if (status.debug && !this.wantDebug) this.setDebug(false);
     }
@@ -461,6 +454,11 @@ export class BootClient {
     if (this.online) this.askForStatus();
   }
 
+  private askForPatterns(): void {
+    const asked = this.inFlight?.expect === "patterns" || this.queue.some((job) => job.expect === "patterns");
+    if (!asked) this.enqueue({ line: commands.patterns, expect: "patterns", quiet: true });
+  }
+
   private askForStatus(): void {
     const asked = this.inFlight?.expect === "status" || this.queue.some((job) => job.expect === "status");
     if (!asked) this.enqueue(this.statusJob());
@@ -476,23 +474,9 @@ export class BootClient {
     return () => clearInterval(timer);
   }
 
-  /**
-   * Blinks the strip so you can tell which physical boot this is. Firmware without
-   * `identify` gets a quick flip of the lights and back, which restarts the animation
-   * and costs one flash write.
-   */
+  /** Blinks the strip so you can tell which physical boot this is. It changes no settings. */
   blink(): void {
-    const status = this.state.status;
-    if (!this.online || !status) return;
-    if (status.proto !== undefined) {
-      this.enqueue({ line: commands.identify, expect: "ack" });
-      return;
-    }
-    const wasOn = status.pattern !== "off";
-    this.enqueue({ line: () => commands.power(!wasOn), expect: "ack" });
-    setTimeout(() => {
-      if (this.online) this.enqueue({ line: () => commands.power(wasOn), expect: "ack" });
-    }, BLINK_MS);
+    if (this.online) this.enqueue({ line: commands.identify, expect: "ack" });
   }
 
   // ── Calibration ────────────────────────────────────────────────────────
@@ -540,7 +524,7 @@ export class BootClient {
   private onCalibrate(reply: CalibrateReply): void {
     if (!this.capture) return;
     if (reply.state === "ok") {
-      this.finishCapture({ angleDeg: reply.angleDeg ?? reply.neutralDeg ?? 0 });
+      this.finishCapture({ angleDeg: reply.angleDeg ?? 0 });
     } else if (reply.state === "failed") {
       this.finishCapture({ reason: reply.reason ?? "failed" });
     }

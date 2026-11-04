@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import type { BootState } from "../core/boot";
 import { SIDE_NAMES, type BootsStore, type Side } from "../core/boots";
 import { patternDisplay } from "../core/patternNames";
+import { PROTOCOL_VERSION } from "../core/protocol";
 import { LinkDot, TiltStrip, Toggle } from "./parts";
 
 const TILT_REFRESH_MS = 1000;
@@ -102,13 +103,13 @@ function BootDetails({
           <Fact label="Pattern" value={status.pattern === "off" ? "Off" : patternDisplay(status.pattern).name} />
           <Fact label="Brightness" value={`${status.brightness} of ${status.maxBrightness}`} />
           <Fact label="Motion sensor" value={status.sensor === "ok" ? "OK" : "Unavailable"} tone={status.sensor === "ok" ? undefined : "bad"} />
-          <Fact {...calibrationFact(status, state.supportsPoses)} />
+          <Fact {...calibrationFact(status)} />
           <Fact label="Last capture" value={captureText(status.calibration)} />
           <Fact label="Saved" value={saveText(status)} tone={status.saveFailed ? "bad" : undefined} />
           <Fact
             label="Firmware"
-            value={status.proto !== undefined ? `Protocol ${status.proto}` : "Update this boot's firmware"}
-            tone={status.proto !== undefined ? undefined : "warn"}
+            value={(status.proto ?? 0) >= PROTOCOL_VERSION ? `Protocol ${status.proto}` : "Update this boot's firmware"}
+            tone={(status.proto ?? 0) >= PROTOCOL_VERSION ? undefined : "warn"}
           />
         </dl>
       ) : (
@@ -135,7 +136,7 @@ function BootDetails({
         {debugOn && motion && (
           <dl className="facts facts-tight">
             <Fact label="Accel" value={`${motion.accel.toFixed(2)} m/s²`} />
-            {motion.accelPeak !== undefined && <Fact label="Peak" value={`${motion.accelPeak.toFixed(2)} m/s²`} />}
+            <Fact label="Peak" value={`${motion.accelPeak.toFixed(2)} m/s²`} />
             <Fact label="Gyro" value={`${motion.gyro.toFixed(2)} rad/s`} />
             <Fact label="Angle" value={`${motion.angleDeg.toFixed(2)}°`} />
             <Fact label="Stomp strength" value={motion.strength.toFixed(2)} />
@@ -204,9 +205,8 @@ function Fact({ label, value, tone }: { label: string; value: string; tone?: "ba
 
 const degrees = (value: number | null | undefined) => (value === null || value === undefined ? "--" : `${value.toFixed(1)}°`);
 
-function calibrationFact(status: NonNullable<BootState["status"]>, supportsPoses: boolean) {
+function calibrationFact(status: NonNullable<BootState["status"]>) {
   if (!status.calibrated) return { label: "Neutral", value: "Not set", tone: "warn" as const };
-  if (!supportsPoses) return { label: "Neutral", value: `Set, ${degrees(status.neutralDeg)}` };
   return {
     label: "Heel, neutral, toe",
     value: `${degrees(status.heelDeg)}, ${degrees(status.neutralDeg)}, ${degrees(status.toeDeg)}`,

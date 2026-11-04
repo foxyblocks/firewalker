@@ -4,58 +4,43 @@ import { commands, LineSplitter, parseLine } from "./protocol";
 // change there that the app doesn't understand fails here first.
 const FIRMWARE_LINES = {
   status:
-    '{"t":"status","id":"3ED1","pattern":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.02,"calibrated":true,"neutralDeg":1.56,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true}',
+    '{"t":"status","proto":1,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true}',
   ackOk: '{"t":"ack","cmd":"brightness","ok":true}',
   ackFail: '{"t":"ack","cmd":"brightness","ok":false,"error":"out-of-range"}',
-  capturing: '{"t":"calibrate","state":"capturing"}',
-  captured: '{"t":"calibrate","state":"ok","neutralDeg":1.56,"tilt":0.00}',
-  captureFailed: '{"t":"calibrate","state":"failed","reason":"motion"}',
+  patterns: '{"t":"patterns","list":["flow","fire-trail"]}',
+  capturing: '{"t":"calibrate","pose":"heel","state":"capturing"}',
+  captured: '{"t":"calibrate","pose":"heel","state":"ok","angleDeg":-18.40,"tilt":-1.00}',
+  captureFailed: '{"t":"calibrate","pose":"heel","state":"failed","reason":"motion"}',
   motion:
-    '{"t":"motion","tilt":0.05,"angleDeg":1.42,"accel":10.18,"gyro":0.03,"stomp":false,"strength":0.00}',
+    '{"t":"motion","tilt":0.05,"angleDeg":1.42,"accel":10.18,"accelPeak":10.31,"gyro":0.03,"stomp":false,"strength":0.00}',
 };
 
 describe("parseLine", () => {
   it("reads a status line into the boot's real settings", () => {
     expect(parseLine(FIRMWARE_LINES.status)).toMatchObject({
       t: "status",
+      proto: 1,
       id: "3ED1",
-      pattern: "flow",
+      pattern: "off",
+      lit: "flow",
       brightness: 24,
       maxBrightness: 64,
       sensor: "ok",
       calibrated: true,
       neutralDeg: 1.56,
+      heelDeg: -18.4,
+      toeDeg: null,
     });
   });
 
-  it("reads acks, calibration progress, and motion lines", () => {
+  it("reads acks, patterns, calibration progress, and motion lines", () => {
     expect(parseLine(FIRMWARE_LINES.ackOk)).toEqual({ t: "ack", cmd: "brightness", ok: true });
     expect(parseLine(FIRMWARE_LINES.ackFail)).toMatchObject({ ok: false, error: "out-of-range" });
-    expect(parseLine(FIRMWARE_LINES.capturing)).toEqual({ t: "calibrate", state: "capturing" });
-    expect(parseLine(FIRMWARE_LINES.captured)).toMatchObject({ state: "ok", neutralDeg: 1.56 });
+    expect(parseLine(FIRMWARE_LINES.patterns)).toEqual({ t: "patterns", list: ["flow", "fire-trail"] });
+    expect(parseLine(FIRMWARE_LINES.capturing)).toEqual({ t: "calibrate", pose: "heel", state: "capturing" });
+    expect(parseLine(FIRMWARE_LINES.captured)).toMatchObject({ state: "ok", pose: "heel", angleDeg: -18.4 });
     expect(parseLine(FIRMWARE_LINES.captureFailed)).toMatchObject({ state: "failed", reason: "motion" });
-    expect(parseLine(FIRMWARE_LINES.motion)).toMatchObject({ t: "motion", accel: 10.18, stomp: false });
-  });
-
-  it("reads the three-pose and patterns additions", () => {
-    expect(parseLine('{"t":"patterns","list":["flow","fire-trail"]}')).toEqual({
-      t: "patterns",
-      list: ["flow", "fire-trail"],
-    });
-    expect(
-      parseLine(
-        '{"t":"status","proto":1,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true}',
-      ),
-    ).toMatchObject({ proto: 1, lit: "flow", heelDeg: -18.4, toeDeg: null });
-    expect(parseLine('{"t":"calibrate","pose":"heel","state":"ok","angleDeg":-18.40,"tilt":-1.00}')).toMatchObject({
-      pose: "heel",
-      angleDeg: -18.4,
-    });
-    expect(
-      parseLine(
-        '{"t":"motion","tilt":0.05,"angleDeg":1.42,"accel":10.18,"accelPeak":10.31,"gyro":0.03,"stomp":false,"strength":0.00}',
-      ),
-    ).toMatchObject({ accelPeak: 10.31 });
+    expect(parseLine(FIRMWARE_LINES.motion)).toMatchObject({ t: "motion", accel: 10.18, accelPeak: 10.31 });
   });
 
   it("keeps working when the firmware adds fields it doesn't know yet", () => {
@@ -105,14 +90,14 @@ describe("commands", () => {
     expect(commands.identify()).toBe("identify");
   });
 
-  it("sends plain calibrate for neutral, which every firmware understands", () => {
-    expect(commands.calibrate("neutral")).toBe("calibrate");
+  it("names the pose it's capturing", () => {
+    expect(commands.calibrate("neutral")).toBe("calibrate neutral");
     expect(commands.calibrate("heel")).toBe("calibrate heel");
     expect(commands.calibrate("toe")).toBe("calibrate toe");
   });
 
   it("keeps every command inside the 20-byte write the firmware promises", () => {
-    for (const line of [commands.pattern("fire-trail"), commands.calibrate("heel"), commands.brightness(255)]) {
+    for (const line of [commands.pattern("fire-trail"), commands.calibrate("neutral"), commands.brightness(255)]) {
       expect(new TextEncoder().encode(line).length).toBeLessThanOrEqual(20);
     }
   });

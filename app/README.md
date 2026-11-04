@@ -28,7 +28,7 @@ Open <http://localhost:5173/?boot=fake&paired=1>. These options set up a scenari
 | `paired=1` | Skips Find boots, with both boots already labeled |
 | `patterns=6` | Gives the boots more patterns |
 | `mismatch=1` | Right lacks the last pattern |
-| `firmware=older` | Firmware without the newer commands |
+| `proto=0` | Firmware too old for this app |
 | `sensor=missing` | Right's motion sensor is unavailable |
 | `save=fail` | Left's flash writes fail |
 | `offline=1` | Right is out of range |
@@ -81,8 +81,7 @@ home.
   touches the other boot.
 - **Calibrate:** do this wearing the boots. Neutral with your weight even, heel down with
   toes up, toe down with heel up, each as far as you want the full effect. Stay in the pose
-  for the two seconds after the countdown. A little wobble is fine. Heel and toe are optional,
-  and need firmware that reports `heelDeg` and `toeDeg`.
+  for the two seconds after the countdown. A little wobble is fine. Heel and toe are optional.
 - **Status:** what a boot actually reports, plus live debug numbers.
 
 ## Troubleshooting
@@ -93,7 +92,7 @@ home.
 | Chrome's picker stays empty or closes by itself | Allow Chrome under macOS Settings, Privacy & Security, Bluetooth, and keep its window in front. |
 | Reconnecting never finishes | Check the boot has power. In Chrome after a reload, add it again from Boots. |
 | "It kept moving" every time | A capture collects for two seconds and tolerates a wobble, but not rocking back and forth. Settle into the pose before the countdown ends. |
-| "Needs a firmware update" | That boot's firmware doesn't have the pattern. Flash the current build. |
+| "Update this boot's firmware" or "Needs a firmware update" | That boot's firmware is too old for this app or doesn't have that pattern. Flash the current build. |
 
 ## How it's organized
 
