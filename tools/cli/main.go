@@ -1,6 +1,7 @@
 // cli is the local bench tool for the XIAO MG24 Sense: it flashes one-off strip tests
 // and whole firmware builds to a USB-connected board, and streams what the board says
-// back, so bench work doesn't depend on the phone remote.
+// back, so bench work doesn't depend on the phone remote. With no arguments it opens the
+// TUI in internal/tui, and the subcommands here do the same jobs for scripts.
 //
 // This file is the command line: Cobra subcommands, and the flow from parsed flags to a
 // flash. The pieces it calls own the rest. internal/bench is what a test is, boards is
@@ -31,6 +32,7 @@ import (
 	"firewalker/cli/internal/link"
 	"firewalker/cli/internal/protocol"
 	"firewalker/cli/internal/theme"
+	"firewalker/cli/internal/tui"
 )
 
 // How long a boot gets to answer `status` before it's treated as not running the app.
@@ -47,7 +49,14 @@ func main() {
 	}
 }
 
-func newCommand() *cobra.Command {
+func newCommand() *cobra.Command { return newCommandWith(runTest) }
+
+// testRunner is what a bench test's subcommand does once its flags are parsed.
+type testRunner func(ctx context.Context, cmd *cobra.Command, o *bench.Options, c *bench.Config) error
+
+// newCommandWith builds the command tree around a test runner, so a test can check what
+// a command line parses to without flashing anything.
+func newCommandWith(run testRunner) *cobra.Command {
 	opts := &bench.Options{}
 	root := &cobra.Command{
 		Use: "cli", Short: "Build and run MG24 Sense strip tests on D10",
@@ -96,11 +105,20 @@ func newCommand() *cobra.Command {
 			if cfg.Test == bench.TestFireTrail && !cfg.Motion && !cmd.Flags().Changed("stomp-every") {
 				cfg.StompEvery = time.Second
 			}
-			return runTest(cmd.Context(), cmd, opts, cfg)
+			return run(cmd.Context(), cmd, opts, cfg)
 		}
 		root.AddCommand(cmd)
 	}
 	root.AddCommand(newAppCommand(opts))
+
+	// Bare `./cli` opens the TUI for a person at a terminal. Piped or scripted, there's
+	// nobody to press keys, so it prints help.
+	root.RunE = func(cmd *cobra.Command, _ []string) error {
+		if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
+			return cmd.Help()
+		}
+		return tui.Run(opts.RepoRoot)
+	}
 	return root
 }
 

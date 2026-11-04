@@ -195,3 +195,53 @@ func TestBuildFlagsGiveShortColorTestsAValidLayout(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandLineShowsOnlyWhatDiffersFromTheDefaults(t *testing.T) {
+	saved := StripLayout{Pixels: 94, Toe: 86, Heel: 48}
+	tests := []struct {
+		name   string
+		test   int
+		mutate func(*Options, *Config)
+		want   string
+	}{
+		{"simulated flow on the saved layout", TestFlow, func(o *Options, c *Config) {
+			c.Tilt, c.StompEvery = -0.5, 2*time.Second
+		}, "./cli flow --tilt=-0.5 --stomp-every 2s --brightness 16"},
+		{"motion with logs", TestFlow, func(o *Options, c *Config) {
+			c.Motion, c.LogMotion = true, true
+		}, "./cli flow --motion --log-motion --brightness 16"},
+		{"a layout edited for this test", TestFlow, func(o *Options, c *Config) {
+			o.Pixels, c.Toe = 90, 80
+		}, "./cli flow --pixels 90 --toe 80 --heel 48 --brightness 16"},
+		{"fire-trail's usual timer is the default", TestFireTrail, func(o *Options, c *Config) {
+			c.StompEvery = time.Second
+		}, "./cli fire-trail --brightness 16"},
+		{"fire-trail with its timer off has to say so", TestFireTrail, func(o *Options, c *Config) {
+			c.StompEvery = 0
+		}, "./cli fire-trail --stomp-every 0s --brightness 16"},
+		{"a color needs quoting", TestColor, func(o *Options, c *Config) {
+			c.Color, c.Lit = "#ff8000", 10
+		}, "./cli color --lit 10 --color '#ff8000' --brightness 16"},
+		{"off has nothing to set", TestOff, func(o *Options, c *Config) {}, "./cli off"},
+		{"two boots need a serial", TestFlow, func(o *Options, c *Config) {
+			o.Serial = "99C817E5"
+		}, "./cli flow --brightness 16 --serial 99C817E5"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			o, c := validConfig(test.test)
+			c.Name = TestNames[test.test]
+			o.Pixels, c.Toe, c.Heel = saved.Pixels, saved.Toe, saved.Heel
+			if !c.IsPattern() {
+				c.Toe, c.Heel = -1, -1
+			}
+			test.mutate(o, c)
+			if err := Validate(o, c); err != nil {
+				t.Fatal(err)
+			}
+			if got := CommandLine(Args(o, c, saved)); got != test.want {
+				t.Fatalf("got  %s\nwant %s", got, test.want)
+			}
+		})
+	}
+}

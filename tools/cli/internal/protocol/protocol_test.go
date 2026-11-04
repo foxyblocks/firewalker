@@ -104,3 +104,31 @@ func TestClassifyTreatsEverythingElseAsALog(t *testing.T) {
 		}
 	}
 }
+
+func TestCompletionsFollowWhatWasTyped(t *testing.T) {
+	tests := []struct {
+		typed string
+		want  []string
+	}{
+		{"pat", []string{"patterns", "pattern flow", "pattern fire-trail", "pattern off"}},
+		{"strip p", []string{"strip preview on", "strip preview off"}},
+		{"BRI", []string{"brightness "}},
+		{"nope", nil},
+	}
+	for _, test := range tests {
+		got := Completions(test.typed)
+		if len(got) != len(test.want) {
+			t.Errorf("Completions(%q) = %q, want %q", test.typed, got, test.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != test.want[i] {
+				t.Errorf("Completions(%q) = %q, want %q", test.typed, got, test.want)
+				break
+			}
+		}
+	}
+	if got := Completions(""); len(got) < 10 {
+		t.Errorf("an empty line should offer every command, got %q", got)
+	}
+}

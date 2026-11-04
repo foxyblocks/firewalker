@@ -9,7 +9,10 @@
 // log.
 package protocol
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // ExpectedProto is the newest protocol this tool knows. A boot reporting an older one
 // still works, but it's missing features, so the TUI suggests flashing the app. Proto 2
@@ -152,4 +155,33 @@ func Classify(raw string) Line {
 		return log
 	}
 	return line
+}
+
+// commands lists what a boot accepts, from the commands table in
+// docs/remote-protocol.md. A trailing space means a value comes next. The console uses
+// this for tab completion only, so a command that's missing here can still be typed.
+var commands = []string{
+	"status",
+	"patterns",
+	"pattern flow", "pattern fire-trail", "pattern off",
+	"power on", "power off",
+	"brightness ",
+	"calibrate neutral", "calibrate heel", "calibrate toe",
+	"debug on", "debug off",
+	"identify",
+	"strip leds ", "strip toe ", "strip heel ",
+	"strip preview on", "strip preview off",
+}
+
+// Completions returns the commands starting with what's been typed, ignoring case. For
+// example, "strip p" offers "strip preview on" and "strip preview off".
+func Completions(typed string) []string {
+	var matches []string
+	typed = strings.ToLower(typed)
+	for _, command := range commands {
+		if strings.HasPrefix(command, typed) {
+			matches = append(matches, command)
+		}
+	}
+	return matches
 }

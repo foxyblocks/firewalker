@@ -272,3 +272,74 @@ func bit(value bool) int {
 	}
 	return 0
 }
+
+// TestNames maps each test to its subcommand name.
+var TestNames = map[int]string{TestFlow: "flow", TestFireTrail: "fire-trail", TestColor: "color", TestOff: "off"}
+
+// Args writes a validated test as `./cli` arguments, leaving out whatever a run would
+// work out by itself. saved is the layout a run would find on its own, so a test on the
+// boot's own layout stays short and only an edited layout spells out its flags. This is
+// what the TUI previews, and main_test.go checks that it parses back to the same test.
+func Args(o *Options, c *Config, saved StripLayout) []string {
+	args := []string{c.Name}
+	if c.IsPattern() {
+		if c.Motion {
+			args = append(args, "--motion")
+		}
+		if c.LogMotion {
+			args = append(args, "--log-motion")
+		}
+		if c.Tilt != 0 {
+			// The = keeps a negative value from reading as a flag of its own.
+			args = append(args, "--tilt="+strconv.FormatFloat(c.Tilt, 'f', -1, 64))
+		}
+		if !c.Motion && c.StompEvery != defaultStompEvery(c.Test) {
+			args = append(args, "--stomp-every", c.StompEvery.String())
+		}
+		if o.Pixels != saved.Pixels || c.Toe != saved.Toe || c.Heel != saved.Heel {
+			args = append(args, "--pixels", strconv.Itoa(o.Pixels), "--toe", strconv.Itoa(c.Toe), "--heel", strconv.Itoa(c.Heel))
+		}
+	} else if o.Pixels != saved.Pixels {
+		args = append(args, "--pixels", strconv.Itoa(o.Pixels))
+	}
+	if c.Test == TestColor {
+		if c.Lit != o.Pixels {
+			args = append(args, "--lit", strconv.Itoa(c.Lit))
+		}
+		if strings.ToLower(c.Color) != "cycle" {
+			args = append(args, "--color", c.Color)
+		}
+		if c.Interval != 500*time.Millisecond {
+			args = append(args, "--interval", c.Interval.String())
+		}
+	}
+	if c.Test != TestOff || o.Brightness != 16 {
+		args = append(args, "--brightness", strconv.Itoa(o.Brightness))
+	}
+	if o.Serial != "" {
+		args = append(args, "--serial", o.Serial)
+	}
+	return args
+}
+
+// defaultStompEvery is the timer a test gets without motion when nothing says otherwise.
+// Fire trails only appear on a stomp, so a fire-trail test with no timer would stay dark.
+func defaultStompEvery(test int) time.Duration {
+	if test == TestFireTrail {
+		return time.Second
+	}
+	return 0
+}
+
+// CommandLine writes arguments as a command to paste, quoting only what a shell would
+// otherwise read differently, such as the # in a color.
+func CommandLine(args []string) string {
+	parts := []string{"./cli"}
+	for _, arg := range args {
+		if strings.ContainsAny(arg, "#'\" $&;|<>*?()") {
+			arg = "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
+		}
+		parts = append(parts, arg)
+	}
+	return strings.Join(parts, " ")
+}
