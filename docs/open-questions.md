@@ -13,7 +13,7 @@ decided deliberately. Once one is resolved, move the decision into `wiring.md`,
   boot starts from the uncut bench strip in `include/config.h` (160 pixels, toe 52, heel 132),
   which the `cli` tool also reads.
 - Do the animation speeds still look right? `FLOW_TRAIL_SPEED_PXPS`, `FLOW_TRAIL_LEN`,
-  `FIRE_TRAIL_STEP_MS`, and `FIRE_TRAIL_LEN` count in pixels and were tuned on a far less
+  `FIRE_TRAIL_SPEED_PXPS`, and `FIRE_TRAIL_LEN` count in pixels and were tuned on a far less
   dense strip, so the same values now cover a much shorter physical distance.
 
 ## Mount and motion calibration
@@ -29,7 +29,7 @@ so check each mounted shoe:
   shoe? Tune `IMU_STOMP_ACCEL_THRESHOLD`, `IMU_RELEASE_ACCEL_THRESHOLD`,
   `IMU_REFRACTORY_MS`, and `IMU_STOMP_FORCE_FULL`.
 - **Fire-trail origin:** do real stomps start from the part of the boot that's down? Each
-  stomp logs its tilt and origin over USB, so tune `FIRE_TRAIL_END_TILT` if a flat stomp reads
+  stomp logs its angle and origin over USB, so tune `FIRE_TRAIL_FLAT_DEG` if a flat stomp reads
   as toe or heel, or a heel strike reads as flat.
 - **Worn pose captures:** does `CALIBRATION_MAX_SPREAD_DEG` in `include/config.h` let you
   capture neutral, heel, and toe while wearing the boot, and still reject a foot rocking back

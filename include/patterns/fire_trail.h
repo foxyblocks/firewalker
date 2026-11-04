@@ -33,13 +33,13 @@ class FireTrailPattern : public Pattern {
   uint32_t      trailColor_[FIRE_TRAIL_LEN];  // fire gradient head→tail, built once
   Trail         trails_[FIRE_TRAIL_MAX] = {};
   uint8_t       activeCount_ = 0;
-  unsigned long lastStepMs_  = 0;
+  float         pixelsDue_   = 0.0f;  // steps owed but not yet taken, always under one pixel between frames
   bool          built_       = false;
 
   void buildGradient();
-  void spawn(float tilt);  // start a trail from the part of the boot that's down (ignored if all slots busy)
-  void render();           // redraw all active bands onto the strip
-  void advanceIfDue();     // step heads at one pixel per FIRE_TRAIL_STEP_MS, retire done
+  void spawn(float tiltDeg);  // start a trail from the part of the boot that's down (ignored if all slots busy)
+  void render();              // redraw all active bands onto the strip
+  void advanceIfDue(unsigned long dt);  // step heads at FIRE_TRAIL_SPEED_PXPS, retire done
 };
 
 }  // namespace Firewalker

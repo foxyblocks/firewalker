@@ -25,14 +25,14 @@ namespace Firewalker {
 // The part of the boot a trail starts from.
 enum class TrailOrigin : uint8_t { Heel, Middle, Toe };
 
-// Picks the origin from fused tilt (-1 heel pose, 0 neutral, +1 toe pose). Tilt at or past
-// endTilt in either direction picks that end, and anything between counts as flat. A foot
-// is rarely exactly level when it lands, so flat needs more room than the motion service's
-// small dead zone.
-constexpr TrailOrigin trailOriginFromTilt(float tilt, float endTilt) {
-  return (tilt >= endTilt) ? TrailOrigin::Toe
-         : (tilt <= -endTilt) ? TrailOrigin::Heel
-                              : TrailOrigin::Middle;
+// Picks the origin from the stomp's angle in degrees from the neutral pose, with toe-down
+// positive (degreesFromNeutral). Anything within flatDeg either way counts as flat, because
+// a foot is rarely level when it lands, and further than that picks the end that's down.
+// Example: with a flatDeg of 8, an angle of -6 is flat and -9 is heel down.
+constexpr TrailOrigin trailOriginFromTilt(float tiltDeg, float flatDeg) {
+  return (tiltDeg > flatDeg) ? TrailOrigin::Toe
+         : (tiltDeg < -flatDeg) ? TrailOrigin::Heel
+                                : TrailOrigin::Middle;
 }
 
 // One band's route around the ring.

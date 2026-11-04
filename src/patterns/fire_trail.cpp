@@ -53,21 +53,21 @@ static const __FlashStringHelper* originName(TrailOrigin origin) {
 
 // Starts a trail from whichever part of the boot is down at this stomp. Later tilt doesn't
 // affect it, so trails from different stomps can run in different directions at once. The
-// log line shows the tilt behind each choice, for tuning FIRE_TRAIL_END_TILT on a real foot.
-void FireTrailPattern::spawn(float tilt) {
+// log line shows the angle behind each choice, for tuning FIRE_TRAIL_FLAT_DEG on a real foot.
+void FireTrailPattern::spawn(float tiltDeg) {
   for (uint8_t i = 0; i < FIRE_TRAIL_MAX; i++) {
     if (!trails_[i].active) {
-      if (activeCount_ == 0) lastStepMs_ = millis();
-      const TrailOrigin origin = trailOriginFromTilt(tilt, FIRE_TRAIL_END_TILT);
+      if (activeCount_ == 0) pixelsDue_ = 0.0f;
+      const TrailOrigin origin = trailOriginFromTilt(tiltDeg, FIRE_TRAIL_FLAT_DEG);
       trails_[i].path = trailPath(stripLayout(), origin);
       trails_[i].head = 0;
       trails_[i].active = true;
       activeCount_++;
       Serial.print(F("[firewalker] stomp -> trail from "));
       Serial.print(originName(origin));
-      Serial.print(F(" (tilt "));
-      Serial.print(tilt, 2);
-      Serial.print(F(", "));
+      Serial.print(F(" ("));
+      Serial.print(tiltDeg, 1);
+      Serial.print(F(" deg, "));
       Serial.print(activeCount_);
       Serial.println(F(" active)"));
       return;
@@ -98,19 +98,20 @@ void FireTrailPattern::render() {
   strip.show();
 }
 
-// Steps by however many pixels are due, so trail speed stays FIRE_TRAIL_STEP_MS
-// per pixel even when a frame takes longer than one step to send.
-void FireTrailPattern::advanceIfDue() {
+// Steps by however many whole pixels are due and carries the fraction to the next frame, so
+// trails hold FIRE_TRAIL_SPEED_PXPS at any speed or frame rate. Example: at 200 pixels per
+// second, a 16 ms frame is due 3.2 pixels, so it steps 3 and carries 0.2.
+void FireTrailPattern::advanceIfDue(unsigned long dt) {
   if (activeCount_ == 0) return;
 
-  const unsigned long now = millis();
-  const unsigned long steps = (now - lastStepMs_) / FIRE_TRAIL_STEP_MS;
+  pixelsDue_ += FIRE_TRAIL_SPEED_PXPS * (float)dt / 1000.0f;
+  const int16_t steps = (int16_t)pixelsDue_;
   if (steps == 0) return;
 
-  lastStepMs_ += steps * FIRE_TRAIL_STEP_MS;
+  pixelsDue_ -= (float)steps;
   for (uint8_t i = 0; i < FIRE_TRAIL_MAX; i++) {
     if (!trails_[i].active) continue;
-    trails_[i].head += (int16_t)steps;
+    trails_[i].head += steps;
     // Done once the tail has passed the far end of the longest route.
     const int16_t tailSteps = trails_[i].head - (FIRE_TRAIL_LEN - 1);
     if (tailSteps > (int16_t)trails_[i].path.longest) {
@@ -123,10 +124,10 @@ void FireTrailPattern::advanceIfDue() {
 
 void FireTrailPattern::update(const PatternInput& in) {
   if (in.stomp) {
-    spawn(in.tiltFwd);
+    spawn(in.tiltDeg);
     render();
   }
-  advanceIfDue();
+  advanceIfDue(in.dt);
 }
 
 }  // namespace Firewalker

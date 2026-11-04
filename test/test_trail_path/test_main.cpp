@@ -12,7 +12,7 @@
 
 using namespace Firewalker;
 
-static constexpr float END_TILT = 0.25f;
+static constexpr float FLAT_DEG = 8.0f;
 static constexpr StripLayout BENCH = {160, 52, 132};
 static constexpr StripLayout MIRRORED = {160, 132, 52};
 static constexpr StripLayout UNEVEN = {110, 40, 100};  // 60 steps one way, 50 the other
@@ -26,23 +26,25 @@ static uint16_t lastPixel(const TrailFront& front, uint16_t count) {
 
 // ── picking the origin from tilt ──────────────────────────────────────────
 
-static void test_full_tilt_picks_the_end_that_is_down() {
-  TEST_ASSERT_TRUE(trailOriginFromTilt(1.0f, END_TILT) == TrailOrigin::Toe);
-  TEST_ASSERT_TRUE(trailOriginFromTilt(-1.0f, END_TILT) == TrailOrigin::Heel);
+static void test_a_big_tilt_picks_the_end_that_is_down() {
+  TEST_ASSERT_TRUE(trailOriginFromTilt(30.0f, FLAT_DEG) == TrailOrigin::Toe);
+  TEST_ASSERT_TRUE(trailOriginFromTilt(-30.0f, FLAT_DEG) == TrailOrigin::Heel);
 }
 
 static void test_level_picks_the_middle() {
-  TEST_ASSERT_TRUE(trailOriginFromTilt(0.0f, END_TILT) == TrailOrigin::Middle);
+  TEST_ASSERT_TRUE(trailOriginFromTilt(0.0f, FLAT_DEG) == TrailOrigin::Middle);
 }
 
-static void test_a_slight_tilt_still_counts_as_flat() {
-  TEST_ASSERT_TRUE(trailOriginFromTilt(0.24f, END_TILT) == TrailOrigin::Middle);
-  TEST_ASSERT_TRUE(trailOriginFromTilt(-0.24f, END_TILT) == TrailOrigin::Middle);
+static void test_the_whole_tolerance_counts_as_flat() {
+  TEST_ASSERT_TRUE(trailOriginFromTilt(7.9f, FLAT_DEG) == TrailOrigin::Middle);
+  TEST_ASSERT_TRUE(trailOriginFromTilt(-7.9f, FLAT_DEG) == TrailOrigin::Middle);
+  TEST_ASSERT_TRUE(trailOriginFromTilt(8.0f, FLAT_DEG) == TrailOrigin::Middle);
+  TEST_ASSERT_TRUE(trailOriginFromTilt(-8.0f, FLAT_DEG) == TrailOrigin::Middle);
 }
 
-static void test_reaching_the_threshold_picks_that_end() {
-  TEST_ASSERT_TRUE(trailOriginFromTilt(0.25f, END_TILT) == TrailOrigin::Toe);
-  TEST_ASSERT_TRUE(trailOriginFromTilt(-0.25f, END_TILT) == TrailOrigin::Heel);
+static void test_just_past_the_tolerance_picks_that_end() {
+  TEST_ASSERT_TRUE(trailOriginFromTilt(8.1f, FLAT_DEG) == TrailOrigin::Toe);
+  TEST_ASSERT_TRUE(trailOriginFromTilt(-8.1f, FLAT_DEG) == TrailOrigin::Heel);
 }
 
 // ── toe down and heel down ────────────────────────────────────────────────
@@ -151,10 +153,10 @@ static void test_every_origin_covers_every_pixel() {
 
 int main(int, char**) {
   UNITY_BEGIN();
-  RUN_TEST(test_full_tilt_picks_the_end_that_is_down);
+  RUN_TEST(test_a_big_tilt_picks_the_end_that_is_down);
   RUN_TEST(test_level_picks_the_middle);
-  RUN_TEST(test_a_slight_tilt_still_counts_as_flat);
-  RUN_TEST(test_reaching_the_threshold_picks_that_end);
+  RUN_TEST(test_the_whole_tolerance_counts_as_flat);
+  RUN_TEST(test_just_past_the_tolerance_picks_that_end);
   RUN_TEST(test_toe_down_runs_both_sides_from_toe_to_heel);
   RUN_TEST(test_heel_down_runs_both_sides_from_heel_to_toe);
   RUN_TEST(test_flat_starts_halfway_along_each_side);
