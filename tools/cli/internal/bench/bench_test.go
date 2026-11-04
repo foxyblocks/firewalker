@@ -24,7 +24,11 @@ func TestValidateRejectsConflictingFlags(t *testing.T) {
 		{"logs without motion", func(_ *Options, c *Config) { c.LogMotion = true }},
 		{"logs with no upload", func(o *Options, c *Config) { c.Motion, c.LogMotion, o.BuildOnly = true, true, true }},
 		{"both port and serial", func(o *Options, _ *Config) { o.Port, o.Serial = "a", "b" }},
-		{"toe past heel", func(_ *Options, c *Config) { c.Toe, c.Heel = 100, 50 }},
+		{"toe and heel on one pixel", func(_ *Options, c *Config) { c.Toe, c.Heel = 50, 50 }},
+		{"heel past the end", func(_ *Options, c *Config) { c.Toe, c.Heel = 50, 160 }},
+		{"toe past the end", func(_ *Options, c *Config) { c.Toe, c.Heel = 160, 50 }},
+		{"negative toe", func(_ *Options, c *Config) { c.Toe, c.Heel = -5, 50 }},
+		{"debug with no upload", func(o *Options, _ *Config) { o.Debug, o.BuildOnly = true, true }},
 		{"tilt out of range", func(_ *Options, c *Config) { c.Tilt = 2 }},
 	}
 	for _, test := range tests {
@@ -45,6 +49,71 @@ func TestValidateDefaultsLayoutFromStripLength(t *testing.T) {
 	}
 	if c.Toe != 52 || c.Heel != 132 {
 		t.Fatalf("got toe=%d heel=%d, want the 160-pixel layout", c.Toe, c.Heel)
+	}
+}
+
+// A mirrored boot runs the ring the other way around, so the heel can come first. A real
+// boot is set up this way: 94 LEDs, toe 86, heel 48. Firmware's stripLayoutValid has the
+// same rule.
+func TestValidateAcceptsToeAndHeelInEitherOrder(t *testing.T) {
+	o, c := validConfig(TestFlow)
+	o.Pixels, c.Toe, c.Heel = 94, 86, 48
+	if err := Validate(o, c); err != nil {
+		t.Fatal(err)
+	}
+	flags := BuildFlags(o, c)
+	for _, want := range []string{"-DFIREWALKER_LED_COUNT=94", "-DFIREWALKER_STRIP_TOE_INDEX=86", "-DFIREWALKER_STRIP_HEEL_INDEX=48"} {
+		if !slices.Contains(flags, want) {
+			t.Errorf("missing %s in %v", want, flags)
+		}
+	}
+}
+
+// CheckInputs runs before anything talks to a board, when the strip length may not be
+// known yet, so it can't depend on it. It still catches a bad flag early.
+func TestCheckInputsCatchesBadFlagsBeforeTheStripLengthIsKnown(t *testing.T) {
+	o, c := validConfig(TestFlow)
+	o.Pixels = 0
+	if err := CheckInputs(o, c); err != nil {
+		t.Fatalf("a missing strip length isn't an input problem: %v", err)
+	}
+	c.Motion, c.Tilt = true, 0.5
+	if err := CheckInputs(o, c); err == nil {
+		t.Fatal("expected motion plus a simulated tilt to fail")
+	}
+}
+
+func TestPickLayoutPrefersTheBootThenItsMemoryThenConfig(t *testing.T) {
+	config := StripLayout{Pixels: 160, Toe: 52, Heel: 132}
+	saved := StripLayout{Pixels: 94, Toe: 86, Heel: 48}
+	remembered := StripLayout{Pixels: 110, Toe: 36, Heel: 91}
+	tests := []struct {
+		name       string
+		choices    LayoutChoices
+		want       StripLayout
+		wantSource LayoutSource
+	}{
+		{"the boot's reply wins", LayoutChoices{Boot: &saved, Remembered: &remembered, Config: config}, saved, SourceBoot},
+		{"a board that didn't answer uses what it last said", LayoutChoices{Remembered: &remembered, Config: config}, remembered, SourceRemembered},
+		{"a board never seen before falls back to config.h", LayoutChoices{Config: config}, config, SourceConfig},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := PickLayout(test.choices)
+			if got.Layout != test.want || got.Source != test.wantSource {
+				t.Fatalf("got %+v, want %+v from %v", got, test.want, test.wantSource)
+			}
+		})
+	}
+}
+
+func TestApplyLayoutKeepsExplicitToeAndHeel(t *testing.T) {
+	o, c := validConfig(TestFlow)
+	o.Pixels = 0
+	c.Toe = 10
+	ApplyLayout(o, c, StripLayout{Pixels: 94, Toe: 86, Heel: 48})
+	if o.Pixels != 94 || c.Toe != 10 || c.Heel != 48 {
+		t.Fatalf("got pixels=%d toe=%d heel=%d", o.Pixels, c.Toe, c.Heel)
 	}
 }
 
