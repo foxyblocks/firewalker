@@ -37,16 +37,25 @@ describe("parseLine", () => {
     expect(parseLine(FIRMWARE_LINES.motion)).toMatchObject({ t: "motion", accel: 10.18, stomp: false });
   });
 
-  it("reads the additions planned for the firmware", () => {
+  it("reads the three-pose and patterns additions", () => {
     expect(parseLine('{"t":"patterns","list":["flow","fire-trail"]}')).toEqual({
       t: "patterns",
       list: ["flow", "fire-trail"],
     });
-    const withPoses = FIRMWARE_LINES.status.replace(
-      '"ble":true',
-      '"ble":true,"proto":1,"lit":"fire-trail","heelDeg":-18.4,"toeDeg":null',
-    );
-    expect(parseLine(withPoses)).toMatchObject({ proto: 1, lit: "fire-trail", heelDeg: -18.4, toeDeg: null });
+    expect(
+      parseLine(
+        '{"t":"status","proto":1,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true}',
+      ),
+    ).toMatchObject({ proto: 1, lit: "flow", heelDeg: -18.4, toeDeg: null });
+    expect(parseLine('{"t":"calibrate","pose":"heel","state":"ok","angleDeg":-18.40,"tilt":-1.00}')).toMatchObject({
+      pose: "heel",
+      angleDeg: -18.4,
+    });
+    expect(
+      parseLine(
+        '{"t":"motion","tilt":0.05,"angleDeg":1.42,"accel":10.18,"accelPeak":10.31,"gyro":0.03,"stomp":false,"strength":0.00}',
+      ),
+    ).toMatchObject({ accelPeak: 10.31 });
   });
 
   it("keeps working when the firmware adds fields it doesn't know yet", () => {

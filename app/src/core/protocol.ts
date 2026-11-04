@@ -10,8 +10,8 @@
  * This file is pure: no Bluetooth, no timers, no React. `boot.ts` builds the
  * connection behavior on top of it, and `fakeBoot.ts` speaks the same text.
  *
- * Fields marked "planned" are additions agreed with the firmware but not on every
- * boot yet, so they're optional and the app checks for them before relying on them.
+ * Fields marked "newer firmware" aren't on every boot yet, so they're optional and the
+ * app checks for them before relying on them.
  */
 
 // The Nordic UART Service UUIDs the firmware advertises and listens on.
@@ -41,10 +41,10 @@ export interface StatusReply {
   saveFailed: boolean;
   saves: number;
   debug: boolean;
-  proto?: number; // planned: which protocol this firmware speaks
-  lit?: string; // planned: the pattern `power on` brings back
-  heelDeg?: number | null; // planned: null until that pose is captured
-  toeDeg?: number | null; // planned: null until that pose is captured
+  proto?: number; // newer firmware: which protocol this firmware speaks
+  lit?: string; // newer firmware: the pattern `power on` brings back
+  heelDeg?: number | null; // newer firmware: null until that pose is captured
+  toeDeg?: number | null; // newer firmware: null until that pose is captured
 }
 
 export interface AckReply {
@@ -57,9 +57,9 @@ export interface AckReply {
 export interface CalibrateReply {
   t: "calibrate";
   state: "capturing" | "ok" | "failed";
-  pose?: Pose; // planned: missing means neutral
+  pose?: Pose; // newer firmware: missing means neutral
   neutralDeg?: number;
-  angleDeg?: number; // planned: the captured angle for heel and toe
+  angleDeg?: number; // newer firmware: the angle saved for this pose
   tilt?: number;
   reason?: string;
 }
@@ -72,7 +72,7 @@ export interface MotionReply {
   gyro: number;
   stomp: boolean;
   strength: number;
-  accelPeak?: number; // planned: highest acceleration since the previous line
+  accelPeak?: number; // newer firmware: highest acceleration since the previous line
 }
 
 export interface PatternsReply {

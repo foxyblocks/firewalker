@@ -1,0 +1,495 @@
+/**
+ * A pretend boot in memory that speaks the real text protocol, failures included. It
+ * stands in for hardware in the tests, in the iOS Simulator (which has no Bluetooth),
+ * and in Chrome with `?boot=fake`.
+ *
+ * It mirrors the firmware's behavior rather than just its message formats, because
+ * that's where the app's logic gets tested: status lines are rate limited, a burst of
+ * changes becomes one flash write, replies split across 20-byte notifications, and a
+ * capture takes a second and can fail. See src/modes/final_app.cpp on the firmware
+ * side and docs/remote-protocol.md.
+ *
+ * Two firmware generations are modeled, because the app has to work on both:
+ * - "current" is what the migration PR ships today.
+ * - "planned" adds `patterns`, `identify`, `proto`, `lit`, `accelPeak`, and heel and
+ *   toe calibration, as agreed with the firmware.
+ */
+
+import type { BootLink, FoundBoot, LinkEvents, RadioState, Transport } from "./transport";
+import type { Pose } from "../core/protocol";
+
+const STATUS_MIN_MS = 250;
+const MOTION_MS = 200;
+const SAVE_QUIET_MS = 1000;
+const SAVE_MAX_MS = 5000;
+const CAPTURE_MS = 1000;
+const FIRST_SAMPLE_MS = 20;
+const REPLY_LATENCY_MS = 10;
+const DEFAULT_FULL_TILT_DEG = 30;
+const MAX_NEUTRAL_DEG = 45;
+const MIN_POSE_RANGE_DEG = 10;
+const NEUTRAL_DEAD_ZONE_DEG = 3;
+
+export interface FakeBootOptions {
+  id?: string;
+  firmware?: "current" | "planned";
+  /** What this boot can run. Only "planned" firmware can report it. */
+  patterns?: string[];
+  pattern?: string;
+  lastLit?: string;
+  brightness?: number;
+  maxBrightness?: number;
+  sensor?: "ok" | "unavailable";
+  calibrated?: boolean;
+  neutralDeg?: number;
+  heelDeg?: number | null;
+  toeDeg?: number | null;
+  debug?: boolean;
+  saveFails?: boolean;
+  /** Angles a capture reads when nothing has set one, so demos give sensible results. */
+  poseAngles?: Record<Pose, number>;
+  /** Bytes per Bluetooth notification. The firmware's default MTU allows 20. */
+  notificationBytes?: number;
+  /** Rocks the boot slowly, so tilt visibly moves in demos. */
+  wander?: boolean;
+}
+
+export class FakeBoot {
+  readonly id: string;
+  readonly deviceId: string;
+  readonly name: string;
+  readonly firmware: "current" | "planned";
+  readonly availablePatterns: string[];
+
+  /** Every command received, for tests to inspect. */
+  readonly received: string[] = [];
+  /** How many `identify` blinks it has shown. */
+  blinks = 0;
+  /** Set false to take the boot out of range. */
+  reachable = true;
+  /** Ignores all commands, as a boot with a stuck radio would. */
+  unresponsive = false;
+  /** Delays every reply, to hold a command in flight. */
+  replyDelayMs = REPLY_LATENCY_MS;
+  /** Skips the status line sent on subscribe. */
+  silentOnSubscribe = false;
+  /** Holds the boot still at this angle, overriding `poseAngles`. */
+  angleDeg: number | null = null;
+  /** The next capture fails the moment it gets a sample. */
+  moving = false;
+  /** The next capture ends with no `calibrate` line, leaving only the status field. */
+  silentCaptureResult = false;
+
+  pattern: string;
+  lastLit: string;
+  brightness: number;
+  readonly maxBrightness: number;
+  sensor: "ok" | "unavailable";
+  calibrated: boolean;
+  neutralDeg: number;
+  heelDeg: number | null;
+  toeDeg: number | null;
+  debug: boolean;
+  saveFails: boolean;
+  saves = 0;
+
+  private events: LinkEvents | null = null;
+  private readonly notificationBytes: number;
+  private readonly poseAngles: Record<Pose, number>;
+  private readonly wander: boolean;
+  private calibration = "idle";
+  private capturing = false;
+  private saved = true;
+  private saveFailed = false;
+  private lastStatusAt = -Infinity;
+  private firstUnsavedAt = 0;
+  private statusTimer: ReturnType<typeof setTimeout> | null = null;
+  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private motionTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(options: FakeBootOptions = {}) {
+    this.id = options.id ?? "3ED1";
+    this.deviceId = `fake-${this.id}`;
+    this.name = `Firewalker-${this.id}`;
+    this.firmware = options.firmware ?? "planned";
+    this.availablePatterns = options.patterns ?? ["flow", "fire-trail"];
+    this.pattern = options.pattern ?? "flow";
+    this.lastLit = options.lastLit ?? (this.pattern === "off" ? "flow" : this.pattern);
+    this.brightness = options.brightness ?? 24;
+    this.maxBrightness = options.maxBrightness ?? 64;
+    this.sensor = options.sensor ?? "ok";
+    this.calibrated = options.calibrated ?? false;
+    this.neutralDeg = options.neutralDeg ?? 0;
+    this.heelDeg = options.heelDeg ?? null;
+    this.toeDeg = options.toeDeg ?? null;
+    this.debug = options.debug ?? false;
+    this.saveFails = options.saveFails ?? false;
+    this.notificationBytes = options.notificationBytes ?? 20;
+    this.poseAngles = options.poseAngles ?? { neutral: 1.56, heel: -18.4, toe: 34.2 };
+    this.wander = options.wander ?? false;
+  }
+
+  get connected(): boolean {
+    return this.events !== null;
+  }
+
+  /** Connects a client. A boot holds one connection at a time. */
+  attach(events: LinkEvents): void {
+    this.events = events;
+    this.startMotion();
+    if (!this.silentOnSubscribe) this.queueStatus();
+  }
+
+  /** Ends the connection from the phone's side. The boot keeps running. */
+  detach(): void {
+    this.events = null;
+    this.stopMotion();
+    if (this.statusTimer) clearTimeout(this.statusTimer);
+    this.statusTimer = null;
+  }
+
+  /** Ends the connection from the boot's side, as going out of range would. */
+  dropLink(): void {
+    const events = this.events;
+    this.detach();
+    events?.onClosed();
+  }
+
+  /** Handles one command, the way the firmware's handleCommand does. */
+  receive(rawLine: string): void {
+    const line = rawLine.trim();
+    this.received.push(line);
+    if (this.unresponsive) return;
+
+    const words = line.split(/\s+/);
+    const verb = words[0] ?? "";
+    const arg = words[1];
+    const planned = this.firmware === "planned";
+
+    switch (verb) {
+      case "status":
+        return this.sendStatus();
+      case "patterns":
+        if (!planned) return this.ackInvalid("unknown-command");
+        return this.send(JSON.stringify({ t: "patterns", list: this.availablePatterns }));
+      case "pattern":
+        if (!arg) return this.ackInvalid("expected-one-argument");
+        if (arg !== "off" && !this.availablePatterns.includes(arg)) {
+          return this.ackInvalid("unknown-pattern");
+        }
+        this.select(arg);
+        return this.ackThenStatus("pattern");
+      case "power":
+        if (arg !== "on" && arg !== "off") return this.ackInvalid("expected-on-or-off");
+        this.select(arg === "on" ? this.lastLit : "off");
+        return this.ackThenStatus("power");
+      case "brightness": {
+        const level = Number(arg);
+        if (!Number.isInteger(level) || level < 0 || level > 255) {
+          return this.ackInvalid("expected-0-to-255");
+        }
+        if (level < 1 || level > this.maxBrightness) {
+          return this.send(JSON.stringify({ t: "ack", cmd: "brightness", ok: false, error: "out-of-range" }));
+        }
+        this.brightness = level;
+        this.markChanged();
+        return this.ackThenStatus("brightness");
+      }
+      case "calibrate":
+        if (arg && !planned) return this.ackInvalid("too-many-arguments");
+        if (arg && arg !== "neutral" && arg !== "heel" && arg !== "toe") {
+          return this.ackInvalid("unknown-pose");
+        }
+        return this.startCapture((arg as Pose | undefined) ?? "neutral");
+      case "debug":
+        if (arg !== "on" && arg !== "off") return this.ackInvalid("expected-on-or-off");
+        this.debug = arg === "on";
+        this.startMotion();
+        return this.ackThenStatus("debug");
+      case "identify":
+        if (!planned) return this.ackInvalid("unknown-command");
+        this.blinks++;
+        return this.send(JSON.stringify({ t: "ack", cmd: "identify", ok: true }));
+      default:
+        return this.ackInvalid("unknown-command");
+    }
+  }
+
+  private select(pattern: string): void {
+    if (pattern !== "off") this.lastLit = pattern;
+    this.pattern = pattern;
+    this.markChanged();
+  }
+
+  private ackThenStatus(cmd: string): void {
+    this.send(JSON.stringify({ t: "ack", cmd, ok: true }));
+    this.queueStatus();
+  }
+
+  private ackInvalid(error: string): void {
+    this.send(JSON.stringify({ t: "ack", cmd: "unknown", ok: false, error }));
+  }
+
+  private currentAngle(pose: Pose): number {
+    if (this.angleDeg !== null) return this.angleDeg;
+    return this.poseAngles[pose];
+  }
+
+  private startCapture(pose: Pose): void {
+    if (this.capturing) {
+      return this.send(JSON.stringify({ t: "ack", cmd: "calibrate", ok: false, error: "already-capturing" }));
+    }
+    if (this.sensor !== "ok") {
+      this.calibration = "sensor-unavailable";
+      this.send(JSON.stringify({ t: "ack", cmd: "calibrate", ok: false, error: "sensor-unavailable" }));
+      this.send(this.calibrateLine(pose, { state: "failed", reason: "sensor-unavailable" }));
+      return this.queueStatus();
+    }
+
+    this.capturing = true;
+    this.calibration = "capturing";
+    this.send(JSON.stringify({ t: "ack", cmd: "calibrate", ok: true }));
+    this.send(this.calibrateLine(pose, { state: "capturing" }));
+    this.queueStatus();
+
+    setTimeout(
+      () => this.finishCapture(pose),
+      this.moving ? FIRST_SAMPLE_MS : CAPTURE_MS,
+    );
+  }
+
+  private finishCapture(pose: Pose): void {
+    this.capturing = false;
+    const failure = this.captureFailure(pose);
+    const silent = this.silentCaptureResult;
+    this.silentCaptureResult = false;
+
+    if (failure) {
+      this.calibration = failure;
+      if (!silent) this.send(this.calibrateLine(pose, { state: "failed", reason: failure }));
+      return this.queueStatus();
+    }
+
+    const angle = this.currentAngle(pose);
+    if (pose === "neutral") {
+      this.resetPosesInvalidatedBy(angle);
+      this.neutralDeg = angle;
+      this.calibrated = true;
+    } else if (pose === "heel") {
+      this.heelDeg = angle;
+    } else {
+      this.toeDeg = angle;
+    }
+    this.calibration = "ok";
+    this.saveNow();
+    if (!silent) {
+      this.send(
+        this.calibrateLine(
+          pose,
+          this.firmware === "planned"
+            ? { state: "ok", angleDeg: angle, tilt: this.tiltAt(angle) }
+            : { state: "ok", neutralDeg: angle, tilt: 0 },
+        ),
+      );
+    }
+    this.queueStatus();
+  }
+
+  private captureFailure(pose: Pose): string | null {
+    if (this.moving) return "motion";
+    const angle = this.currentAngle(pose);
+    if (pose === "neutral") return Math.abs(angle) > MAX_NEUTRAL_DEG ? "out-of-range" : null;
+    if (Math.abs(angle - this.neutralDeg) < MIN_POSE_RANGE_DEG) return "too-close";
+    const other = pose === "heel" ? this.toeDeg : this.heelDeg;
+    if (other !== null && Math.sign(angle - this.neutralDeg) === Math.sign(other - this.neutralDeg)) {
+      return "wrong-side";
+    }
+    return null;
+  }
+
+  /**
+   * Retaking neutral keeps heel and toe, unless the new neutral lands past one of them
+   * or within the minimum range of it. That side then returns to its default.
+   */
+  private resetPosesInvalidatedBy(newNeutral: number): void {
+    const stillValid = (pose: number | null) =>
+      pose !== null &&
+      Math.sign(pose - newNeutral) === Math.sign(pose - this.neutralDeg) &&
+      Math.abs(pose - newNeutral) >= MIN_POSE_RANGE_DEG;
+    if (!stillValid(this.heelDeg)) this.heelDeg = null;
+    if (!stillValid(this.toeDeg)) this.toeDeg = null;
+  }
+
+  /** Maps an angle to -1..+1 the way the firmware's three-point tilt does. */
+  private tiltAt(angle: number): number {
+    const toe = this.toeDeg ?? this.neutralDeg + DEFAULT_FULL_TILT_DEG;
+    const heel = this.heelDeg ?? this.neutralDeg - DEFAULT_FULL_TILT_DEG;
+    const offset = angle - this.neutralDeg;
+    if (Math.abs(offset) <= NEUTRAL_DEAD_ZONE_DEG) return 0;
+    const towardToe = Math.sign(offset) === Math.sign(toe - this.neutralDeg);
+    const tilt = towardToe ? offset / (toe - this.neutralDeg) : -offset / (heel - this.neutralDeg);
+    return Math.max(-1, Math.min(1, tilt));
+  }
+
+  /** The angle right now: held still, or slowly rocking in a demo. */
+  private liveAngle(): number {
+    if (this.angleDeg !== null) return this.angleDeg;
+    if (!this.wander) return this.neutralDeg;
+    return this.neutralDeg + Math.sin(Date.now() / 900) * 22;
+  }
+
+  private calibrateLine(pose: Pose, fields: Record<string, unknown>): string {
+    const withPose = this.firmware === "planned" ? { pose } : {};
+    return JSON.stringify({ t: "calibrate", ...withPose, ...fields });
+  }
+
+  private markChanged(): void {
+    const now = Date.now();
+    if (this.saved) this.firstUnsavedAt = now;
+    this.saved = false;
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    const quietDue = now + SAVE_QUIET_MS;
+    const maxDue = this.firstUnsavedAt + SAVE_MAX_MS;
+    this.saveTimer = setTimeout(() => this.saveNow(), Math.min(quietDue, maxDue) - now);
+  }
+
+  private saveNow(): void {
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    this.saveFailed = this.saveFails;
+    this.saved = !this.saveFails;
+    if (!this.saveFails) this.saves++;
+    this.queueStatus();
+  }
+
+  /** Sends a status line no sooner than the firmware's rate limit allows. */
+  private queueStatus(): void {
+    if (this.statusTimer || !this.events) return;
+    const wait = Math.max(0, this.lastStatusAt + STATUS_MIN_MS - Date.now());
+    this.statusTimer = setTimeout(() => {
+      this.statusTimer = null;
+      this.sendStatus();
+    }, wait);
+  }
+
+  private sendStatus(): void {
+    this.lastStatusAt = Date.now();
+    const planned =
+      this.firmware === "planned"
+        ? { proto: 1, lit: this.lastLit, heelDeg: this.heelDeg, toeDeg: this.toeDeg }
+        : {};
+    this.send(
+      JSON.stringify({
+        t: "status",
+        id: this.id,
+        pattern: this.pattern,
+        brightness: this.brightness,
+        maxBrightness: this.maxBrightness,
+        sensor: this.sensor,
+        tilt: round2(this.sensor === "ok" ? this.tiltAt(this.liveAngle()) : 0),
+        calibrated: this.calibrated,
+        neutralDeg: round2(this.neutralDeg),
+        calibration: this.calibration,
+        saved: this.saved,
+        saveFailed: this.saveFailed,
+        saves: this.saves,
+        debug: this.debug,
+        ble: true,
+        ...planned,
+      }),
+    );
+  }
+
+  private startMotion(): void {
+    this.stopMotion();
+    if (!this.debug || !this.events) return;
+    this.motionTimer = setInterval(() => this.sendMotion(), MOTION_MS);
+  }
+
+  private stopMotion(): void {
+    if (this.motionTimer) clearInterval(this.motionTimer);
+    this.motionTimer = null;
+  }
+
+  private sendMotion(): void {
+    const angle = this.liveAngle();
+    const accel = 9.81 + Math.abs(Math.sin(Date.now() / 300)) * 2;
+    const planned = this.firmware === "planned" ? { accelPeak: round2(accel + 1.4) } : {};
+    this.send(
+      JSON.stringify({
+        t: "motion",
+        tilt: round2(this.tiltAt(angle)),
+        angleDeg: round2(angle),
+        accel: round2(accel),
+        gyro: 0.03,
+        stomp: false,
+        strength: 0,
+        ...planned,
+      }),
+    );
+  }
+
+  /** Delivers one line, split into notifications the way the radio would split it. */
+  private send(line: string): void {
+    const text = `${line}\n`;
+    const delay = this.replyDelayMs;
+    for (let start = 0; start < text.length; start += this.notificationBytes) {
+      const chunk = text.slice(start, start + this.notificationBytes);
+      setTimeout(() => this.events?.onData(chunk), delay);
+    }
+  }
+}
+
+const round2 = (value: number) => Math.round(value * 100) / 100;
+
+/** Implements the Transport seam over a set of pretend boots. */
+export class FakeTransport implements Transport {
+  readonly simulated = true;
+  finding: "scan" | "picker";
+  radio: RadioState = "on";
+  private readonly boots: FakeBoot[];
+  private scanTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(boots: FakeBoot[], finding: "scan" | "picker" = "scan") {
+    this.boots = boots;
+    this.finding = finding;
+  }
+
+  async radioState(): Promise<RadioState> {
+    return this.radio;
+  }
+
+  async startScan(onFound: (boot: FoundBoot) => void): Promise<void> {
+    // A connected boot stops advertising, so it doesn't show up, same as real ones.
+    this.scanTimer = setTimeout(() => {
+      this.boots
+        .filter((boot) => boot.reachable && !boot.connected)
+        .forEach((boot, index) => {
+          onFound({ deviceId: boot.deviceId, name: boot.name, rssi: index === 0 ? -48 : -67 });
+        });
+    }, 300);
+  }
+
+  async stopScan(): Promise<void> {
+    if (this.scanTimer) clearTimeout(this.scanTimer);
+    this.scanTimer = null;
+  }
+
+  async pick(): Promise<FoundBoot | null> {
+    const boot = this.boots.find((candidate) => candidate.reachable && !candidate.connected);
+    return boot ? { deviceId: boot.deviceId, name: boot.name } : null;
+  }
+
+  async open(deviceId: string, events: LinkEvents): Promise<BootLink> {
+    const boot = this.boots.find((candidate) => candidate.deviceId === deviceId);
+    if (!boot || !boot.reachable || boot.connected) throw new Error("Boot not reachable");
+    boot.attach(events);
+    return {
+      write: async (line) => {
+        if (!boot.connected) throw new Error("Not connected");
+        boot.receive(line);
+      },
+      close: async () => boot.detach(),
+    };
+  }
+}
