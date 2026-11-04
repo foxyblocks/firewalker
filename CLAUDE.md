@@ -41,6 +41,7 @@ hardware.
 - `src/firewalker_core.cpp` — shared hardware services: strip, onboard pixel,
   D6 button, idle fill.
 - `test/` — host-native Unity tests for the pure math (`pio test -e native`).
+- `app/` — the Capacitor iPhone remote (React + TypeScript, Bun). See `app/README.md`.
 - `CONTEXT.md` — domain glossary; reuse these terms.
 - `docs/wiring-mpu6050.html`, `docs/wiring.md`, `docs/wiring-protoboard.md`,
   `docs/wiring-extra-effort.html`, `docs/power-budget.md` — IMU wiring, legacy

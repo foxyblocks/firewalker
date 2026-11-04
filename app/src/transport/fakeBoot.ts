@@ -459,6 +459,8 @@ export class FakeTransport implements Transport {
     return this.radio;
   }
 
+  async openSettings(): Promise<void> {}
+
   async startScan(onFound: (boot: FoundBoot) => void): Promise<void> {
     // A connected boot stops advertising, so it doesn't show up, same as real ones.
     this.scanTimer = setTimeout(() => {

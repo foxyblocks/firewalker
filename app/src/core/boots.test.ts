@@ -85,6 +85,30 @@ describe("knowing the boots", () => {
   });
 });
 
+describe("blinking from the Find boots list", () => {
+  it("connects to an unlabeled boot just long enough to blink it", async () => {
+    const boot = new FakeBoot();
+    const store = new BootsStore(new FakeTransport([boot]), memoryStorage());
+    await store.load();
+
+    const done = store.blinkFound({ deviceId: boot.deviceId, name: boot.name });
+    await vi.advanceTimersByTimeAsync(3000);
+    await done;
+
+    expect(boot.blinks).toBe(1);
+    expect(boot.connected).toBe(false);
+    expect(store.sides()).toEqual([]);
+  });
+
+  it("uses the existing connection for a labeled boot", async () => {
+    const { left, store } = await pair();
+    await store.blinkFound({ deviceId: left.deviceId, name: left.name });
+    await settle();
+    expect(left.blinks).toBe(1);
+    expect(left.connected).toBe(true);
+  });
+});
+
 describe("choosing what a tap controls", () => {
   it("defaults to Both once two boots are known", async () => {
     const { store } = await pair();

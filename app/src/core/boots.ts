@@ -19,6 +19,9 @@ export type Target = "both" | Side;
 const SIDES: Side[] = ["left", "right"];
 const SIDE_NAMES: Record<Side, string> = { left: "Left", right: "Right" };
 const STORAGE_KEY = "boots";
+const BLINK_CONNECT_WAIT_MS = 6000;
+// Long enough to finish a blink that flips the lights off and back on.
+const BLINK_HOLD_MS = 2500;
 
 export interface KnownBoot {
   side: Side;
@@ -44,6 +47,8 @@ export interface PatternTile {
 
 /** Everything the Remote screen shows, for whichever boots the current tab controls. */
 export interface RemoteView {
+  /** The boots this tab controls. */
+  chosen: Side[];
   tiles: PatternTile[];
   on: boolean;
   brightness: number;
@@ -188,6 +193,35 @@ export class BootsStore {
     this.knownBoots = this.knownBoots.filter((boot) => boot.side !== side);
   }
 
+  /**
+   * Blinks a boot so you can tell which physical one a list row means. A boot with no
+   * label yet has no connection, so this makes a short-lived one and lets it go, since
+   * each boot only accepts one connection at a time.
+   */
+  async blinkFound(found: FoundBoot): Promise<void> {
+    const existing = this.knownBoots.find((boot) => boot.deviceId === found.deviceId);
+    if (existing) {
+      this.clients.get(existing.side)?.blink();
+      return;
+    }
+    const client = new BootClient(this.transport, found.deviceId);
+    await new Promise<void>((resolve) => {
+      const giveUp = setTimeout(finish, BLINK_CONNECT_WAIT_MS);
+      const unsubscribe = client.subscribe(() => {
+        if (client.getState().link === "online") finish();
+      });
+      function finish() {
+        clearTimeout(giveUp);
+        unsubscribe();
+        resolve();
+      }
+      client.connect();
+    });
+    client.blink();
+    await new Promise((resolve) => setTimeout(resolve, BLINK_HOLD_MS));
+    await client.disconnect();
+  }
+
   /** Forgets a boot and disconnects from it. The boot keeps running what it's running. */
   forget(side: Side): void {
     this.removeBoot(side);
@@ -277,6 +311,7 @@ export class BootsStore {
 
     const first = online[0]?.state;
     return {
+      chosen: chosen.map(({ side }) => side),
       tiles,
       on: online.some(({ state }) => shownOn(state)),
       brightness: first?.pending.brightness ?? first?.status?.brightness ?? 0,

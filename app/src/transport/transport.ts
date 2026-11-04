@@ -41,6 +41,8 @@ export interface Transport {
   readonly simulated: boolean;
 
   radioState(): Promise<RadioState>;
+  /** Opens this app's page in iOS Settings, for turning Bluetooth access back on. */
+  openSettings(): Promise<void>;
   startScan(onFound: (boot: FoundBoot) => void): Promise<void>;
   stopScan(): Promise<void>;
   /** Shows the system's picker. Resolves null if the person cancels. */

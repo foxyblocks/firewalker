@@ -107,3 +107,8 @@ supply with grounds tied together.
   [`include/config.h`](include/config.h).
 - Domain language: [`CONTEXT.md`](CONTEXT.md). Decisions: [`docs/adr/`](docs/adr).
 - Agent / Linear / triage setup: [`CLAUDE.md`](CLAUDE.md) and `docs/agents/`.
+
+## iPhone remote
+
+`app/` is the iPhone app that controls the boots over Bluetooth, and its
+[README](app/README.md) covers running, testing, and installing it. It works with no network.
