@@ -18,13 +18,31 @@ export class BleTransport implements Transport {
   readonly simulated = false;
   readonly finding = Capacitor.isNativePlatform() ? ("scan" as const) : ("picker" as const);
 
+  private started: Promise<void> | null = null;
+
   /**
-   * Starts Bluetooth and reports whether it can be used. On iOS, the first call is what
-   * shows the permission prompt. The plugin signals each failure with its error text.
+   * Starts Bluetooth, once. On iOS, each `initialize` builds a new Bluetooth manager and
+   * discards the old one along with any scan or connection it was running, so checking
+   * Bluetooth must never call it twice. A failed start is forgotten, so Try again can
+   * retry it.
+   */
+  private start(): Promise<void> {
+    this.started ??= BleClient.initialize().catch((error: unknown) => {
+      this.started = null;
+      throw error;
+    });
+    return this.started;
+  }
+
+  /**
+   * Reports whether Bluetooth can be used, starting it if needed. On iOS, the first start
+   * is what shows the permission prompt. The plugin signals each failure with its error
+   * text. This runs whenever the app returns to the foreground, so it has to be harmless
+   * to call while boots are connected.
    */
   async radioState(): Promise<RadioState> {
     try {
-      await BleClient.initialize();
+      await this.start();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (/denied|unauthorized/i.test(message)) return "denied";
@@ -40,11 +58,13 @@ export class BleTransport implements Transport {
 
   async startScan(onFound: (boot: FoundBoot) => void): Promise<void> {
     await BleClient.requestLEScan({ services: [BOOT_SERVICE] }, (result) => {
-      // iOS can cache an old GAP name, so the advertised name comes first.
-      const name = result.localName ?? result.device.name ?? "";
-      if (name.startsWith(BOOT_NAME_PREFIX)) {
-        onFound({ deviceId: result.device.deviceId, name, rssi: result.rssi });
-      }
+      // iOS can cache an old GAP name, so the advertised name comes first. The firmware
+      // puts its name in the scan response, which can arrive after the advertisement, and
+      // the scan already filters on the boot's service, so a result with no name yet is
+      // still a boot. It only gets dropped if it's named as something else.
+      const name = result.localName ?? result.device.name;
+      if (name && !name.startsWith(BOOT_NAME_PREFIX)) return;
+      onFound({ deviceId: result.device.deviceId, name: name ?? "Firewalker", rssi: result.rssi });
     });
   }
 
