@@ -9,8 +9,8 @@
 // shrinks toward the down-most end while the survivors brighten, leaving a
 // single pixel at full tilt. A tilted stomp launches directional trails; a flat
 // stomp flashes the strip white and fades back to the flow color.
-// The strip is a closed ring around the foot (pixel 0 at the inner ankle, toe and heel at
-// measured indices — see firewalker_strip_map.h). A stomp launches trail fronts
+// The strip is a closed ring around the foot (pixel 0 under the controller, toe and heel at
+// configured indices — see firewalker_strip_map.h). A stomp launches trail fronts
 // from the tilt-derived "down" point: up to 4 bands (2 per arc) diverging to
 // the heel and toe, each a white head → current hue → previous hue. Driven by
 // the IMU's fused fore-aft tilt. See CONTEXT.md (Flow) and ADR-0002/0003.
@@ -25,7 +25,7 @@ class FlowPattern : public Pattern {
 
  private:
   // A travelling trail front: a band head that advances `dir` along one arc of
-  // the ring, bounded to [lo, hi]. Coordinates are *unwrapped* — on the medial
+  // the ring, bounded to [lo, hi]. Coordinates are *unwrapped* — on the wrap
   // arc hi runs past the last pixel index and positions fold back to real
   // pixels (stripWrapIndex) only when painting.
   struct Front {

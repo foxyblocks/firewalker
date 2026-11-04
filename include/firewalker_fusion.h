@@ -4,11 +4,10 @@
 #include <stdint.h>
 
 // Pure orientation + stomp math for the IMU module — no Arduino, no sensor I/O.
-// firewalker_imu.cpp and the MG24 prototype's imu_xiao.cpp supply axis-mapped
-// samples from their respective sensors. The native tests (`pio test -e native`)
-// exercise this math and replay the MG24's mount mapping, so tracking during
-// motion, thresholds, and hysteresis can be checked off-hardware. See ADR-0003 and
-// docs/open-questions.md (bench calibration).
+// firewalker_imu.cpp supplies axis-mapped samples. The native tests
+// (`pio test -e native`) exercise this math and replay the MG24's mount mapping,
+// so tracking during motion, thresholds, and hysteresis can be checked
+// off-hardware. See ADR-0003 and docs/open-questions.md (bench calibration).
 
 namespace Firewalker {
 
@@ -23,15 +22,6 @@ inline float accelTiltAngle(float aFwd, float aUp) { return atan2f(aFwd, aUp); }
 inline float fuseTiltStep(float fusedAngle, float accAngle, float gyroRate,
                           float dt, float alpha) {
   return alpha * (fusedAngle + gyroRate * dt) + (1.0f - alpha) * accAngle;
-}
-
-// Fused angle (radians) → normalized tilt in [-1, +1], saturating at fullDeg.
-inline float normalizeTilt(float angleRad, float fullDeg) {
-  float deg = angleRad * 57.2957795f;  // rad -> deg
-  float t = deg / fullDeg;
-  if (t > 1.0f) t = 1.0f;
-  if (t < -1.0f) t = -1.0f;
-  return t;
 }
 
 // Stomp detection: acceleration-magnitude hysteresis + a refractory gap, so one

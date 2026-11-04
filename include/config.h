@@ -1,43 +1,42 @@
 #pragma once
 
-// Central knobs for the Firewalker bring-up firmware. Keeping pin / count /
-// brightness / baud here (not scattered through main.cpp) makes the hardware
-// assumptions explicit and easy to change as wiring is confirmed.
-//
-// Strip-type flags (NEO_GRB, NEO_KHZ800) intentionally live in firewalker_core.cpp next
-// to the Adafruit_NeoPixel include.
+// Central knobs for the Firewalker firmware: every pin, strip, brightness, motion,
+// and pattern setting lives here, named by the module that owns it. Build flags
+// may override the strip size, layout, and brightness for test builds.
 
 #include <Arduino.h>
+#include <stddef.h>
+
+#include "firewalker_calibration.h"
 
 // ── Serial ──────────────────────────────────────────────────────────────
 // Must match `monitor_speed` in platformio.ini.
 constexpr unsigned long SERIAL_BAUD = 115200;
 
-// ── NeoPixel strip ──────────────────────────────────────────────────────
-// Feather RP2040 silk D5. The installed board variant maps D5 -> GPIO 7.
-constexpr uint8_t  LED_PIN = D11;
+// ── Strip ───────────────────────────────────────────────────────────────
+// BTF FCOB-5V-160L-W-IP30-SPI-5MM: a nominal 1m of 160 individually addressable
+// pixels, XGB1338 (WS2812B-compatible, GRB, 800 kHz). Data is on D10, which is SPI
+// MOSI. The signal comes from the SPI hardware, so it can't move to another pin freely.
 
-// Strip size and layout can be supplied by a prototype's build flags. Every
-// source file receives the same values, so the strip buffer and pattern arrays
-// agree on the pixel count. The default layout describes the 40-pixel shoe;
-// the MG24 build.sh selects its 160-pixel bench strip and scaled ring positions.
+// Connected pixel count and ring layout. These describe the uncut bench strip, and the
+// ring positions scale the original 40-pixel ring by four. A boot needs about 69 cm, or
+// about 110 pixels, so set all three once the strip is cut (see docs/open-questions.md).
+// The cli tool reads them from here too. Test builds override them with build flags, and
+// every source file sees the same values.
 #ifndef FIREWALKER_LED_COUNT
-#define FIREWALKER_LED_COUNT 40
+#define FIREWALKER_LED_COUNT 160
 #endif
 #ifndef FIREWALKER_STRIP_TOE_INDEX
-#define FIREWALKER_STRIP_TOE_INDEX 13
+#define FIREWALKER_STRIP_TOE_INDEX 52
 #endif
 #ifndef FIREWALKER_STRIP_HEEL_INDEX
-#define FIREWALKER_STRIP_HEEL_INDEX 33
+#define FIREWALKER_STRIP_HEEL_INDEX 132
 #endif
 constexpr uint16_t LED_COUNT = FIREWALKER_LED_COUNT;
 
-// Strip ring geometry (measured on the FOX-183 mount). The strip is a closed
-// loop around the foot perimeter: pixel 0 starts at the inner ankle directly
-// under the controller, runs forward along the medial side to the toe apex,
-// back along the lateral side to the heel, then returns to the start. Both
-// arcs between toe and heel are 20 steps in the default layout. Prototype
-// overrides use their supplied indices. The pure index→fore-aft
+// The strip is a closed loop around the foot perimeter: pixel 0 starts directly
+// under the controller, then the indices run forward to the toe apex, back along
+// the other side to the heel, and return to the start. The pure index-to-fore-aft
 // math lives in include/firewalker_strip_map.h (tested in test/test_strip_map).
 constexpr uint16_t STRIP_TOE_INDEX  = FIREWALKER_STRIP_TOE_INDEX;
 constexpr uint16_t STRIP_HEEL_INDEX = FIREWALKER_STRIP_HEEL_INDEX;
@@ -45,69 +44,45 @@ static_assert(LED_COUNT > 0 && STRIP_TOE_INDEX < STRIP_HEEL_INDEX &&
                   STRIP_HEEL_INDEX < LED_COUNT,
               "Strip layout must satisfy toe < heel < pixel count");
 
-// ── Foot side ────────────────────────────────────────────────────────────
-// Both shoes carry an identical hardware build (controller on the inner ankle,
-// USB up the leg), but the two GY-521 IMUs ended up mounted inverted about the
-// heel↔toe axis from each other: the RIGHT boot sits VCC-down, the LEFT boot
-// VCC-up (USB-port side up, SDA/SCL toward the ground). That 180° flip about
-// the fore-aft axis reverses the vertical and board-normal axes while leaving
-// the heel↔toe axis aligned with travel — so the vertical and pitch-gyro signs
-// differ per foot, while the fore-aft sign is the same on both. The per-foot
-// signs are set in the IMU mount section below. Select per shoe with the
-// final_app_left / final_app_right PlatformIO envs (-DFIREWALKER_FOOT_LEFT /
-// -DFIREWALKER_FOOT_RIGHT); plain final_app and imu_debug default to RIGHT. The
-// boot log prints which foot is running. Both boots are bench-confirmed
-// (imu_debug, 2026-06-11).
-#if defined(FIREWALKER_FOOT_LEFT) && defined(FIREWALKER_FOOT_RIGHT)
-#error "Define at most one of FIREWALKER_FOOT_LEFT / FIREWALKER_FOOT_RIGHT"
-#endif
-#if defined(FIREWALKER_FOOT_LEFT)
-constexpr bool  FOOT_IS_LEFT = true;
-#else
-constexpr bool  FOOT_IS_LEFT = false;   // default: right foot
-#endif
+// Signal timing. src/firewalker_strip.cpp turns each LED bit into four bits of SPI at
+// this rate, which sets every pulse width. 3.25 MHz divides evenly from the board's
+// 39 MHz clock. Re-check black frames, fixed colors, and animations on the real strip
+// after any change, because a successful upload doesn't verify the signal.
+constexpr uint32_t STRIP_SPI_HZ   = 3250000;
+constexpr uint32_t STRIP_LATCH_US = 300;
 
-// Global brightness (0-255). Total current scales with this, so raising it eats
-// into the USB budget fast — see docs/power-budget.md before pushing it up.
+// Default brightness (0-255) on first boot. After that each controller restores
+// its own saved value. Brightness scales requested color and is not a current
+// limit. Build flags set it for test builds.
 #ifndef FIREWALKER_LED_BRIGHTNESS
-#define FIREWALKER_LED_BRIGHTNESS 100
+#define FIREWALKER_LED_BRIGHTNESS 16
 #endif
-// The prototype CLI supplies this for every translation unit, including
-// patterns that reapply brightness while rendering. The default is 100.
-constexpr uint8_t LED_BRIGHTNESS = FIREWALKER_LED_BRIGHTNESS;  // 0-255
+constexpr uint8_t LED_BRIGHTNESS = FIREWALKER_LED_BRIGHTNESS;
 
-// Light the first pixel after boot so strip power/data wiring can be checked
-// without needing the serial monitor to catch setup() logs.
-constexpr bool    BOOT_PIXEL_DEBUG = true;
-constexpr uint8_t BOOT_PIXEL_INDEX = 0;
-constexpr uint8_t BOOT_PIXEL_R     = 0;
-constexpr uint8_t BOOT_PIXEL_G     = 255;
-constexpr uint8_t BOOT_PIXEL_B     = 0;
-
-// ── Onboard status NeoPixel ──────────────────────────────────────────────
-// The Feather RP2040's built-in NeoPixel (PIN_NEOPIXEL -> GPIO 16; always
-// powered on this board — no enable pin). Lit a solid color in every mode by
-// setupCore() as a "powered / firmware running" indicator, independent of the
-// main strip and of having a serial monitor attached. It's a single bright
-// pixel right by the USB jack, so brightness is kept low.
-constexpr bool    ONBOARD_PIXEL_ENABLED = true;
-#if defined(PIN_NEOPIXEL)
-constexpr uint8_t ONBOARD_PIXEL_PIN     = PIN_NEOPIXEL;
-#else
-constexpr uint8_t ONBOARD_PIXEL_PIN     = 16;   // Feather RP2040 onboard NeoPixel
+// Highest brightness the remote may set. The uncut 160-pixel strip is rated about 1.6 A
+// at full white, so 64/255 keeps a full-white frame near 400 mA, inside the 500 mA the
+// XIAO's USB-fed 5V pad should supply. docs/power-budget.md has the numbers for a cut
+// strip and for a dedicated 5V supply.
+#ifndef FIREWALKER_LED_BRIGHTNESS_MAX
+#define FIREWALKER_LED_BRIGHTNESS_MAX 64
 #endif
-constexpr uint8_t ONBOARD_PIXEL_BRIGHTNESS = 40;   // 0-255; it's bright up close
-constexpr uint8_t ONBOARD_PIXEL_R = 255;           // warm amber, matching the fire theme
-constexpr uint8_t ONBOARD_PIXEL_G = 60;
-constexpr uint8_t ONBOARD_PIXEL_B = 0;
+constexpr uint8_t LED_BRIGHTNESS_MIN = 1;
+constexpr uint8_t LED_BRIGHTNESS_MAX = FIREWALKER_LED_BRIGHTNESS_MAX;
+static_assert(LED_BRIGHTNESS >= LED_BRIGHTNESS_MIN && LED_BRIGHTNESS <= 255,
+              "Default brightness must be at least LED_BRIGHTNESS_MIN");
 
-// ── IMU motion sensor (MPU-6050 / GY-521) ───────────────────────────────
-// GY-521 breakout (MPU-6050: 3-axis accel + 3-axis gyro) read over I2C on the
-// Feather's SDA/SCL pins — the shoe's motion sensor, used by the app
-// (final_app) and imu_debug (see docs/wiring-mpu6050.md). The Adafruit MPU6050
-// library reports acceleration in m/s^2 *including* gravity, so at rest the
-// total magnitude sits near 9.81; a stomp/step is a spike well above it.
-constexpr uint8_t       IMU_I2C_ADDR = 0x68;   // AD0 low; 0x69 if AD0 tied high
+// ── Onboard status LED ───────────────────────────────────────────────────
+// Half-periods of the onboard LED's blink patterns (firewalker_core.h StatusLight).
+constexpr unsigned long STATUS_BLINK_SLOW_MS = 500;
+constexpr unsigned long STATUS_BLINK_FAST_MS = 100;
+
+// ── IMU motion sensor (onboard LSM6DS3TR-C) ─────────────────────────────
+// The MG24 Sense's onboard accel + gyro, on the default I2C bus. PD5 powers it and
+// must go high before the sensor starts. src/firewalker_imu.cpp converts readings
+// to m/s^2 *including* gravity and rad/s, so at rest the total magnitude sits near
+// 9.81 and a stomp is a spike well above it.
+constexpr uint8_t       IMU_I2C_ADDR = 0x6A;
+constexpr uint8_t       IMU_ENABLE_PIN = PD5;
 constexpr unsigned long IMU_SAMPLE_MS = 20;    // ~50 Hz accel/gyro poll
 constexpr unsigned long IMU_LOG_MS = 100;      // throttle verbose serial to ~10 Hz
 constexpr float         IMU_GRAVITY = 9.81f;   // rest |accel| baseline (m/s^2)
@@ -124,46 +99,53 @@ constexpr unsigned long IMU_REFRACTORY_MS = 250;              // min gap between
 // trails. The trigger itself is unchanged — this only reads how hard it hit.
 constexpr float         IMU_STOMP_FORCE_FULL = 40.0f;  // |accel| (m/s^2) → full-brightness trail
 
-// imu_debug motion visual: map movement intensity (|accel| - gravity) to the
-// idle fill brightness so the strip shows how hard the IMU is being shaken.
-constexpr float         IMU_ACCEL_DELTA_MIN = 0.5f;   // below this reads as "still"
-constexpr float         IMU_ACCEL_DELTA_MAX = 12.0f;  // saturates idle brightness here
-
-// ── IMU mount + orientation fusion ───────────────────────────────────────
-// Orientation → fore-aft tilt. Mount (FOX-183 carrier): board ~vertical on the
-// inner ankle, USB up the leg. At rest one in-plane accel axis reads ~gravity
-// (the "up" axis, Y) and the heel↔toe axis (X) reads small; pitching the foot
-// is rotation about the board normal (Z), so gyro Z is the pitch rate. Axis
-// indices/signs are 0=X,1=Y,2=Z. The heel↔toe axis (X) points the same way on
-// both boots, so its sign is foot-independent; the vertical (Y) and board-normal
-// (Z) axes are reversed between boots by the VCC-up/down mount inversion (see
-// "Foot side"), so their signs are set per foot below.
-//
-// Bench-confirmed (imu_debug, 2026-06-11):
-//   RIGHT: rest a=(+0.6,-9.4,-3.6) → gravity on -Y; toe-down swings ax to ~-4.4;
-//          tilt reads +0.83 toe-down.            Signs V=-1, FA=-1, P=+1.
-//   LEFT:  rest a=(+2.9,+9.5,+0.9) → gravity on +Y (VCC-up); toe-down ax +2.9→-1.6,
-//          heel-down ax→+6.7; pitch corr(gyroZ,dTilt)=-0.96. Signs V=+1, FA=-1, P=-1.
-//   Sole-flat fore-aft cant (trimmed via IMU_MOUNT_FOREAFT_REST_DEG below): LEFT
-//   -12.5° (measured), RIGHT -3.7° — so a flat foot reads level, not heel-down.
-constexpr uint8_t IMU_MOUNT_FOREAFT_AXIS    = 0;      // accel X = heel↔toe
-constexpr float   IMU_MOUNT_FOREAFT_SIGN    = -1.0f;  // toe-down → ax<0 → +tilt (both boots)
-constexpr uint8_t IMU_MOUNT_VERTICAL_AXIS   = 1;      // accel Y = vertical at rest
-constexpr uint8_t IMU_MOUNT_PITCH_GYRO_AXIS = 2;      // gyro Z = pitch rate (board normal)
-#if defined(FIREWALKER_FOOT_LEFT)
-constexpr float   IMU_MOUNT_VERTICAL_SIGN    = +1.0f;  // left: VCC-up mount, +Y points up
-constexpr float   IMU_MOUNT_PITCH_GYRO_SIGN  = -1.0f;  // left: board normal flipped
-constexpr float   IMU_MOUNT_FOREAFT_REST_DEG = -12.5f; // measured sole-flat fore-aft cant
-#else
-constexpr float   IMU_MOUNT_VERTICAL_SIGN    = -1.0f;  // right: VCC-down mount, -Y points up
-constexpr float   IMU_MOUNT_PITCH_GYRO_SIGN  = +1.0f;  // right: matches toe-down rate
-constexpr float   IMU_MOUNT_FOREAFT_REST_DEG = -3.7f;  // sole-flat fore-aft cant (from bench rest)
-#endif
+// ── Orientation fusion ───────────────────────────────────────────────────
+// Axes and signs live in include/firewalker_mg24_mount.h, shared with the native
+// motion tests.
 constexpr float   IMU_FILTER_ALPHA  = 0.96f;  // complementary-filter weight on the gyro term
-// imuTiltFwd() subtracts IMU_MOUNT_FOREAFT_REST_DEG (so a sole-flat foot reads
-// level despite the mount's cant), then saturates at ±1 at IMU_TILT_FULL_DEG of
-// tilt *from flat* — i.e. the pool fully pours at ~30° toe-down or heel-down.
-constexpr float   IMU_TILT_FULL_DEG = 30.0f;
+
+// ── Tilt calibration ─────────────────────────────────────────────────────
+// How fused angles become tilt (include/firewalker_calibration.h). A side with no
+// captured heel or toe pose reaches full tilt at IMU_TILT_FULL_DEG from neutral. The dead
+// zone is in degrees and covers the capture's spread limit below, so a calibrated boot
+// rests exactly flat.
+constexpr float   IMU_TILT_FULL_DEG     = 30.0f;
+constexpr float   IMU_TILT_DEADZONE_DEG = 3.0f;
+constexpr Firewalker::TiltLimits TILT_LIMITS = {
+    IMU_TILT_FULL_DEG,
+    IMU_TILT_DEADZONE_DEG,
+    10.0f,  // a heel or toe pose must sit at least this far from neutral
+    45.0f,  // a neutral pose must sit within this of sensor level
+};
+
+// Bounds for holding a pose still. These are starting values, confirmed only on a still
+// bench so far, and may need loosening for a pose held on a foot (docs/open-questions.md).
+constexpr unsigned long CALIBRATION_WINDOW_MS    = 1000;   // how long the boot must hold still
+constexpr unsigned long CALIBRATION_NO_SAMPLE_MS = 500;    // gap in sensor samples that fails a capture
+constexpr uint16_t      CALIBRATION_MIN_SAMPLES  = 25;     // half the samples expected at 50 Hz
+constexpr float         CALIBRATION_MAX_RANGE_DEG = 3.0f;  // max spread of the angle across the window
+constexpr float         CALIBRATION_MAX_GYRO_RADS = 0.25f; // about 14 deg/s of any rotation
+constexpr float         CALIBRATION_MAX_ACCEL_DEV = 1.5f;  // m/s^2 away from gravity
+
+// ── Saved settings ───────────────────────────────────────────────────────
+// A burst of slider changes turns into one flash write: it saves after the changes
+// pause, or after the longest delay if they never do.
+constexpr unsigned long SETTINGS_SAVE_QUIET_MS = 1000;
+constexpr unsigned long SETTINGS_SAVE_MAX_MS   = 5000;
+
+// ── Remote control ───────────────────────────────────────────────────────
+// Shared by the BLE service and the USB console (docs/remote-protocol.md).
+constexpr unsigned long REMOTE_MOTION_REPORT_MS = 200;  // motion lines while debug is on
+constexpr unsigned long REMOTE_STATUS_MIN_MS    = 250;  // fastest repeat of change-driven status lines
+constexpr uint16_t      REMOTE_ADVERTISE_INTERVAL = 160;   // BLE advertising interval, in 0.625 ms units (100 ms)
+constexpr uint8_t       REMOTE_RX_QUEUE_DEPTH     = 8;     // BLE commands waiting for the main loop
+constexpr size_t        REMOTE_TX_BUFFER_BYTES    = 1024;  // reply bytes waiting to go out over BLE
+constexpr size_t        REMOTE_ATT_VALUE_MAX      = 244;   // largest notification payload the firmware will send
+constexpr uint8_t       REMOTE_NOTIFICATIONS_PER_LOOP = 4; // cap per main-loop pass, so sending can't stall it
+constexpr unsigned long IDENTIFY_MS       = 1500;  // how long `identify` blinks the strip
+constexpr unsigned long IDENTIFY_BLINK_MS = 125;   // half-period of that blink
+constexpr unsigned long APP_FRAME_MS            = 16;   // shortest time between strip frames
+constexpr unsigned long APP_OFF_REFRESH_MS      = 1000; // black refresh when off, in case the strip repowers
 
 // ── Idle fill (imu_debug visual) ─────────────────────────────────────────
 // imu_debug fills the strip a solid color scaled by motion (the app uses the
@@ -200,22 +182,8 @@ constexpr uint16_t FLOW_TRAIL_PREV_HUE   = 7300;   // tail hue step back (~40° 
 constexpr uint8_t  FLOW_MAX_FRONTS       = 16;     // 4 per stomp; supports ~4 concurrent stomps
 constexpr float    FLOW_TRAIL_BRIGHT_MIN = 0.30f;  // trail brightness at a threshold-force stomp (→1.0 at IMU_STOMP_FORCE_FULL)
 
-// Strip geometry (ring, toe/heel indices) lives in the NeoPixel section above
+// Strip geometry (ring, toe/heel indices) lives in the Strip section above
 // (STRIP_TOE_INDEX / STRIP_HEEL_INDEX) — it's a hardware fact, not a flow knob.
-
-// Ignore tiny tilts near level (residual mount cant / wobble) so the strip rests
-// flat; past the deadzone the remaining range is rescaled to still reach full
-// pooling. The bulk of the mount cant is already removed by the per-foot
-// IMU_MOUNT_FOREAFT_REST_DEG trim; this is the small flat band on top of that.
-constexpr float   FLOW_TILT_DEADZONE = 0.10f;  // normalized tilt (0..1) ≈ 3° at 30° full
-
-// ── D6 button ────────────────────────────────────────────────────────────
-// Momentary button between Feather silk D6 and GND, internal pull-up. In the
-// app it cycles patterns; in imu_debug it's a bench input.
-constexpr bool          DEBUG_BUTTON_ENABLED = true;
-constexpr uint8_t       DEBUG_BUTTON_PIN = D6;
-constexpr unsigned long DEBUG_BUTTON_DEBOUNCE_MS = 30;
-constexpr bool          DEBUG_BUTTON_LOG = false;
 
 // ── Fire-trail pattern: gradient palette ─────────────────────────────────
 // Palette stops from the hot head to the cool tail, as plain R/G/B. The

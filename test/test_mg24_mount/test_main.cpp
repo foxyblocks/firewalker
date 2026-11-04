@@ -1,5 +1,5 @@
 // Replay rigid rotations using the same MG24 mount mapping and fusion math as
-// imu_xiao.cpp. This catches a gyro that fights a fast tilt even though the
+// firewalker_imu.cpp. This catches a gyro that fights a fast tilt even though the
 // accelerometer eventually pulls the resting angle into the right position.
 #include <math.h>
 #include <unity.h>
