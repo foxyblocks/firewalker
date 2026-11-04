@@ -22,7 +22,6 @@ import {
   type MotionReply,
   type Pose,
   type StatusReply,
-  type StripPreview,
   type StripSetting,
 } from "./protocol";
 import type { BootLink, Transport } from "../transport/transport";
@@ -51,7 +50,7 @@ export interface Pending {
   leds?: number;
   toe?: number;
   heel?: number;
-  preview?: StripPreview;
+  preview?: boolean;
 }
 
 export type CaptureResult =
@@ -99,7 +98,7 @@ export class BootClient {
   private dragging = false;
   private desiredBrightness = 0;
   private readonly desiredStrip: Record<StripSetting, number> = { leds: 0, toe: 0, heel: 0 };
-  private wantPreview: StripPreview = "off";
+  private wantPreview = false;
   private reconnectDelay = RECONNECT_MIN_MS;
   /** Bumped per connection, so a stale attempt can't touch the current one. */
   private generation = 0;
@@ -155,7 +154,7 @@ export class BootClient {
     this.generation++;
     this.clearReconnect();
     this.stopPreviewRefresh();
-    this.wantPreview = "off";
+    this.wantPreview = false;
     const link = this.link;
     this.teardown();
     this.update({ link: "idle" });
@@ -334,7 +333,7 @@ export class BootClient {
       // Debug stays on after a disconnect, so clean up after an earlier session.
       if (status.debug && !this.wantDebug) this.setDebug(false);
       // Bring back a preview the connection dropped, or clear one left by an earlier session.
-      if (this.wantPreview !== "off" || status.preview !== "off") this.sendPreview();
+      if (this.wantPreview || status.preview) this.sendPreview();
     }
 
     if (this.inFlight?.expect === "status") this.finishJob();
@@ -467,14 +466,14 @@ export class BootClient {
   }
 
   /**
-   * Chooses what the strip previews while its layout is being set, or "off" to return to
-   * the pattern. It stays up until "off", through a dropped connection too, by asking again
+   * Shows the strip's layout on the strip itself, in place of its pattern, while it's being
+   * set. It stays up until turned off, through a dropped connection too, by asking again
    * before the boot's own limit runs out.
    */
-  setStripPreview(preview: StripPreview): void {
-    this.wantPreview = preview;
+  setStripPreview(on: boolean): void {
+    this.wantPreview = on;
     this.stopPreviewRefresh();
-    if (preview !== "off") {
+    if (on) {
       this.previewTimer = setInterval(() => this.sendPreview(), PREVIEW_REFRESH_MS);
     }
     this.sendPreview();

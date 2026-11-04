@@ -4,7 +4,7 @@ import { commands, LineSplitter, parseLine } from "./protocol";
 // change there that the app doesn't understand fails here first.
 const FIRMWARE_LINES = {
   status:
-    '{"t":"status","proto":2,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":"off"}',
+    '{"t":"status","proto":2,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}',
   ackOk: '{"t":"ack","cmd":"brightness","ok":true}',
   ackFail: '{"t":"ack","cmd":"brightness","ok":false,"error":"out-of-range"}',
   patterns: '{"t":"patterns","list":["flow","fire-trail"]}',
@@ -24,7 +24,7 @@ describe("parseLine", () => {
       maxLeds: 160,
       toe: 40,
       heel: 90,
-      preview: "off",
+      preview: false,
       id: "3ED1",
       pattern: "off",
       lit: "flow",
@@ -105,8 +105,8 @@ describe("commands", () => {
     expect(commands.strip("leds", 110)).toBe("strip leds 110");
     expect(commands.strip("toe", 0)).toBe("strip toe 0");
     expect(commands.strip("heel", 90)).toBe("strip heel 90");
-    expect(commands.stripPreview("toe")).toBe("strip preview toe");
-    expect(commands.stripPreview("off")).toBe("strip preview off");
+    expect(commands.stripPreview(true)).toBe("strip preview on");
+    expect(commands.stripPreview(false)).toBe("strip preview off");
   });
 
   it("keeps every command inside the 20-byte write the firmware promises", () => {
@@ -115,7 +115,7 @@ describe("commands", () => {
       commands.calibrate("neutral"),
       commands.brightness(255),
       commands.strip("leds", 160),
-      commands.stripPreview("heel"),
+      commands.stripPreview(false),
     ]) {
       expect(new TextEncoder().encode(line).length).toBeLessThanOrEqual(20);
     }

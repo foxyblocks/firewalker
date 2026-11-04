@@ -4,10 +4,10 @@
  * own, because a cut length and a mount can differ, so with two boots you set them one at
  * a time.
  *
- * Whichever slider you last touched is what the strip previews: the LED count fills the
- * ring in blue, so you stop when the blue reaches the end, and toe and heel each light one
- * pixel, in yellow and purple, that you walk to the right spot. A slider follows your
- * finger, and the minus and plus buttons land on the exact pixel.
+ * For as long as this tab is open, the strip shows the whole layout at once: the ring in
+ * blue, with one yellow pixel at the toe and one purple pixel at the heel. So you stop the
+ * LED count when the blue reaches the end of the strip, and walk each marker to the right
+ * spot. A slider follows your finger, and the minus and plus buttons land on the exact pixel.
  *
  * The boot holds the truth (`shownStrip`), and the rules for where a slider can land are in
  * core/stripSetup.ts. BootClient keeps the preview up for as long as this tab asks for one,
@@ -20,34 +20,10 @@ import type { StripSetting } from "../core/protocol";
 import { dragTo, nudge, shownStrip, sliderRange, type StripValues } from "../core/stripSetup";
 import { LinkDot, PixelSlider, type PixelSliderShape, type PixelTone } from "./parts";
 
-const SLIDERS: {
-  setting: StripSetting;
-  name: string;
-  tone: PixelTone;
-  shape: PixelSliderShape;
-  hint: string;
-}[] = [
-  {
-    setting: "leds",
-    name: "LED count",
-    tone: "blue",
-    shape: "fill",
-    hint: "Slide until the blue reaches the end of the strip.",
-  },
-  {
-    setting: "toe",
-    name: "Toe",
-    tone: "yellow",
-    shape: "point",
-    hint: "Move the yellow pixel to the tip of your toe.",
-  },
-  {
-    setting: "heel",
-    name: "Heel",
-    tone: "purple",
-    shape: "point",
-    hint: "Move the purple pixel to the back of your heel.",
-  },
+const SLIDERS: { setting: StripSetting; name: string; tone: PixelTone; shape: PixelSliderShape }[] = [
+  { setting: "leds", name: "LED count", tone: "blue", shape: "fill" },
+  { setting: "toe", name: "Toe", tone: "yellow", shape: "point" },
+  { setting: "heel", name: "Heel", tone: "purple", shape: "point" },
 ];
 
 export function StripSetup({ store, onClose }: { store: BootsStore; onClose: () => void }) {
@@ -55,18 +31,16 @@ export function StripSetup({ store, onClose }: { store: BootsStore; onClose: () 
   const [side, setSide] = useState<Side | undefined>(
     () => sides.find((candidate) => store.client(candidate)?.getState().link === "online") ?? sides[0],
   );
-  const [active, setActive] = useState<StripSetting>("leds");
   const client = side ? store.client(side) : undefined;
   const state = client?.getState();
   const online = state?.link === "online";
   const values = state ? shownStrip(state) : undefined;
 
-  // Two effects, so that moving between sliders changes the preview without flickering back
-  // through the pattern. Only leaving this boot, or this tab, turns the preview off.
+  // The strip shows its layout for as long as this tab is on this boot.
   useEffect(() => {
-    client?.setStripPreview(active);
-  }, [client, active]);
-  useEffect(() => () => client?.setStripPreview("off"), [client]);
+    client?.setStripPreview(true);
+    return () => client?.setStripPreview(false);
+  }, [client]);
 
   const change = (setting: StripSetting, value: number) => {
     if (values && value !== values[setting]) client?.setStrip(setting, value);
@@ -94,16 +68,17 @@ export function StripSetup({ store, onClose }: { store: BootsStore; onClose: () 
 
       {values && side ? (
         <>
-          <p className="sheet-help strip-hint">{SLIDERS.find(({ setting }) => setting === active)?.hint}</p>
+          <p className="sheet-help">
+            Slide until the blue reaches the end of the strip. Then move yellow to the tip of your toe, and
+            purple to the back of your heel.
+          </p>
           <div className="strip-cards">
             {SLIDERS.map((slider) => (
               <SliderCard
                 key={slider.setting}
                 {...slider}
                 values={values}
-                active={slider.setting === active}
                 disabled={!online}
-                onActive={() => setActive(slider.setting)}
                 onDragging={(dragging) => client?.setDragging(dragging)}
                 onChange={(value) => change(slider.setting, value)}
               />
@@ -132,9 +107,7 @@ function SliderCard({
   tone,
   shape,
   values,
-  active,
   disabled,
-  onActive,
   onDragging,
   onChange,
 }: {
@@ -143,22 +116,17 @@ function SliderCard({
   tone: PixelTone;
   shape: PixelSliderShape;
   values: StripValues;
-  active: boolean;
   disabled: boolean;
-  onActive: () => void;
   onDragging: (dragging: boolean) => void;
   onChange: (value: number) => void;
 }) {
   const { min, max } = sliderRange(setting, values);
   // A marker the count was just cut below shows at the end until the boot reports it moved.
   const value = Math.min(values[setting], max);
-  const step = (direction: 1 | -1) => {
-    onActive();
-    onChange(nudge(setting, direction, values));
-  };
+  const step = (direction: 1 | -1) => onChange(nudge(setting, direction, values));
 
   return (
-    <div className={`strip-card led-${tone}${active ? " strip-card-on" : ""}`} onPointerDown={onActive}>
+    <div className={`strip-card led-${tone}`}>
       <div className="strip-card-head">
         <span className="card-name">{name}</span>
         <div className="stepper">
@@ -178,10 +146,7 @@ function SliderCard({
         max={max}
         shape={shape}
         disabled={disabled}
-        onStart={() => {
-          onActive();
-          onDragging(true);
-        }}
+        onStart={() => onDragging(true)}
         onChange={(wanted) => onChange(dragTo(setting, wanted, values))}
         onStep={step}
         onEnd={() => onDragging(false)}

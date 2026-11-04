@@ -46,7 +46,7 @@ static PoseCalibrator calibrator(CAPTURE_LIMITS, TILT_LIMITS);
 static bool identifying = false;
 static unsigned long identifyStartMs = 0;
 
-static StripPreview stripPreview = StripPreview::Off;
+static bool stripPreview = false;
 static unsigned long lastStripCommandMs = 0;  // a preview ends STRIP_PREVIEW_HOLD_MS after this
 
 static bool debugEnabled = false;
@@ -128,11 +128,11 @@ static void selectPattern(PatternId pattern) {
 // Shows or stops showing a strip layout preview, which takes over the strip from the
 // pattern without changing any settings. Each call keeps a preview alive for another
 // STRIP_PREVIEW_HOLD_MS. Stopping brings back the saved brightness and restarts the pattern.
-static void setStripPreview(StripPreview preview) {
+static void setStripPreview(bool on) {
   lastStripCommandMs = millis();
-  if (preview == stripPreview) return;
-  stripPreview = preview;
-  if (preview == StripPreview::Off) {
+  if (on == stripPreview) return;
+  stripPreview = on;
+  if (!on) {
     strip.setBrightness(settings.brightness);
     showPattern(settings.pattern);
   }
@@ -208,13 +208,13 @@ static void handleCommand(const Command& command) {
       setStripLayout(settings.strip);
       saveScheduler.markChanged(millis());
       lastStripCommandMs = millis();
-      if (stripPreview == StripPreview::Off) showPattern(settings.pattern);
+      if (!stripPreview) showPattern(settings.pattern);
       sendAck(command.type, true);
       break;
     }
 
     case CommandType::StripPreview:
-      setStripPreview(command.preview);
+      setStripPreview(command.on);
       sendAck(command.type, true);
       break;
   }
@@ -255,25 +255,15 @@ static void sendMotionIfDue(unsigned long now) {
   accelPeak = 0.0f;
 }
 
-// Draws what a strip layout preview shows: the whole ring filled for the pixel count, or
-// the one pixel at the toe or heel. Everything else is dark, so you can see where the ring
-// ends on an uncut strip, and exactly which pixel a marker is on.
+// Draws the whole strip layout at once: the ring in blue, with the toe and heel pixels in
+// their own colors on top. Past the end of the ring stays dark, so on an uncut strip you can
+// see where the ring ends, and you can see all three settings while changing any of them.
 static void drawStripPreview() {
   strip.setBrightness(STRIP_PREVIEW_BRIGHTNESS);
   strip.clear();
-  switch (stripPreview) {
-    case StripPreview::Leds:
-      for (uint16_t i = 0; i < strip.numPixels(); i++) strip.setPixelColor(i, STRIP_PREVIEW_LEDS_COLOR);
-      break;
-    case StripPreview::Toe:
-      strip.setPixelColor(settings.strip.toe, STRIP_PREVIEW_TOE_COLOR);
-      break;
-    case StripPreview::Heel:
-      strip.setPixelColor(settings.strip.heel, STRIP_PREVIEW_HEEL_COLOR);
-      break;
-    case StripPreview::Off:
-      break;
-  }
+  for (uint16_t i = 0; i < strip.numPixels(); i++) strip.setPixelColor(i, STRIP_PREVIEW_LEDS_COLOR);
+  strip.setPixelColor(settings.strip.toe, STRIP_PREVIEW_TOE_COLOR);
+  strip.setPixelColor(settings.strip.heel, STRIP_PREVIEW_HEEL_COLOR);
   strip.show();
 }
 
@@ -297,7 +287,7 @@ static void renderIfDue(unsigned long now) {
     return;
   }
 
-  if (stripPreview != StripPreview::Off) {
+  if (stripPreview) {
     stompPending = false;
     if ((now - lastFrameMs) >= APP_FRAME_MS) {
       lastFrameMs = now;
@@ -368,8 +358,8 @@ void loop() {
 
   if (saveScheduler.due(now)) saveNow();
 
-  if (stripPreview != StripPreview::Off && (now - lastStripCommandMs) >= STRIP_PREVIEW_HOLD_MS) {
-    setStripPreview(StripPreview::Off);
+  if (stripPreview && (now - lastStripCommandMs) >= STRIP_PREVIEW_HOLD_MS) {
+    setStripPreview(false);
     statusPending = true;
   }
 

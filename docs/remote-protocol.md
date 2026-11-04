@@ -53,7 +53,7 @@ aren't JSON.
 | `debug on`, `debug off` | Starts or stops live motion lines |
 | `identify` | Blinks the strip for about 1.5 seconds, to show which boot this is. Changes no settings |
 | `strip leds <n>`, `strip toe <n>`, `strip heel <n>` | Sets the pixel count, or the pixel at the toe or heel, and remembers it. See [Strip layout](#strip-layout) |
-| `strip preview leds`, `strip preview toe`, `strip preview heel`, `strip preview off` | Shows that value on the strip in place of the pattern, or returns to the pattern. Changes no settings |
+| `strip preview on`, `strip preview off` | Shows the layout on the strip in place of the pattern, or returns to the pattern. Changes no settings |
 
 Each controller keeps its own settings, and a command only affects the controller
 that receives it. `off` blanks the pixels but doesn't disconnect their power, so the
@@ -73,8 +73,8 @@ Sent once per command, except `status`, which replies with a status line directl
 Errors are `empty`, `too-long`, `too-many-arguments`, `expected-one-argument`,
 `unknown-command`, `unknown-pattern`, `unknown-pose`, `expected-on-or-off`,
 `expected-0-to-255`, `expected-setting-and-value`, `expected-number`, `unknown-strip-setting`,
-`unknown-strip-preview`, `out-of-range`, `same-pixel`, and `already-capturing`, plus
-`sensor-unavailable` for a capture that can't start. A command the firmware can't parse
+`out-of-range`, `same-pixel`, and `already-capturing`, plus `sensor-unavailable` for a capture
+that can't start. A command the firmware can't parse
 reports `"cmd":"unknown"`.
 
 ### `patterns`
@@ -93,7 +93,7 @@ Sent in reply to `status`, when a client subscribes, and after any change. Chang
 are reported at most every 250 ms, so a slider drag gets one line per interval.
 
 ```json
-{"t":"status","proto":2,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":"off"}
+{"t":"status","proto":2,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}
 ```
 
 | Field | Meaning |
@@ -115,7 +115,7 @@ are reported at most every 250 ms, so a slider drag gets one line per interval.
 | `ble` | Whether a BLE client is subscribed |
 | `leds`, `maxLeds` | How many pixels the ring has, and the most this build can drive |
 | `toe`, `heel` | The pixels at the toe and heel, counting from 0 |
-| `preview` | What the strip is previewing in place of its pattern: `leds`, `toe`, `heel`, or `off` |
+| `preview` | Whether the strip is showing its layout in place of its pattern |
 
 `saved` stays `false` for up to a second or so after a change while the save waits
 for the changes to pause. A slider drag becomes one flash write rather than one per
@@ -188,18 +188,14 @@ The rules, in [`firewalker_strip_map.h`](../include/firewalker_strip_map.h):
 
 Changes save the same way a brightness change does, so a slider drag becomes one flash write.
 
-`strip preview` is how you see what you're setting:
-
-| Preview | What the strip shows |
-|---|---|
-| `leds` | The whole ring in blue, so you stop when the blue reaches the end of the strip |
-| `toe` | The toe pixel alone, in yellow |
-| `heel` | The heel pixel alone, in purple |
+`strip preview on` is how you see what you're setting. The whole ring lights blue, so you stop
+the count when the blue reaches the end of the strip, with one yellow pixel at the toe and one
+purple pixel at the heel. Pixels past the count stay dark.
 
 It runs at a fixed brightness, whatever the boot's brightness and pattern are, and it even shows
 with the lights off. It lasts one minute from the latest `strip` command, so a client holds it up
-by repeating `strip preview` and can't leave a boot stuck on it by going away. When it ends, the
-pattern starts again.
+by repeating `strip preview on` and can't leave a boot stuck on it by going away. When it ends,
+the pattern starts again.
 
 ### `motion`
 

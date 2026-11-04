@@ -83,10 +83,10 @@ home.
   toes up, toe down with heel up, each as far as you want the full effect. Stay in the pose
   for the two seconds after the countdown. A little wobble is fine. Heel and toe are optional.
 - **Calibrate, Strip tab:** tells each boot how long its strip is and where the toe and heel
-  are, while you look at the strip, one boot at a time. LED count fills the strip in blue, so
-  slide until the blue reaches the end. Toe and heel each light one pixel, yellow and purple,
-  that you move to the right spot. The minus and plus buttons land on the exact pixel, and each
-  change saves on the boot.
+  are, while you look at the strip, one boot at a time. The strip shows all three at once: a
+  blue line for the LED count, one yellow pixel at the toe, and one purple pixel at the heel.
+  Slide until the blue reaches the end, then move each marker to the right spot. The minus and
+  plus buttons land on the exact pixel, and each change saves on the boot.
 - **Status:** what a boot actually reports, plus live debug numbers.
 
 ## Troubleshooting

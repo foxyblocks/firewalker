@@ -73,10 +73,11 @@ constexpr uint8_t LED_BRIGHTNESS_MAX = FIREWALKER_LED_BRIGHTNESS_MAX;
 static_assert(LED_BRIGHTNESS >= LED_BRIGHTNESS_MIN && LED_BRIGHTNESS <= 255,
               "Default brightness must be at least LED_BRIGHTNESS_MIN");
 
-// What the strip shows while a remote sets its layout (`strip preview`). The colors are the
-// app's slider colors, and the fixed brightness means a single pixel is easy to find even
-// on a boot turned down low. A preview ends by itself this long after the latest strip
-// command, so a phone that goes away can't leave a boot stuck showing it.
+// What the strip shows while a remote sets its layout (`strip preview`): the ring in blue,
+// with the toe and heel pixels in their own colors. These are the app's slider colors, and
+// the fixed brightness means the markers are easy to find even on a boot turned down low. A
+// preview ends by itself this long after the latest strip command, so a phone that goes
+// away can't leave a boot stuck showing it.
 constexpr uint32_t      STRIP_PREVIEW_LEDS_COLOR = 0x0000FF;  // blue
 constexpr uint32_t      STRIP_PREVIEW_TOE_COLOR  = 0xFFC800;  // yellow
 constexpr uint32_t      STRIP_PREVIEW_HEEL_COLOR = 0x8000FF;  // purple

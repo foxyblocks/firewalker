@@ -806,11 +806,6 @@ dd {
   background: var(--surface-raised);
 }
 
-.strip-card-on {
-  border-color: var(--pixel);
-  box-shadow: 0 0 14px -4px var(--pixel-glow);
-}
-
 .strip-card-head {
   display: flex;
   align-items: center;
@@ -846,10 +841,6 @@ dd {
   text-align: center;
 }
 
-/* Holds two lines, so the sliders stay put under a finger as the hint changes. */
-.strip-hint {
-  min-height: 2.8em;
-}
 
 .sheet-foot {
   display: flex;

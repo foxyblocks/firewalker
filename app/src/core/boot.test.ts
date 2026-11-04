@@ -640,24 +640,10 @@ describe("the strip preview", () => {
     client.connect();
     await settle();
 
-    client.setStripPreview("toe");
+    client.setStripPreview(true);
     await settle();
-    expect(boot.preview).toBe("toe");
-    expect(state(client).status?.preview).toBe("toe");
-  });
-
-  it("changes what's showing without passing through off", async () => {
-    const { boot, client } = setup();
-    client.connect();
-    await settle();
-
-    client.setStripPreview("toe");
-    await settle();
-    boot.received.length = 0;
-    client.setStripPreview("heel");
-    await settle();
-    expect(boot.received).toContain("strip preview heel");
-    expect(boot.received).not.toContain("strip preview off");
+    expect(boot.preview).toBe(true);
+    expect(state(client).status?.preview).toBe(true);
   });
 
   it("stays up for as long as it's wanted, past the boot's own limit", async () => {
@@ -665,9 +651,9 @@ describe("the strip preview", () => {
     client.connect();
     await settle();
 
-    client.setStripPreview("leds");
+    client.setStripPreview(true);
     await vi.advanceTimersByTimeAsync(180_000);
-    expect(boot.preview).toBe("leds");
+    expect(boot.preview).toBe(true);
   });
 
   it("stops when it's no longer wanted, and stops asking", async () => {
@@ -675,11 +661,11 @@ describe("the strip preview", () => {
     client.connect();
     await settle();
 
-    client.setStripPreview("leds");
+    client.setStripPreview(true);
     await settle();
-    client.setStripPreview("off");
+    client.setStripPreview(false);
     await settle();
-    expect(boot.preview).toBe("off");
+    expect(boot.preview).toBe(false);
 
     boot.received.length = 0;
     await vi.advanceTimersByTimeAsync(180_000);
@@ -691,12 +677,12 @@ describe("the strip preview", () => {
     client.connect();
     await settle();
 
-    client.setStripPreview("leds");
+    client.setStripPreview(true);
     await settle();
     boot.dropLink();
     boot.reachable = false;
     await vi.advanceTimersByTimeAsync(61_000);
-    expect(boot.preview).toBe("off");
+    expect(boot.preview).toBe(false);
   });
 
   it("comes back after the connection drops", async () => {
@@ -704,32 +690,32 @@ describe("the strip preview", () => {
     client.connect();
     await settle();
 
-    client.setStripPreview("heel");
+    client.setStripPreview(true);
     await settle();
     boot.dropLink();
     boot.reachable = false;
     await vi.advanceTimersByTimeAsync(61_000);
-    expect(boot.preview).toBe("off");
+    expect(boot.preview).toBe(false);
 
     boot.reachable = true;
     await vi.advanceTimersByTimeAsync(20_000);
     expect(state(client).link).toBe("online");
-    expect(boot.preview).toBe("heel");
+    expect(boot.preview).toBe(true);
   });
 
   it("clears one left running by an earlier session", async () => {
     const { boot, client } = setup();
-    boot.preview = "toe";
+    boot.preview = true;
     client.connect();
     await settle();
-    expect(boot.preview).toBe("off");
+    expect(boot.preview).toBe(false);
   });
 
   it("stops asking once the boot is forgotten", async () => {
     const { boot, client } = setup();
     client.connect();
     await settle();
-    client.setStripPreview("leds");
+    client.setStripPreview(true);
     await settle();
 
     await client.disconnect();

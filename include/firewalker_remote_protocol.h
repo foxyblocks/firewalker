@@ -52,18 +52,13 @@ enum class CommandType : uint8_t {
   StripPreview,
 };
 
-// What the strip shows in place of the pattern while its layout is being set: `leds` fills
-// the ring in blue, and `toe` and `heel` each light their one pixel. See final_app.cpp.
-enum class StripPreview : uint8_t { Off, Leds, Toe, Heel };
-
 struct Command {
   CommandType type = CommandType::Invalid;
   PatternId pattern = PatternId::Flow;  // for Pattern
   CalibrationPose pose = CalibrationPose::Neutral;  // for Calibrate
-  bool on = false;                      // for Power and Debug
+  bool on = false;                      // for Power, Debug, and StripPreview
   int32_t value = 0;                    // for Brightness and StripSet
   StripField stripField = StripField::Count;   // for StripSet
-  StripPreview preview = StripPreview::Off;    // for StripPreview
   const char* error = nullptr;          // for Invalid: why it was rejected
 };
 
@@ -81,16 +76,6 @@ inline const char* poseName(CalibrationPose pose) {
     case CalibrationPose::Neutral: return "neutral";
     case CalibrationPose::Heel: return "heel";
     case CalibrationPose::Toe: return "toe";
-  }
-  return "unknown";
-}
-
-inline const char* stripPreviewName(StripPreview preview) {
-  switch (preview) {
-    case StripPreview::Off: return "off";
-    case StripPreview::Leds: return "leds";
-    case StripPreview::Toe: return "toe";
-    case StripPreview::Heel: return "heel";
   }
   return "unknown";
 }
@@ -125,21 +110,13 @@ inline bool parseOnOff(const char* word, bool& out) {
   return false;
 }
 
-// Parses the words after `strip`: a setting and its pixel number, or `preview` and what to
-// show. Whether a number fits this strip is the caller's check (applyStripSetting), so
+// Parses the words after `strip`: a setting and its pixel number, or `preview` and on or
+// off. Whether a number fits this strip is the caller's check (applyStripSetting), so
 // this only rejects what isn't a pixel number at all.
 inline void parseStripCommand(const char* setting, const char* value, Command& command) {
   if (strcmp(setting, "preview") == 0) {
-    if (strcmp(value, "off") == 0) {
-      command.preview = StripPreview::Off;
-    } else if (strcmp(value, "leds") == 0) {
-      command.preview = StripPreview::Leds;
-    } else if (strcmp(value, "toe") == 0) {
-      command.preview = StripPreview::Toe;
-    } else if (strcmp(value, "heel") == 0) {
-      command.preview = StripPreview::Heel;
-    } else {
-      command.error = "unknown-strip-preview";
+    if (!parseOnOff(value, command.on)) {
+      command.error = "expected-on-or-off";
       return;
     }
     command.type = CommandType::StripPreview;
@@ -371,7 +348,7 @@ struct StatusReport {
   bool bleConnected;
   StripLayout strip;
   uint16_t maxLeds;  // the longest strip this build can drive
-  StripPreview preview;
+  bool preview;      // the strip is showing its layout in place of the pattern
 };
 
 // Writes a pose's angle, or `null` if it hasn't been captured.
@@ -399,7 +376,7 @@ inline void formatStatus(char* out, size_t size, const StatusReport& report) {
            "\"calibrated\":%s,\"neutralDeg\":%s,\"heelDeg\":%s,\"toeDeg\":%s,"
            "\"calibration\":\"%s\",\"saved\":%s,\"saveFailed\":%s,\"saves\":%lu,"
            "\"debug\":%s,\"ble\":%s,\"leds\":%u,\"maxLeds\":%u,\"toe\":%u,\"heel\":%u,"
-           "\"preview\":\"%s\"}",
+           "\"preview\":%s}",
            (unsigned)REMOTE_PROTOCOL_VERSION, report.id, patternName(report.pattern),
            patternName(report.lit), (unsigned)report.brightness, (unsigned)report.maxBrightness,
            report.sensorReady ? "ok" : "unavailable", tiltText,
@@ -408,7 +385,7 @@ inline void formatStatus(char* out, size_t size, const StatusReport& report) {
            report.saveFailed ? "true" : "false", (unsigned long)report.saves,
            report.debug ? "true" : "false", report.bleConnected ? "true" : "false",
            (unsigned)report.strip.count, (unsigned)report.maxLeds, (unsigned)report.strip.toe,
-           (unsigned)report.strip.heel, stripPreviewName(report.preview));
+           (unsigned)report.strip.heel, report.preview ? "true" : "false");
 }
 
 // One line of live motion, sent while debug is on. `accelPeak` is the highest

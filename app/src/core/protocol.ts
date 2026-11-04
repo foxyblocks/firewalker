@@ -27,8 +27,6 @@ export type Pose = "neutral" | "heel" | "toe";
 
 /** The strip layout values a boot saves: its pixel count, and the pixels at the toe and heel. */
 export type StripSetting = "leds" | "toe" | "heel";
-/** What a boot's strip shows in place of its pattern while its layout is being set. */
-export type StripPreview = StripSetting | "off";
 
 export interface StatusReply {
   t: "status";
@@ -53,7 +51,7 @@ export interface StatusReply {
   maxLeds: number; // the longest strip this build can drive
   toe: number; // the pixel at the toe
   heel: number; // the pixel at the heel
-  preview: StripPreview; // "off" unless a strip preview is showing
+  preview: boolean; // the strip is showing its layout in place of its pattern
 }
 
 export interface AckReply {
@@ -102,7 +100,7 @@ export const commands = {
   debug: (on: boolean) => `debug ${on ? "on" : "off"}`,
   identify: () => "identify",
   strip: (setting: StripSetting, value: number) => `strip ${setting} ${Math.round(value)}`,
-  stripPreview: (preview: StripPreview) => `strip preview ${preview}`,
+  stripPreview: (on: boolean) => `strip preview ${on ? "on" : "off"}`,
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> =>

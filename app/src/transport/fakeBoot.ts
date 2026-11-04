@@ -11,7 +11,7 @@
  */
 
 import type { BootLink, FoundBoot, LinkEvents, RadioState, Transport } from "./transport";
-import type { Pose, StripPreview, StripSetting } from "../core/protocol";
+import type { Pose, StripSetting } from "../core/protocol";
 
 const STATUS_MIN_MS = 250;
 const MOTION_MS = 200;
@@ -101,8 +101,8 @@ export class FakeBoot {
   readonly maxLeds: number;
   toe: number;
   heel: number;
-  /** What the strip is showing in place of its pattern. */
-  preview: StripPreview = "off";
+  /** Whether the strip is showing its layout in place of its pattern. */
+  preview = false;
 
   private events: LinkEvents | null = null;
   private readonly notificationBytes: number;
@@ -235,18 +235,16 @@ export class FakeBoot {
   private holdPreview(): void {
     if (this.previewTimer) clearTimeout(this.previewTimer);
     this.previewTimer = null;
-    if (this.preview === "off") return;
+    if (!this.preview) return;
     this.previewTimer = setTimeout(() => {
-      this.preview = "off";
+      this.preview = false;
       this.queueStatus();
     }, PREVIEW_HOLD_MS);
   }
 
   private handlePreview(value: string): void {
-    if (value !== "off" && value !== "leds" && value !== "toe" && value !== "heel") {
-      return this.ackInvalid("unknown-strip-preview");
-    }
-    this.preview = value;
+    if (value !== "on" && value !== "off") return this.ackInvalid("expected-on-or-off");
+    this.preview = value === "on";
     this.holdPreview();
     this.ackThenStatus("strip");
   }
