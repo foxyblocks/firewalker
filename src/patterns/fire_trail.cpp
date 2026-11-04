@@ -60,7 +60,7 @@ void FireTrailPattern::render() {
     if (!trails_[i].active) continue;
     for (uint8_t d = 0; d < FIRE_TRAIL_LEN; d++) {
       int16_t pos = trails_[i].head - d;
-      if (pos >= 0 && pos < (int16_t)LED_COUNT) {
+      if (pos >= 0 && pos < (int16_t)strip.numPixels()) {
         strip.setPixelColor(pos, trailColor_[d]);
       }
     }
@@ -82,7 +82,7 @@ void FireTrailPattern::advanceIfDue() {
     if (!trails_[i].active) continue;
     trails_[i].head += (int16_t)steps;
     int16_t bottom = trails_[i].head - (FIRE_TRAIL_LEN - 1);
-    if (bottom >= (int16_t)LED_COUNT) {
+    if (bottom >= (int16_t)strip.numPixels()) {
       trails_[i].active = false;
       activeCount_--;
     }

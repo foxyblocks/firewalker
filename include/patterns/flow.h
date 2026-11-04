@@ -10,7 +10,7 @@
 // single pixel at full tilt. A tilted stomp launches directional trails; a flat
 // stomp flashes the strip white and fades back to the flow color.
 // The strip is a closed ring around the foot (pixel 0 under the controller, toe and heel at
-// configured indices — see firewalker_strip_map.h). A stomp launches trail fronts
+// indices saved per boot — see firewalker_strip_map.h). A stomp launches trail fronts
 // from the tilt-derived "down" point: up to 4 bands (2 per arc) diverging to
 // the heel and toe, each a white head → current hue → previous hue. Driven by
 // the IMU's fused fore-aft tilt. See CONTEXT.md (Flow) and ADR-0002/0003.
@@ -36,11 +36,11 @@ class FlowPattern : public Pattern {
     float    bright;  // 0..1 band brightness, set from the stomp force at spawn
   };
 
-  float pos_[LED_COUNT];          // fore-aft foot position per pixel (toe=1, heel=0)
+  StripLayout layout_ = STRIP_DEFAULT_LAYOUT;  // the layout pos_ was built from
+  float pos_[STRIP_MAX_PIXELS];   // fore-aft foot position per pixel (toe=1, heel=0)
   Front fronts_[FLOW_MAX_FRONTS];
   float hue_ = 0.0f;              // current hue on the 0..65535 wheel (float to accumulate)
   float flashRemainMs_ = 0.0f;    // countdown of a flat-stomp white flash (ms left)
-  bool  built_ = false;
 
   void buildPositions();
   // Launch fronts from the current down-point; strength (0..1, the stomp force)

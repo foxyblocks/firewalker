@@ -4,6 +4,11 @@
 // 800 kHz) on the XIAO MG24's D10 pad. Patterns draw into a pixel buffer through
 // `Firewalker::strip` (firewalker_core.h) and push it with show(). Brightness is
 // applied at show() time, so changing it never loses the colors a pattern set.
+//
+// The strip has a fixed capacity, the longest strip this build can drive, and a pixel
+// count that can change while running. Patterns can only draw inside the count, but every
+// frame still covers the whole capacity. So on an uncut strip, pixels past the count are
+// held dark rather than left showing an old color.
 // src/firewalker_strip.cpp explains how the signal is generated.
 
 #include <Arduino.h>
@@ -12,7 +17,7 @@ namespace Firewalker {
 
 class LedStrip {
  public:
-  explicit LedStrip(uint16_t pixelCount) : count_(pixelCount) {}
+  explicit LedStrip(uint16_t capacity) : capacity_(capacity), count_(capacity) {}
 
   // Allocates the frame buffers and starts the SPI hardware that drives D10. Call
   // from setup(), not at global-constructor time.
@@ -23,9 +28,12 @@ class LedStrip {
   uint8_t brightness() const { return brightness_; }
   uint16_t numPixels() const { return count_; }
 
+  // Sets how many pixels can be drawn, up to the capacity, and blacks out the rest.
+  void setPixelCount(uint16_t count);
+
   // Blacks out the buffer. The strip keeps its old colors until show().
   void clear();
-  // Colors are packed 0x00RRGGBB. Out-of-range indices are ignored.
+  // Colors are packed 0x00RRGGBB. Indices past the pixel count are ignored.
   void setPixelColor(uint16_t index, uint32_t color);
   void setPixelColor(uint16_t index, uint8_t r, uint8_t g, uint8_t b);
 
@@ -45,6 +53,7 @@ class LedStrip {
  private:
   size_t encodedSize() const;
 
+  uint16_t capacity_;
   uint16_t count_;
   uint8_t* pixels_ = nullptr;   // R, G, B per pixel, before brightness
   uint8_t* encoded_ = nullptr;  // the frame as SPI bytes, sent by DMA

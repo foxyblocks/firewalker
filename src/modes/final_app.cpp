@@ -1,8 +1,8 @@
 // final_app is the shoe app, and the same binary runs on both shoes. The onboard
 // sensor drives the active pattern, the remote (BLE or the USB console) changes
-// settings, and each controller keeps its own pattern, brightness, and calibrated
-// poses in flash. Losing the phone never matters: whatever is running keeps
-// running, and a reconnecting client is told the current state.
+// settings, and each controller keeps its own pattern, brightness, calibrated
+// poses, and strip layout in flash. Losing the phone never matters: whatever is
+// running keeps running, and a reconnecting client is told the current state.
 //
 // Each loop pass reads the sensor, handles any remote commands, saves settings that
 // are due, and renders at most one frame. See docs/remote-protocol.md for commands.
@@ -28,7 +28,7 @@ namespace FinalAppMode {
 using namespace Firewalker;
 
 static constexpr SettingsBounds SETTINGS_BOUNDS = {LED_BRIGHTNESS_MIN, LED_BRIGHTNESS_MAX,
-                                                   TILT_LIMITS.maxNeutralDeg};
+                                                   TILT_LIMITS.maxNeutralDeg, STRIP_MAX_PIXELS};
 static constexpr PoseCaptureLimits CAPTURE_LIMITS = {
     CALIBRATION_WINDOW_MS, CALIBRATION_NO_SAMPLE_MS, CALIBRATION_MIN_SAMPLES,
     CALIBRATION_MAX_SPREAD_DEG};
@@ -37,7 +37,7 @@ static FlowPattern flow;
 static FireTrailPattern fireTrail;
 static Pattern* activePattern = nullptr;  // null when the strip is off
 
-static Settings settings = defaultSettings(LED_BRIGHTNESS);
+static Settings settings = defaultSettings(LED_BRIGHTNESS, STRIP_DEFAULT_LAYOUT);
 static SaveScheduler saveScheduler(SETTINGS_SAVE_QUIET_MS, SETTINGS_SAVE_MAX_MS);
 static bool saveFailed = false;
 
@@ -45,6 +45,9 @@ static PoseCalibrator calibrator(CAPTURE_LIMITS, TILT_LIMITS);
 
 static bool identifying = false;
 static unsigned long identifyStartMs = 0;
+
+static StripPreview stripPreview = StripPreview::Off;
+static unsigned long lastStripCommandMs = 0;  // a preview ends STRIP_PREVIEW_HOLD_MS after this
 
 static bool debugEnabled = false;
 static bool statusPending = false;
@@ -72,6 +75,9 @@ static void sendStatus() {
   report.saves = settingsWriteCount();
   report.debug = debugEnabled;
   report.bleConnected = remoteBleConnected();
+  report.strip = settings.strip;
+  report.maxLeds = STRIP_MAX_PIXELS;
+  report.preview = stripPreview;
 
   char line[REMOTE_LINE_MAX];
   formatStatus(line, sizeof(line), report);
@@ -117,6 +123,19 @@ static void selectPattern(PatternId pattern) {
     showPattern(pattern);
   }
   saveScheduler.markChanged(millis());
+}
+
+// Shows or stops showing a strip layout preview, which takes over the strip from the
+// pattern without changing any settings. Each call keeps a preview alive for another
+// STRIP_PREVIEW_HOLD_MS. Stopping brings back the saved brightness and restarts the pattern.
+static void setStripPreview(StripPreview preview) {
+  lastStripCommandMs = millis();
+  if (preview == stripPreview) return;
+  stripPreview = preview;
+  if (preview == StripPreview::Off) {
+    strip.setBrightness(settings.brightness);
+    showPattern(settings.pattern);
+  }
 }
 
 static void handleCommand(const Command& command) {
@@ -175,6 +194,29 @@ static void handleCommand(const Command& command) {
       debugEnabled = command.on;
       sendAck(command.type, true);
       break;
+
+    // Saves after the changes pause, so dragging a slider becomes one flash write. Patterns
+    // read the layout when they enter, so one showing now restarts to pick it up. A preview
+    // draws straight from the settings, and the pattern restarts when the preview ends.
+    case CommandType::StripSet: {
+      const char* failure =
+          applyStripSetting(settings.strip, command.stripField, command.value, STRIP_MAX_PIXELS);
+      if (failure) {
+        sendAck(command.type, false, failure);
+        return;
+      }
+      setStripLayout(settings.strip);
+      saveScheduler.markChanged(millis());
+      lastStripCommandMs = millis();
+      if (stripPreview == StripPreview::Off) showPattern(settings.pattern);
+      sendAck(command.type, true);
+      break;
+    }
+
+    case CommandType::StripPreview:
+      setStripPreview(command.preview);
+      sendAck(command.type, true);
+      break;
   }
   statusPending = true;
 }
@@ -213,6 +255,28 @@ static void sendMotionIfDue(unsigned long now) {
   accelPeak = 0.0f;
 }
 
+// Draws what a strip layout preview shows: the whole ring filled for the pixel count, or
+// the one pixel at the toe or heel. Everything else is dark, so you can see where the ring
+// ends on an uncut strip, and exactly which pixel a marker is on.
+static void drawStripPreview() {
+  strip.setBrightness(STRIP_PREVIEW_BRIGHTNESS);
+  strip.clear();
+  switch (stripPreview) {
+    case StripPreview::Leds:
+      for (uint16_t i = 0; i < strip.numPixels(); i++) strip.setPixelColor(i, STRIP_PREVIEW_LEDS_COLOR);
+      break;
+    case StripPreview::Toe:
+      strip.setPixelColor(settings.strip.toe, STRIP_PREVIEW_TOE_COLOR);
+      break;
+    case StripPreview::Heel:
+      strip.setPixelColor(settings.strip.heel, STRIP_PREVIEW_HEEL_COLOR);
+      break;
+    case StripPreview::Off:
+      break;
+  }
+  strip.show();
+}
+
 // Draws one frame, at most every APP_FRAME_MS so the strip can't take all of the
 // loop's time from the sensor and the radio. With the strip off, a black frame now
 // and then keeps it dark if the strip's power was cycled separately.
@@ -227,8 +291,17 @@ static void renderIfDue(unsigned long now) {
     } else if ((now - lastFrameMs) >= APP_FRAME_MS) {
       lastFrameMs = now;
       const uint32_t color = ((elapsed / IDENTIFY_BLINK_MS) % 2 == 0) ? 0xFFFFFF : 0x000000;
-      for (uint16_t i = 0; i < LED_COUNT; i++) strip.setPixelColor(i, color);
+      for (uint16_t i = 0; i < strip.numPixels(); i++) strip.setPixelColor(i, color);
       strip.show();
+    }
+    return;
+  }
+
+  if (stripPreview != StripPreview::Off) {
+    stompPending = false;
+    if ((now - lastFrameMs) >= APP_FRAME_MS) {
+      lastFrameMs = now;
+      drawStripPreview();
     }
     return;
   }
@@ -266,6 +339,7 @@ void setup() {
   imuSetCalibration(settings.calibration);
 
   remoteBegin();
+  setStripLayout(settings.strip);
   strip.setBrightness(settings.brightness);
   showPattern(settings.pattern);
   sendStatus();
@@ -293,6 +367,11 @@ void loop() {
   const unsigned long now = millis();
 
   if (saveScheduler.due(now)) saveNow();
+
+  if (stripPreview != StripPreview::Off && (now - lastStripCommandMs) >= STRIP_PREVIEW_HOLD_MS) {
+    setStripPreview(StripPreview::Off);
+    statusPending = true;
+  }
 
   if (remoteTakeClientReady()) statusPending = true;
   if (statusPending && (now - lastStatusMs) >= REMOTE_STATUS_MIN_MS) sendStatus();

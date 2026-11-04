@@ -20,15 +20,26 @@ const char* loadSettings(const SettingsBounds& bounds, Settings& out) {
   const Ecode_t info = nvm3_getObjectInfo(nvm3_defaultHandle, SETTINGS_KEY, &objectType, &objectSize);
   if (info == ECODE_NVM3_ERR_KEY_NOT_FOUND) return "absent";
   if (info != ECODE_NVM3_OK) return "read-failed";
-  // A record from a firmware with a different layout can't be read into this one.
-  if (objectSize != sizeof(SettingsRecord)) return "unsupported";
 
-  SettingsRecord record;
-  if (nvm3_readData(nvm3_defaultHandle, SETTINGS_KEY, &record, sizeof(record)) != ECODE_NVM3_OK) {
-    return "read-failed";
+  SettingsDecode decoded;
+  if (objectSize == sizeof(SettingsRecord)) {
+    SettingsRecord record;
+    if (nvm3_readData(nvm3_defaultHandle, SETTINGS_KEY, &record, sizeof(record)) != ECODE_NVM3_OK) {
+      return "read-failed";
+    }
+    decoded = decodeSettings(record, bounds, out);
+  } else if (objectSize == sizeof(SettingsRecordV2)) {
+    SettingsRecordV2 record;
+    if (nvm3_readData(nvm3_defaultHandle, SETTINGS_KEY, &record, sizeof(record)) != ECODE_NVM3_OK) {
+      return "read-failed";
+    }
+    decoded = decodeSettingsV2(record, bounds, out);
+  } else {
+    // A record from a firmware with a different layout can't be read into this one.
+    return "unsupported";
   }
 
-  switch (decodeSettings(record, bounds, out)) {
+  switch (decoded) {
     case SettingsDecode::Ok: return "loaded";
     case SettingsDecode::Corrupt: return "corrupt";
     case SettingsDecode::Unsupported: return "unsupported";

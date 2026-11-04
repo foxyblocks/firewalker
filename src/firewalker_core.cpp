@@ -4,7 +4,16 @@
 
 namespace Firewalker {
 
-LedStrip strip(LED_COUNT);
+LedStrip strip(STRIP_MAX_PIXELS);
+
+static StripLayout currentLayout = STRIP_DEFAULT_LAYOUT;
+
+const StripLayout& stripLayout() { return currentLayout; }
+
+void setStripLayout(const StripLayout& layout) {
+  currentLayout = layout;
+  strip.setPixelCount(layout.count);
+}
 
 void setupCore(const __FlashStringHelper* modeName) {
   Serial.begin(SERIAL_BAUD);
@@ -21,11 +30,11 @@ void setupCore(const __FlashStringHelper* modeName) {
   Serial.print(F("[firewalker] mode="));
   Serial.print(modeName);
   Serial.print(F(" pixels="));
-  Serial.print(LED_COUNT);
+  Serial.print(currentLayout.count);
   Serial.print(F(" toe="));
-  Serial.print(STRIP_TOE_INDEX);
+  Serial.print(currentLayout.toe);
   Serial.print(F(" heel="));
-  Serial.println(STRIP_HEEL_INDEX);
+  Serial.println(currentLayout.heel);
 }
 
 // Channels are scaled here rather than with setBrightness so a caller's computed
@@ -37,7 +46,7 @@ void renderIdleBrightness(uint8_t brightness) {
       (uint16_t)IDLE_FILL_R * brightness / LED_BRIGHTNESS,
       (uint16_t)IDLE_FILL_G * brightness / LED_BRIGHTNESS,
       (uint16_t)IDLE_FILL_B * brightness / LED_BRIGHTNESS);
-  for (uint16_t i = 0; i < LED_COUNT; i++) {
+  for (uint16_t i = 0; i < strip.numPixels(); i++) {
     strip.setPixelColor(i, color);
   }
   strip.show();

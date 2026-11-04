@@ -31,8 +31,54 @@ static void test_calibrate_takes_an_optional_pose() {
   TEST_ASSERT_EQUAL_STRING("too-many-arguments", parseCommand("calibrate heel now").error);
 }
 
+static void test_strip_commands_name_a_setting_and_a_value() {
+  const Command leds = parseCommand("strip leds 110");
+  TEST_ASSERT_EQUAL(CommandType::StripSet, leds.type);
+  TEST_ASSERT_EQUAL(StripField::Count, leds.stripField);
+  TEST_ASSERT_EQUAL(110, leds.value);
+
+  const Command toe = parseCommand("strip toe 0");
+  TEST_ASSERT_EQUAL(CommandType::StripSet, toe.type);
+  TEST_ASSERT_EQUAL(StripField::Toe, toe.stripField);
+  TEST_ASSERT_EQUAL(0, toe.value);
+
+  const Command heel = parseCommand("strip heel 90");
+  TEST_ASSERT_EQUAL(StripField::Heel, heel.stripField);
+  TEST_ASSERT_EQUAL(90, heel.value);
+}
+
+static void test_strip_commands_reject_bad_input() {
+  TEST_ASSERT_EQUAL_STRING("expected-setting-and-value", parseCommand("strip").error);
+  TEST_ASSERT_EQUAL_STRING("expected-setting-and-value", parseCommand("strip leds").error);
+  TEST_ASSERT_EQUAL_STRING("too-many-arguments", parseCommand("strip leds 110 now").error);
+  TEST_ASSERT_EQUAL_STRING("unknown-strip-setting", parseCommand("strip arch 40").error);
+  TEST_ASSERT_EQUAL_STRING("expected-number", parseCommand("strip leds lots").error);
+  TEST_ASSERT_EQUAL_STRING("expected-number", parseCommand("strip toe -1").error);
+  TEST_ASSERT_EQUAL_STRING("expected-number", parseCommand("strip toe 12x").error);
+  TEST_ASSERT_EQUAL_STRING("expected-number", parseCommand("strip toe 99999").error);
+}
+
+static void test_strip_preview_names_what_to_show() {
+  const Command leds = parseCommand("strip preview leds");
+  TEST_ASSERT_EQUAL(CommandType::StripPreview, leds.type);
+  TEST_ASSERT_EQUAL(StripPreview::Leds, leds.preview);
+  TEST_ASSERT_EQUAL(StripPreview::Toe, parseCommand("strip preview toe").preview);
+  TEST_ASSERT_EQUAL(StripPreview::Heel, parseCommand("strip preview heel").preview);
+  TEST_ASSERT_EQUAL(StripPreview::Off, parseCommand("strip preview off").preview);
+  TEST_ASSERT_EQUAL_STRING("unknown-strip-preview", parseCommand("strip preview arch").error);
+}
+
+static void test_strip_commands_ack_as_strip() {
+  char line[REMOTE_LINE_MAX];
+  formatAck(line, sizeof(line), CommandType::StripSet, false, "same-pixel");
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"ack\",\"cmd\":\"strip\",\"ok\":false,\"error\":\"same-pixel\"}", line);
+  formatAck(line, sizeof(line), CommandType::StripPreview, true);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"ack\",\"cmd\":\"strip\",\"ok\":true}", line);
+}
+
 static void test_every_command_fits_a_default_ble_write() {
-  const char* longest[] = {"calibrate neutral", "pattern fire-trail", "brightness 255"};
+  const char* longest[] = {"calibrate neutral", "pattern fire-trail", "brightness 255",
+                           "strip preview heel", "strip leds 160"};
   for (const char* command : longest) {
     TEST_ASSERT_TRUE(strlen(command) <= 20);
   }
@@ -160,6 +206,9 @@ static StatusReport sampleStatus() {
   report.saves = 3;
   report.debug = false;
   report.bleConnected = true;
+  report.strip = {110, 40, 90};
+  report.maxLeds = 160;
+  report.preview = StripPreview::Toe;
   return report;
 }
 
@@ -167,10 +216,11 @@ static void test_status_reports_the_actual_state() {
   char line[REMOTE_LINE_MAX];
   formatStatus(line, sizeof(line), sampleStatus());
   TEST_ASSERT_EQUAL_STRING(
-      "{\"t\":\"status\",\"proto\":1,\"id\":\"A1B2\",\"pattern\":\"off\",\"lit\":\"fire-trail\","
+      "{\"t\":\"status\",\"proto\":2,\"id\":\"A1B2\",\"pattern\":\"off\",\"lit\":\"fire-trail\","
       "\"brightness\":32,\"maxBrightness\":64,\"sensor\":\"ok\",\"tilt\":-0.25,\"calibrated\":true,"
       "\"neutralDeg\":4.50,\"heelDeg\":null,\"toeDeg\":34.00,\"calibration\":\"ok\",\"saved\":true,"
-      "\"saveFailed\":false,\"saves\":3,\"debug\":false,\"ble\":true}",
+      "\"saveFailed\":false,\"saves\":3,\"debug\":false,\"ble\":true,\"leds\":110,\"maxLeds\":160,"
+      "\"toe\":40,\"heel\":90,\"preview\":\"toe\"}",
       line);
 }
 
@@ -192,6 +242,9 @@ static void test_largest_status_fits_the_line_buffer() {
   report.saved = false;
   report.saves = 4294967295u;
   report.debug = true;
+  report.strip = {4096, 4095, 4094};
+  report.maxLeds = 4096;
+  report.preview = StripPreview::Heel;
   char line[REMOTE_LINE_MAX];
   formatStatus(line, sizeof(line), report);
   // A truncated line would be missing its closing brace.
@@ -219,6 +272,10 @@ int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_commands_with_no_arguments);
   RUN_TEST(test_calibrate_takes_an_optional_pose);
+  RUN_TEST(test_strip_commands_name_a_setting_and_a_value);
+  RUN_TEST(test_strip_commands_reject_bad_input);
+  RUN_TEST(test_strip_preview_names_what_to_show);
+  RUN_TEST(test_strip_commands_ack_as_strip);
   RUN_TEST(test_every_command_fits_a_default_ble_write);
   RUN_TEST(test_patterns_line_lists_what_can_be_selected);
   RUN_TEST(test_pattern_accepts_each_stable_name);

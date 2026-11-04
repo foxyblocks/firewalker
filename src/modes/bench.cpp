@@ -22,7 +22,7 @@
 #define BENCH_TEST 2
 #endif
 #ifndef BENCH_LIT_PIXELS
-#define BENCH_LIT_PIXELS LED_COUNT
+#define BENCH_LIT_PIXELS STRIP_MAX_PIXELS
 #endif
 #ifndef BENCH_MOTION
 #define BENCH_MOTION 0

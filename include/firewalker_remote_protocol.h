@@ -27,10 +27,11 @@ namespace Firewalker {
 // Long enough for any valid command, so a longer line is rejected rather than cut.
 constexpr size_t REMOTE_COMMAND_MAX = 48;
 // Long enough for the largest status line.
-constexpr size_t REMOTE_LINE_MAX = 400;
+constexpr size_t REMOTE_LINE_MAX = 440;
 // Reported in status, so an app can tell when a boot's firmware needs updating. Raise it
-// when a change would break a client written against the current protocol.
-constexpr uint8_t REMOTE_PROTOCOL_VERSION = 1;
+// when a change would break a client written against the current protocol, or when clients
+// start relying on something earlier firmware doesn't have. 2 added the strip layout.
+constexpr uint8_t REMOTE_PROTOCOL_VERSION = 2;
 
 // The patterns a client can select, as the `patterns` command lists them. Off isn't one:
 // it's the absence of a pattern. Keep each name to 12 characters, so `pattern <name>` fits
@@ -47,14 +48,22 @@ enum class CommandType : uint8_t {
   Calibrate,
   Debug,
   Identify,
+  StripSet,
+  StripPreview,
 };
+
+// What the strip shows in place of the pattern while its layout is being set: `leds` fills
+// the ring in blue, and `toe` and `heel` each light their one pixel. See final_app.cpp.
+enum class StripPreview : uint8_t { Off, Leds, Toe, Heel };
 
 struct Command {
   CommandType type = CommandType::Invalid;
   PatternId pattern = PatternId::Flow;  // for Pattern
   CalibrationPose pose = CalibrationPose::Neutral;  // for Calibrate
   bool on = false;                      // for Power and Debug
-  int32_t value = 0;                    // for Brightness
+  int32_t value = 0;                    // for Brightness and StripSet
+  StripField stripField = StripField::Count;   // for StripSet
+  StripPreview preview = StripPreview::Off;    // for StripPreview
   const char* error = nullptr;          // for Invalid: why it was rejected
 };
 
@@ -76,6 +85,16 @@ inline const char* poseName(CalibrationPose pose) {
   return "unknown";
 }
 
+inline const char* stripPreviewName(StripPreview preview) {
+  switch (preview) {
+    case StripPreview::Off: return "off";
+    case StripPreview::Leds: return "leds";
+    case StripPreview::Toe: return "toe";
+    case StripPreview::Heel: return "heel";
+  }
+  return "unknown";
+}
+
 inline const char* commandName(CommandType type) {
   switch (type) {
     case CommandType::Status: return "status";
@@ -86,6 +105,8 @@ inline const char* commandName(CommandType type) {
     case CommandType::Brightness: return "brightness";
     case CommandType::Calibrate: return "calibrate";
     case CommandType::Debug: return "debug";
+    case CommandType::StripSet: return "strip";
+    case CommandType::StripPreview: return "strip";
     case CommandType::Invalid: break;
   }
   return "unknown";
@@ -102,6 +123,48 @@ inline bool parseOnOff(const char* word, bool& out) {
     return true;
   }
   return false;
+}
+
+// Parses the words after `strip`: a setting and its pixel number, or `preview` and what to
+// show. Whether a number fits this strip is the caller's check (applyStripSetting), so
+// this only rejects what isn't a pixel number at all.
+inline void parseStripCommand(const char* setting, const char* value, Command& command) {
+  if (strcmp(setting, "preview") == 0) {
+    if (strcmp(value, "off") == 0) {
+      command.preview = StripPreview::Off;
+    } else if (strcmp(value, "leds") == 0) {
+      command.preview = StripPreview::Leds;
+    } else if (strcmp(value, "toe") == 0) {
+      command.preview = StripPreview::Toe;
+    } else if (strcmp(value, "heel") == 0) {
+      command.preview = StripPreview::Heel;
+    } else {
+      command.error = "unknown-strip-preview";
+      return;
+    }
+    command.type = CommandType::StripPreview;
+    return;
+  }
+
+  if (strcmp(setting, "leds") == 0) {
+    command.stripField = StripField::Count;
+  } else if (strcmp(setting, "toe") == 0) {
+    command.stripField = StripField::Toe;
+  } else if (strcmp(setting, "heel") == 0) {
+    command.stripField = StripField::Heel;
+  } else {
+    command.error = "unknown-strip-setting";
+    return;
+  }
+
+  char* end = nullptr;
+  const long number = strtol(value, &end, 10);
+  if (end == value || *end != '\0' || number < 0 || number > 65535) {
+    command.error = "expected-number";
+    return;
+  }
+  command.value = (int32_t)number;
+  command.type = CommandType::StripSet;
 }
 
 // Parses one command line. Surrounding whitespace and a trailing CR or LF are
@@ -172,6 +235,15 @@ inline Command parseCommand(const char* line) {
       return command;
     }
     command.type = CommandType::Calibrate;
+    return command;
+  }
+
+  if (strcmp(verb, "strip") == 0) {
+    if (count != 3) {
+      command.error = "expected-setting-and-value";
+      return command;
+    }
+    parseStripCommand(arg, words[2], command);
     return command;
   }
 
@@ -297,6 +369,9 @@ struct StatusReport {
   uint32_t saves;                // flash writes since boot
   bool debug;
   bool bleConnected;
+  StripLayout strip;
+  uint16_t maxLeds;  // the longest strip this build can drive
+  StripPreview preview;
 };
 
 // Writes a pose's angle, or `null` if it hasn't been captured.
@@ -323,14 +398,17 @@ inline void formatStatus(char* out, size_t size, const StatusReport& report) {
            "\"brightness\":%u,\"maxBrightness\":%u,\"sensor\":\"%s\",\"tilt\":%s,"
            "\"calibrated\":%s,\"neutralDeg\":%s,\"heelDeg\":%s,\"toeDeg\":%s,"
            "\"calibration\":\"%s\",\"saved\":%s,\"saveFailed\":%s,\"saves\":%lu,"
-           "\"debug\":%s,\"ble\":%s}",
+           "\"debug\":%s,\"ble\":%s,\"leds\":%u,\"maxLeds\":%u,\"toe\":%u,\"heel\":%u,"
+           "\"preview\":\"%s\"}",
            (unsigned)REMOTE_PROTOCOL_VERSION, report.id, patternName(report.pattern),
            patternName(report.lit), (unsigned)report.brightness, (unsigned)report.maxBrightness,
            report.sensorReady ? "ok" : "unavailable", tiltText,
            report.calibration.neutralSet ? "true" : "false", neutralText, heelText, toeText,
            report.calibrationState, report.saved ? "true" : "false",
            report.saveFailed ? "true" : "false", (unsigned long)report.saves,
-           report.debug ? "true" : "false", report.bleConnected ? "true" : "false");
+           report.debug ? "true" : "false", report.bleConnected ? "true" : "false",
+           (unsigned)report.strip.count, (unsigned)report.maxLeds, (unsigned)report.strip.toe,
+           (unsigned)report.strip.heel, stripPreviewName(report.preview));
 }
 
 // One line of live motion, sent while debug is on. `accelPeak` is the highest
