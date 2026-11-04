@@ -80,8 +80,9 @@ home.
 - **Remote:** Both, Left, or Right chooses what a tap controls. A single-boot tab never
   touches the other boot.
 - **Calibrate:** do this wearing the boots. Neutral with your weight even, heel down with
-  toes up, toe down with heel up, each as far as you want the full effect. Heel and toe are
-  optional, and need firmware that reports `heelDeg` and `toeDeg`.
+  toes up, toe down with heel up, each as far as you want the full effect. Stay in the pose
+  for the two seconds after the countdown. A little wobble is fine. Heel and toe are optional,
+  and need firmware that reports `heelDeg` and `toeDeg`.
 - **Status:** what a boot actually reports, plus live debug numbers.
 
 ## Troubleshooting
@@ -91,7 +92,7 @@ home.
 | A boot isn't listed | It's connected to something else, or it's off. Disconnect the other device. |
 | Chrome's picker stays empty or closes by itself | Allow Chrome under macOS Settings, Privacy & Security, Bluetooth, and keep its window in front. |
 | Reconnecting never finishes | Check the boot has power. In Chrome after a reload, add it again from Boots. |
-| "It moved" every time | The capture needs one still second. Brace against something and try again. |
+| "It kept moving" every time | A capture collects for two seconds and tolerates a wobble, but not rocking back and forth. Settle into the pose before the countdown ends. |
 | "Needs a firmware update" | That boot's firmware doesn't have the pattern. Flash the current build. |
 
 ## How it's organized

@@ -790,6 +790,20 @@ dd {
   }
 }
 
+/* The Capture button fills over the firmware's two-second window, so a hold has a visible end. */
+.button-capturing:disabled {
+  opacity: 1;
+  background: linear-gradient(90deg, var(--ember) 50%, var(--ember-soft) 50%) right / 200% 100%;
+  color: var(--ink);
+  animation: capture-fill 2s linear forwards;
+}
+
+@keyframes capture-fill {
+  to {
+    background-position: left;
+  }
+}
+
 /* ── Prompt ────────────────────────────────────────────────────────────── */
 
 .prompt {

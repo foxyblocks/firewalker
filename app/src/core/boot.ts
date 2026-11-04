@@ -30,8 +30,8 @@ const COMMAND_TIMEOUT_MS = 2000;
 const FIRST_STATUS_WAIT_MS = 2000;
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
-// A capture holds still for one second, so anything past this means a lost result.
-const CAPTURE_RESULT_WAIT_MS = 3000;
+// A capture collects for two seconds, so anything past this means a lost result.
+const CAPTURE_RESULT_WAIT_MS = 4000;
 const BLINK_MS = 600;
 
 export type LinkState = "idle" | "connecting" | "online" | "reconnecting";

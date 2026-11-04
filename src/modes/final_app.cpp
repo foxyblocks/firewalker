@@ -30,9 +30,8 @@ using namespace Firewalker;
 static constexpr SettingsBounds SETTINGS_BOUNDS = {LED_BRIGHTNESS_MIN, LED_BRIGHTNESS_MAX,
                                                    TILT_LIMITS.maxNeutralDeg};
 static constexpr PoseCaptureLimits CAPTURE_LIMITS = {
-    CALIBRATION_WINDOW_MS,     CALIBRATION_NO_SAMPLE_MS,  CALIBRATION_MIN_SAMPLES,
-    CALIBRATION_MAX_RANGE_DEG, CALIBRATION_MAX_GYRO_RADS, IMU_GRAVITY,
-    CALIBRATION_MAX_ACCEL_DEV};
+    CALIBRATION_WINDOW_MS, CALIBRATION_NO_SAMPLE_MS, CALIBRATION_MIN_SAMPLES,
+    CALIBRATION_MAX_SPREAD_DEG};
 
 static FlowPattern flow;
 static FireTrailPattern fireTrail;
@@ -190,8 +189,8 @@ static void handleCommand(const Command& command) {
   statusPending = true;
 }
 
-// Reports a capture's progress once per state change. A pose that holds still and passes
-// its checks is applied and saved right away, because a calibration is worth more than the
+// Reports a capture's progress once per state change. A pose that settles and passes its
+// checks is applied and saved right away, because a calibration is worth more than the
 // wear of one write. Any failure leaves the previous calibration alone, in use and in flash.
 static void updatePoseCapture() {
   poseCapture.poll(millis());
@@ -204,7 +203,7 @@ static void updatePoseCapture() {
     calibrationState = "capturing";
     formatCalibrationCapturing(line, sizeof(line), capturedPose);
   } else {
-    const float angleDeg = poseCapture.meanDeg();
+    const float angleDeg = poseCapture.angleDeg();
     const char* failure = (state == CaptureState::Succeeded)
                               ? applyPose(settings.calibration, capturedPose, angleDeg, TILT_LIMITS)
                               : captureFailureReason(state);
@@ -300,7 +299,7 @@ void loop() {
       stompSinceReport = true;
     }
     if (imuLatest().mag > accelPeak) accelPeak = imuLatest().mag;
-    poseCapture.addSample(millis(), imuRawAngleDeg(), imuGyroMagnitude(), imuLatest().mag);
+    poseCapture.addSample(millis(), imuRawAngleDeg());
   }
   updatePoseCapture();
 

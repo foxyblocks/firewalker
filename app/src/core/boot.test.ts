@@ -192,7 +192,7 @@ describe("calibrating", () => {
 
     const result = client.calibrate("neutral");
     expect(state(client).capture).toEqual({ pose: "neutral" });
-    await vi.advanceTimersByTimeAsync(1100);
+    await vi.advanceTimersByTimeAsync(2100);
 
     await expect(result).resolves.toEqual({ ok: true, pose: "neutral", angleDeg: 1.56 });
     expect(boot.received).toContain("calibrate");
@@ -206,12 +206,12 @@ describe("calibrating", () => {
     expect(state(client).supportsPoses).toBe(true);
 
     const heel = client.calibrate("heel");
-    await vi.advanceTimersByTimeAsync(1100);
+    await vi.advanceTimersByTimeAsync(2100);
     await expect(heel).resolves.toEqual({ ok: true, pose: "heel", angleDeg: -18.4 });
     expect(boot.heelDeg).toBe(-18.4);
 
     const toe = client.calibrate("toe");
-    await vi.advanceTimersByTimeAsync(1100);
+    await vi.advanceTimersByTimeAsync(2100);
     await expect(toe).resolves.toEqual({ ok: true, pose: "toe", angleDeg: 34.2 });
   });
 
@@ -222,14 +222,14 @@ describe("calibrating", () => {
     expect(state(client).supportsPoses).toBe(false);
   });
 
-  it("reports a boot that moved, keeping the previous calibration", async () => {
+  it("reports a boot that never settled, keeping the previous calibration", async () => {
     const { boot, client } = setup({ calibrated: true, neutralDeg: 2 });
     client.connect();
     await settle();
     boot.moving = true;
 
     const result = client.calibrate("neutral");
-    await vi.advanceTimersByTimeAsync(200);
+    await vi.advanceTimersByTimeAsync(2100);
 
     await expect(result).resolves.toEqual({ ok: false, pose: "neutral", reason: "motion" });
     expect(boot.neutralDeg).toBe(2);
@@ -254,7 +254,7 @@ describe("calibrating", () => {
     boot.silentCaptureResult = true;
 
     const result = client.calibrate("neutral");
-    await vi.advanceTimersByTimeAsync(600);
+    await vi.advanceTimersByTimeAsync(2500);
 
     await expect(result).resolves.toEqual({ ok: false, pose: "neutral", reason: "motion" });
   });
@@ -271,7 +271,7 @@ describe("calibrating", () => {
     boot.moving = false;
     // Hold every further reply back, as a stalled radio would.
     boot.replyDelayMs = 60_000;
-    await vi.advanceTimersByTimeAsync(7000);
+    await vi.advanceTimersByTimeAsync(8000);
 
     await expect(result).resolves.toEqual({ ok: false, pose: "neutral", reason: "no-answer" });
   });

@@ -34,13 +34,13 @@ export const POSE_NAMES: Record<Pose, string> = {
 };
 
 export const POSE_INSTRUCTIONS: Record<Pose, string> = {
-  neutral: "Stand with your weight even on a flat floor, then hold still.",
-  heel: "Heel on the floor, toes up, as far as you want the full effect. Then hold still.",
-  toe: "Toes on the floor, heel up, as far as you want the full effect. Then hold still.",
+  neutral: "Stand with your weight even on a flat floor, and stay there. A little wobble is fine.",
+  heel: "Heel on the floor, toes up, as far as you want the full effect. Stay there. A little wobble is fine.",
+  toe: "Toes on the floor, heel up, as far as you want the full effect. Stay there. A little wobble is fine.",
 };
 
 const FAILURES: Record<string, string> = {
-  motion: "It moved. Hold it still and try again.",
+  motion: "It kept moving too much to find one pose. Settle into it and try again.",
   "no-samples": "The motion sensor stopped responding. Try again, then restart the boot.",
   "sensor-unavailable": "This boot's motion sensor isn't available, so it can't calibrate.",
   "out-of-range": "It held still, but too far from level. Set it flatter and try again.",

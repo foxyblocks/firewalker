@@ -107,8 +107,8 @@ constexpr float   IMU_FILTER_ALPHA  = 0.96f;  // complementary-filter weight on 
 // ── Tilt calibration ─────────────────────────────────────────────────────
 // How fused angles become tilt (include/firewalker_calibration.h). A side with no
 // captured heel or toe pose reaches full tilt at IMU_TILT_FULL_DEG from neutral. The dead
-// zone is in degrees and covers the capture's spread limit below, so a calibrated boot
-// rests exactly flat.
+// zone is in degrees, so a calibrated boot rests exactly flat even if it settles a little
+// off its captured neutral.
 constexpr float   IMU_TILT_FULL_DEG     = 30.0f;
 constexpr float   IMU_TILT_DEADZONE_DEG = 3.0f;
 constexpr Firewalker::TiltLimits TILT_LIMITS = {
@@ -118,14 +118,14 @@ constexpr Firewalker::TiltLimits TILT_LIMITS = {
     45.0f,  // a neutral pose must sit within this of sensor level
 };
 
-// Bounds for holding a pose still. These are starting values, confirmed only on a still
-// bench so far, and may need loosening for a pose held on a foot (docs/open-questions.md).
-constexpr unsigned long CALIBRATION_WINDOW_MS    = 1000;   // how long the boot must hold still
-constexpr unsigned long CALIBRATION_NO_SAMPLE_MS = 500;    // gap in sensor samples that fails a capture
-constexpr uint16_t      CALIBRATION_MIN_SAMPLES  = 25;     // half the samples expected at 50 Hz
-constexpr float         CALIBRATION_MAX_RANGE_DEG = 3.0f;  // max spread of the angle across the window
-constexpr float         CALIBRATION_MAX_GYRO_RADS = 0.25f; // about 14 deg/s of any rotation
-constexpr float         CALIBRATION_MAX_ACCEL_DEV = 1.5f;  // m/s^2 away from gravity
+// How a capture finds a pose in a hold, which is judged as a whole at the end of the window
+// (PoseCapture in include/firewalker_calibration.h). These are generous because the poses
+// are held on a foot, and a tired foot wobbles and sags. The spread limit only has to catch
+// a boot that never settled, such as one rocking from heel to toe.
+constexpr unsigned long CALIBRATION_WINDOW_MS      = 2000;  // how long a capture collects the hold
+constexpr unsigned long CALIBRATION_NO_SAMPLE_MS   = 500;   // gap in sensor samples that fails a capture
+constexpr uint16_t      CALIBRATION_MIN_SAMPLES    = 50;    // half the samples expected at 50 Hz
+constexpr float         CALIBRATION_MAX_SPREAD_DEG = 8.0f;  // the middle half of the samples must fit in this
 
 // ── Saved settings ───────────────────────────────────────────────────────
 // A burst of slider changes turns into one flash write: it saves after the changes

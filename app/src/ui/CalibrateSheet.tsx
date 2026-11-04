@@ -4,7 +4,9 @@
  * you through it and shows each boot's outcome.
  *
  * Tapping Capture starts a short countdown so you can settle into the pose with the phone
- * still in your hand, and a buzz at the end means you don't need to watch the screen.
+ * still in your hand, and a buzz at the end means you don't need to watch the screen. The
+ * firmware then collects for two seconds and finds the pose in whatever your foot did, so
+ * a wobble doesn't fail it (PoseCapture in include/firewalker_calibration.h).
  * Any step can be tapped to retake it, and heel and toe can be skipped, since the firmware
  * falls back to a default range for a side with no captured pose.
  */
@@ -138,14 +140,14 @@ export function CalibrateSheet({ store, onClose }: { store: BootsStore; onClose:
           <>
             <button
               type="button"
-              className="button button-primary button-wide"
+              className={`button button-primary button-wide${phase.kind === "capturing" ? " button-capturing" : ""}`}
               disabled={busy}
               onClick={() => startCountdown(step, COUNTDOWN_SECONDS)}
             >
               {phase.kind === "countdown"
                 ? `Hold it in ${phase.seconds}`
                 : phase.kind === "capturing"
-                  ? "Hold still"
+                  ? "Stay there"
                   : `Capture ${POSE_NAMES[step.pose].toLowerCase()}`}
             </button>
             <div className="sheet-foot">
@@ -194,7 +196,7 @@ function StepRow({
   const shared = outcomes.length > 1;
 
   let summary: string;
-  if (capturing) summary = "Hold still";
+  if (capturing) summary = "Stay there";
   else if (failures.length > 0) summary = "Try again";
   else if (allDone && firstResult?.ok && !shared) summary = `Done, ${firstResult.angleDeg.toFixed(1)}°`;
   else if (allDone) summary = "Done";

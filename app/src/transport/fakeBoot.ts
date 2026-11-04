@@ -22,8 +22,7 @@ const STATUS_MIN_MS = 250;
 const MOTION_MS = 200;
 const SAVE_QUIET_MS = 1000;
 const SAVE_MAX_MS = 5000;
-const CAPTURE_MS = 1000;
-const FIRST_SAMPLE_MS = 20;
+const CAPTURE_MS = 2000;
 const REPLY_LATENCY_MS = 10;
 const DEFAULT_FULL_TILT_DEG = 30;
 const MAX_NEUTRAL_DEG = 45;
@@ -75,7 +74,7 @@ export class FakeBoot {
   silentOnSubscribe = false;
   /** Holds the boot still at this angle, overriding `poseAngles`. */
   angleDeg: number | null = null;
-  /** The next capture fails the moment it gets a sample. */
+  /** The boot never settles, so a capture fails when its window ends. */
   moving = false;
   /** The next capture ends with no `calibrate` line, leaving only the status field. */
   silentCaptureResult = false;
@@ -252,10 +251,7 @@ export class FakeBoot {
     this.send(this.calibrateLine(pose, { state: "capturing" }));
     this.queueStatus();
 
-    setTimeout(
-      () => this.finishCapture(pose),
-      this.moving ? FIRST_SAMPLE_MS : CAPTURE_MS,
-    );
+    setTimeout(() => this.finishCapture(pose), CAPTURE_MS);
   }
 
   private finishCapture(pose: Pose): void {
