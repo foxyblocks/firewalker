@@ -77,17 +77,61 @@ little wobble is fine. A skipped side reaches full tilt 30 degrees from neutral.
 never settles or a pose can't work, it reports why and keeps the previous calibration. Do
 this once per boot.
 
-## Bench tests
+## Bench tool
 
-`./cli` builds a one-off strip test and flashes it, without changing any firmware
-settings or a shoe's saved settings. It needs [Go](https://go.dev) and PlatformIO.
+`./cli` flashes a boot, runs debug tests, and shows what the firmware says. It needs
+[Go](https://go.dev) and PlatformIO. Bench tests never change firmware settings or a shoe's
+saved settings. Pattern, brightness, calibration, and the strip layout all stay on the iPhone
+remote.
+
+### The TUI
+
+Run `./cli` with no arguments to open it. Piped or scripted, it prints help instead.
+
+The board bar across the top lists every boot on USB and each one it has seen before, with a
+tag for what's running: `app` if it answered `status`, otherwise what this tool last flashed
+(such as `bench flow`), or `unknown`. A lone boot is picked for you. With two, nothing flashes
+or sends until you press `tab`.
+
+| Key | Screen | What it's for |
+|---|---|---|
+| `1` | Bench test | Every test below as a form, on the boot's real strip layout, with the matching `./cli` command. `←` `→` change a value, `e` types one, `Enter` flashes, and `b` only builds |
+| `2` | Builds | Whole firmware: the app, `imu_debug`, `strip_test`, and `strip_off` |
+| `3` | Boot | What the running app reports about itself. `r` refreshes, `i` blinks the strip, and `d` turns motion lines on or off |
+| `5` | Log | The whole log. `r`, `f`, `m`, and `b` show or hide replies, firmware logs, motion, and build output. `/` searches, `space` pauses, and `↑` `↓` scroll |
+
+These work from any screen:
+
+| Key | Does |
+|---|---|
+| `tab` | Switch boots |
+| `a` | Flash the app to the picked boot. Its saved settings stay |
+| `A` | Flash the app to both boots, one after the other, after one confirm |
+| `:` | Send any protocol line to the boot, with tab completion and history |
+| `l` | Cycle the log pane: small, half, hidden |
+| `?` | Show help |
+| `q` | Quit and leave the board running |
+
+Every flash names the boot and waits for `Enter`. The stage line then shows building, uploading,
+and running or failed, with build output in the log and the reason for a failure pinned above
+it. Afterward the TUI stays attached, so the firmware's output keeps streaming.
+
+The TUI holds the boot's USB port while it's open, so `pio device monitor` can't attach until
+you quit or switch boots.
+
+### Subcommands
+
+Each test is also a subcommand, for scripts and repeat runs:
 
 ```bash
+./cli app                                              # flash the app; saved settings stay
+./cli app --debug                                     # same, then stream the board's output
 ./cli flow --brightness 16                             # flow with no sensor input
 ./cli flow --tilt=-0.5                                # fixed simulated heel-down tilt
 ./cli flow --stomp-every 2s                           # timed flashes and trails
 ./cli flow --motion                                   # onboard tilt and stomp input
 ./cli flow --motion --log-motion                      # same, and stream motion over USB
+./cli flow --debug                                    # stay attached and stream the output
 ./cli fire-trail --stomp-every 1s                     # repeat fire trails from the middle
 ./cli fire-trail --tilt=1                             # trails from the toe (-1 for the heel)
 ./cli fire-trail --motion                             # real stomps trigger fire trails
@@ -99,17 +143,25 @@ settings or a shoe's saved settings. It needs [Go](https://go.dev) and PlatformI
 ./cli flow --help
 ```
 
-- The strip length and ring layout come from `include/config.h`. `--pixels` overrides the
-  total connected length, and color tests use `--lit` to choose how many light up while the
-  rest get black.
-- With a custom `--pixels`, pattern tests scale the toe and heel positions to fit. `--toe`
-  and `--heel` override them.
+- Pattern tests light the boot's saved strip layout. They ask the boot for it over USB, then
+  fall back to what that board last reported, then to `include/config.h`, and they print which
+  one they used. A bench build can't answer, so the last report is kept in `boards.json`, in a
+  `firewalker-cli` folder under your user config folder.
+- `--pixels` overrides the total connected length, and pattern tests then scale the toe and heel
+  to fit. `--toe` and `--heel` override either marker, in either order. These only apply to that
+  test, and never change what the boot has saved. Color and off tests use the length in
+  `include/config.h`, and `--lit` chooses how many pixels light up while the rest get black.
 - With several boards connected, `--port` or `--serial` picks one. A selection that
-  matches nothing fails rather than falling through to another shoe.
+  matches nothing fails rather than falling through to another shoe. With no boards, it suggests
+  a data cable or a port without a hub, because a charge-only cable powers the board without
+  showing it on USB.
 - `--motion` can't be combined with simulated `--tilt` or `--stomp-every`.
+- `--debug` and `--log-motion` stay attached after the upload and reconnect if the board resets.
+  In a terminal, lines are colored and anything you type goes to the board. Piped, you get the
+  board's raw lines with no color. Ctrl-C leaves the board running.
 
-A bench test replaces the app on that board. Flash the app again to get it back; its
-saved settings are still there.
+A bench test replaces the app on that board. `./cli app`, or `a` in the TUI, gets it back with
+its saved settings still there.
 
 The same tests are available without Go, and there's a build for checking the sensor's
 axes and thresholds:
