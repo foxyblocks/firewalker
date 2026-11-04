@@ -15,6 +15,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"firewalker/cli/internal/proc"
 )
 
 // Build is a whole firmware the tool can flash, as opposed to a configured bench test.
@@ -83,7 +85,7 @@ func (j Job) Run(ctx context.Context, base []string, stdout, stderr io.Writer) e
 	cmd.Env = j.Environ(base)
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	cmd.WaitDelay = 3 * time.Second
-	stopWholeProcessGroup(cmd)
+	proc.StopGroupOnCancel(cmd)
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("pio run failed: %w", err)
 	}

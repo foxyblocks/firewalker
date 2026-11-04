@@ -216,3 +216,17 @@ dedicated 5 V supply with grounds tied together.
 
 `app/` is the iPhone app that controls the boots over Bluetooth, and its
 [README](app/README.md) covers running, testing, and installing it. It works with no network.
+
+To run it in a browser on this computer, use `./cli web`. It needs [Bun](https://bun.sh).
+
+```bash
+./cli web              # install, build, serve at localhost:5173, and open a browser
+./cli web --dev        # the hot-reload dev server, with no build
+./cli web --fake       # open with pretend boots, for working without hardware
+./cli web --no-open    # print the address instead of opening a browser
+./cli web --build-only # build and stop
+```
+
+Ctrl-C stops the server. Real boots need Chrome or Arc, because Safari has no Web Bluetooth. It
+always uses port 5173, and stops if something else is using it, because a browser keeps boot
+labels and Bluetooth permissions per port.

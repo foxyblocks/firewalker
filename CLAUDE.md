@@ -43,7 +43,8 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
   Arm's compiler, and makes uploads target exactly one board.
 - `tools/cli/` and `./cli` — the bench tool. With no arguments it opens the TUI
   (`internal/tui`), and its subcommands do the same jobs for scripts. `internal/bench` is what a
-  test is, `boards` is which board, `link` talks to it, and `flash` runs PlatformIO.
+  test is, `boards` is which board, `link` talks to it, `flash` runs PlatformIO, and `webapp`
+  serves the phone remote.
 - `test/` — host-native Unity tests for the pure logic (`pio test -e native`).
 - `app/` — the Capacitor iPhone remote (React + TypeScript, Bun). See `app/README.md`.
 - `CONTEXT.md` — domain glossary; reuse these terms.
@@ -66,6 +67,7 @@ pio test -e native                     # host-native tests of the pure logic
 
 ./cli                                 # the bench TUI: flash, test, and read logs
 ./cli app                             # flash the app onto the one connected board
+./cli web                             # build the phone remote and open it in a browser
 ./cli flow --motion --log-motion      # one-off strip test, see README.md
 ```
 

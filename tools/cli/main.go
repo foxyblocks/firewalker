@@ -8,7 +8,8 @@
 // which board it runs on, link talks to that board, flash runs PlatformIO, and theme
 // decides how output looks. A bench test becomes build flags for the `bench` PlatformIO
 // environment (see src/modes/bench.cpp), so running one never edits firmware sources and
-// never touches a shoe's saved settings. `./cli app` puts the shoe app back.
+// never touches a shoe's saved settings. `./cli app` puts the shoe app back, and `./cli
+// web` (internal/webapp) runs the phone remote in a browser here.
 package main
 
 import (
@@ -33,6 +34,7 @@ import (
 	"firewalker/cli/internal/protocol"
 	"firewalker/cli/internal/theme"
 	"firewalker/cli/internal/tui"
+	"firewalker/cli/internal/webapp"
 )
 
 // How long a boot gets to answer `status` before it's treated as not running the app.
@@ -110,6 +112,7 @@ func newCommandWith(run testRunner) *cobra.Command {
 		root.AddCommand(cmd)
 	}
 	root.AddCommand(newAppCommand(opts))
+	root.AddCommand(newWebCommand(opts))
 
 	// Bare `./cli` opens the TUI for a person at a terminal. Piped or scripted, there's
 	// nobody to press keys, so it prints help.
@@ -130,14 +133,69 @@ func newAppCommand(opts *bench.Options) *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			// The app's strip and brightness come from each boot's saved settings, so
 			// these flags would quietly do nothing.
-			for _, name := range []string{"pixels", "brightness"} {
-				if cmd.Flag(name).Changed {
-					return fmt.Errorf("app uses the boot's saved settings, so --%s doesn't apply", name)
-				}
+			if err := refuseFlags(cmd, "app uses the boot's saved settings", "pixels", "brightness"); err != nil {
+				return err
 			}
 			return runApp(cmd.Context(), cmd, opts)
 		},
 	}
+}
+
+// newWebCommand builds `./cli web`, which runs the phone remote in a browser on this
+// computer. Its build-only and dry-run flags are the shared ones, which mean the same
+// thing here as they do for a bench test.
+func newWebCommand(opts *bench.Options) *cobra.Command {
+	web := webapp.Options{}
+	cmd := &cobra.Command{
+		Use:   "web",
+		Short: "Build the phone remote and open it in a browser on this computer",
+		Long:  "Build the phone remote in app/ and serve it at http://localhost:5173, then open it in your browser. Ctrl-C stops the server. Real boots need Chrome or Arc, because Safari has no Web Bluetooth. --fake opens it with pretend boots, which work anywhere.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			// The boots connect from the browser, so nothing here touches a board. In
+			// particular, --port is a USB port, and the web port doesn't change.
+			if err := refuseFlags(cmd, "web doesn't touch a board", "pixels", "brightness", "port", "serial", "debug"); err != nil {
+				return err
+			}
+			web.RepoRoot, web.BuildOnly = opts.RepoRoot, opts.BuildOnly
+			if err := web.Check(); err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			if opts.DryRun {
+				return printWebPlan(out, web)
+			}
+			return webapp.Run(cmd.Context(), web, theme.New(out), out, os.Stderr)
+		},
+	}
+	cmd.Flags().BoolVar(&web.Dev, "dev", false, "Run the hot-reload dev server instead of building")
+	cmd.Flags().BoolVar(&web.Fake, "fake", false, "Open it with pretend boots, for working without hardware")
+	cmd.Flags().BoolVar(&web.NoOpen, "no-open", false, "Don't open a browser; just print the address")
+	return cmd
+}
+
+func printWebPlan(out io.Writer, web webapp.Options) error {
+	plan := web.Plan()
+	fmt.Fprintf(out, "Would run in %s:\n", plan.Dir)
+	for _, step := range plan.Setup {
+		fmt.Fprintln(out, "  "+step.String())
+	}
+	if plan.Serve != nil {
+		fmt.Fprintln(out, "  "+plan.Serve.String())
+		fmt.Fprintln(out, "Then open "+web.URL())
+	}
+	return nil
+}
+
+// refuseFlags fails if any of the named shared flags were set, so a flag can't quietly
+// do nothing on a command it doesn't apply to.
+func refuseFlags(cmd *cobra.Command, reason string, names ...string) error {
+	for _, name := range names {
+		if cmd.Flag(name).Changed {
+			return fmt.Errorf("%s, so --%s doesn't apply", reason, name)
+		}
+	}
+	return nil
 }
 
 // openCache opens this user's boards.json. If there's no config folder to keep it in,

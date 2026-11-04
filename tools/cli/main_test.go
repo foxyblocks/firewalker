@@ -60,6 +60,32 @@ func TestAppRefusesFlagsItWouldIgnore(t *testing.T) {
 	}
 }
 
+func TestWebRefusesFlagsMeantForBoards(t *testing.T) {
+	for _, args := range [][]string{
+		{"web", "--pixels", "20"},
+		{"web", "--brightness", "20"},
+		{"web", "--port", "/dev/cu.left"},
+		{"web", "--serial", "LEFT"},
+		{"web", "--debug"},
+	} {
+		if _, err := run(t, append(args, "--dry-run")...); err == nil || !strings.Contains(err.Error(), args[1]) {
+			t.Errorf("%v: got %v", args, err)
+		}
+	}
+}
+
+func TestWebDryRunShowsThePlanAndRunsNothing(t *testing.T) {
+	out, err := run(t, "web", "--fake", "--dry-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"bun install", "bun run build", "bun run vite preview --port 5173 --strictPort", "http://localhost:5173/?boot=fake&paired=1"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in %q", want, out)
+		}
+	}
+}
+
 func TestDebugNeedsAnUpload(t *testing.T) {
 	for _, args := range [][]string{
 		{"app", "--debug", "--build-only"},
