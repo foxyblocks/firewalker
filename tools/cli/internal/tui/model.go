@@ -391,6 +391,7 @@ func (m *Model) handleLinkEvent(msg linkEventMsg) tea.Cmd {
 		m.conn = msg.event.Link
 		m.lastOpenErr = ""
 		m.status = nil
+		m.refreshFormLayout()
 		m.addLog(theme.KindInfo, groupLogs, "attached to "+m.selectedName())
 		_ = m.conn.Send("status")
 		return tea.Batch(msg.next, m.scheduleStatusRetry(msg.gen, 1))
@@ -398,6 +399,7 @@ func (m *Model) handleLinkEvent(msg linkEventMsg) tea.Cmd {
 		m.handleLine(msg.event.Line)
 	case link.EventDisconnected:
 		m.conn, m.status = nil, nil
+		m.refreshFormLayout()
 		m.addLog(theme.KindInfo, groupLogs, "lost "+m.selectedName()+", waiting for it to come back")
 	case link.EventOpenFailed:
 		// This repeats every second until the port opens, so one line per reason.
@@ -447,6 +449,13 @@ func (m *Model) handleLine(raw string) {
 	}
 	m.status = line.Status
 	m.rememberStatus(line.Status)
+	m.refreshFormLayout()
+}
+
+// refreshFormLayout updates the form after what's known about the boot changes, so its
+// note stays true: "saved on" only while the boot is actually reporting that layout, and
+// "last known for" once it can't, such as with a bench build running.
+func (m *Model) refreshFormLayout() {
 	layout, note := m.layoutForForm()
 	m.form.setLayout(layout, note)
 }

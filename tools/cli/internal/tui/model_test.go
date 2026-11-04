@@ -522,7 +522,8 @@ func TestBenchFlashUsesTheBootsLayoutAndStaysAttached(t *testing.T) {
 	h.current(right.Serial).Push("[firewalker] stomp -> trail (2 active)")
 	h.until("the firmware's log", func() bool { return strings.Contains(h.view(), "stomp -> trail") })
 	h.wantView("● 3ED8 · bench flow · 94 LEDs", "✓ running bench flow on 3ED8")
-	if h.m.form.values[fieldLEDs] != "94" || !strings.Contains(h.m.form.layoutNote(), "3ED8") {
+	// The boot can't report a layout now, so the form says it's going from memory.
+	if h.m.form.values[fieldLEDs] != "94" || h.m.form.layoutNote() != "last known for 3ED8" {
 		t.Fatalf("form = %+v note = %q", h.m.form.values, h.m.form.layoutNote())
 	}
 
