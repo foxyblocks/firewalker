@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Runs the bench CLI from source in tools/cli. Go caches the compiled program.
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$REPO_ROOT/tools/cli"
+exec go run . --repo-root "$REPO_ROOT" "$@"

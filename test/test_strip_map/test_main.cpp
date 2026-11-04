@@ -2,8 +2,9 @@
 // include/firewalker_strip_map.h — the pixel→fore-aft position map and the
 // arc/unwrap helpers flow uses for trail fronts. Run with `pio test -e native`.
 //
-// Constants mirror the measured layout (FOX-183): 40 pixels, pixel 0 at the
-// inner ankle under the controller, toe apex at 13, heel at 33.
+// Most constants use the small 40-pixel ring, whose numbers are easy to check by hand:
+// pixel 0 under the controller, toe apex at 13, heel at 33. The FCOB strip's bench
+// layout has its own cases below.
 
 #include <unity.h>
 
@@ -21,7 +22,7 @@ void tearDown() {}
 // ── arc helpers ───────────────────────────────────────────────────────────
 
 static void test_arc_lengths_partition_the_ring() {
-  // 13→33 plain (lateral) = 20 steps; 33→39→0→13 through the wrap (medial)
+  // 13→33 plain = 20 steps; 33→39→0→13 through the wrap
   // = 20 steps. Together they cover the whole 40-pixel ring.
   TEST_ASSERT_EQUAL_UINT16(20, stripPlainArcLen(TOE, HEEL));
   TEST_ASSERT_EQUAL_UINT16(20, stripWrapArcLen(N, TOE, HEEL));
@@ -42,7 +43,7 @@ static void test_toe_is_one_heel_is_zero() {
 }
 
 static void test_strip_start_sits_behind_midfoot() {
-  // Pixel 0 (inner ankle, under the controller) is 7 wrap-steps past the heel
+  // Pixel 0 (under the controller) is 7 wrap-steps past the heel
   // of a 20-step arc → s = 0.35, between heel and mid-foot.
   TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.35f, stripForeAft(0, N, TOE, HEEL));
 }
@@ -64,13 +65,29 @@ static void test_plain_arc_descends_linearly_toe_to_heel() {
 }
 
 static void test_wrap_arc_ascends_linearly_heel_to_toe() {
-  // Walk the medial arc heel→toe in unwrapped coordinates (33..53); s must
+  // Walk the wrap arc heel→toe in unwrapped coordinates (33..53); s must
   // climb by exactly one step each pixel, including across the 39→0 wrap.
   for (uint16_t u = HEEL; u < HEEL + stripWrapArcLen(N, TOE, HEEL); u++) {
     float here = stripForeAft(stripWrapIndex(u, N), N, TOE, HEEL);
     float next = stripForeAft(stripWrapIndex(u + 1, N), N, TOE, HEEL);
     TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f / 20.0f, next - here);
   }
+}
+
+// ── The 160-pixel FCOB strip's bench layout ─────────────────────────────
+
+static void test_fcob_layout_has_two_equal_arcs() {
+  TEST_ASSERT_EQUAL_UINT16(80, stripPlainArcLen(52, 132));
+  TEST_ASSERT_EQUAL_UINT16(80, stripWrapArcLen(160, 52, 132));
+}
+
+static void test_fcob_layout_anchors_and_wrap() {
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f, stripForeAft(52, 160, 52, 132));
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, stripForeAft(132, 160, 52, 132));
+  // Pixel 0 sits 28 wrap-steps past the heel of an 80-step arc: the same 0.35 as the
+  // 40-pixel ring, because this layout scales that ring by four.
+  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.35f, stripForeAft(0, 160, 52, 132));
+  TEST_ASSERT_EQUAL_UINT16(52, stripWrapIndex(212, 160));  // unwrapped toe = real toe
 }
 
 static void test_all_pixels_in_unit_range() {
@@ -90,6 +107,8 @@ int main(int, char**) {
   RUN_TEST(test_known_wrap_arc_positions);
   RUN_TEST(test_plain_arc_descends_linearly_toe_to_heel);
   RUN_TEST(test_wrap_arc_ascends_linearly_heel_to_toe);
+  RUN_TEST(test_fcob_layout_has_two_equal_arcs);
+  RUN_TEST(test_fcob_layout_anchors_and_wrap);
   RUN_TEST(test_all_pixels_in_unit_range);
   return UNITY_END();
 }

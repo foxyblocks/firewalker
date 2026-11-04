@@ -1,5 +1,8 @@
 # Runtime-switchable light patterns; IMU as the default sensor
 
+> **Note:** The Pattern abstraction and retiring the FSR both stand. The D6 button below is
+> history: the remote now switches patterns (ADR-0004).
+
 The firmware needs to show several visual behaviors — **patterns** (flow,
 fire-trail) — in one demo, and the IMU has proven a better stomp sensor than the
 FSR. We introduce a runtime **Pattern** abstraction: one firmware (`final_app`)

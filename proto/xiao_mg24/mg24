@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-# Development launcher for the local Cobra CLI; Go caches the compiled program.
-set -euo pipefail
-MG24_PROTO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$MG24_PROTO_DIR/cli"
-exec go run . --proto-dir "$MG24_PROTO_DIR" "$@"

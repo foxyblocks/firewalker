@@ -1,6 +1,5 @@
 #include "patterns/flow.h"
 
-#include <Adafruit_NeoPixel.h>
 #include <math.h>
 
 #include "config.h"
@@ -11,7 +10,7 @@ namespace Firewalker {
 
 // Each pixel's fore-aft position s ∈ [0,1] (heel=0, toe=1) from the ring map
 // in firewalker_strip_map.h: the strip is a closed loop around the foot
-// (pixel 0 at the inner ankle, toe/heel at measured indices), and the two
+// (pixel 0 under the controller, toe/heel at configured indices), and the two
 // arcs between toe and heel get linear ramps.
 void FlowPattern::buildPositions() {
   for (uint16_t i = 0; i < LED_COUNT; i++) {
@@ -25,13 +24,12 @@ const __FlashStringHelper* FlowPattern::name() const { return F("flow"); }
 void FlowPattern::enter() {
   if (!built_) buildPositions();
   for (uint8_t k = 0; k < FLOW_MAX_FRONTS; k++) fronts_[k].active = false;
-  strip.setBrightness(LED_BRIGHTNESS);
 }
 
 // Launch up to 4 diverging fronts from the tilt-derived fore-aft source: one
-// source per arc of the ring (lateral arc = plain indices toe..heel; medial
-// arc = the wrap arc, handled in *unwrapped* indices heel..heel+wrapLen so
-// fronts can cross the 39→0 seam), and from each source one front toward the
+// source per arc of the ring (the plain arc = indices toe..heel; the wrap arc
+// is handled in *unwrapped* indices heel..heel+wrapLen so fronts can cross the
+// seam from the last pixel to pixel 0), and from each source one front toward the
 // heel and one toward the toe. Unwrapped positions fold back to real pixels
 // only when painting. Fronts with no room to travel (source already at an arc
 // end) are skipped.
@@ -48,8 +46,8 @@ void FlowPattern::spawnTrail(float tilt, float strength) {
   constexpr uint16_t wrapLen  = stripWrapArcLen(LED_COUNT, STRIP_TOE_INDEX, STRIP_HEEL_INDEX);
   constexpr uint16_t wrapToe  = STRIP_HEEL_INDEX + wrapLen;  // unwrapped toe
 
-  // Lateral arc: s falls toe→heel as the index climbs, so the source sits f of
-  // the arc back from the heel. Medial arc (unwrapped): s climbs with the index.
+  // Plain arc: s falls toe→heel as the index climbs, so the source sits f of
+  // the arc back from the heel. Wrap arc (unwrapped): s climbs with the index.
   const float srcA = (float)STRIP_HEEL_INDEX - f * (float)plainLen;
   const float srcB = (float)STRIP_HEEL_INDEX + f * (float)wrapLen;
 
@@ -87,7 +85,7 @@ static uint32_t bandColor(uint8_t d, uint16_t hue, float bright) {
     h = (uint16_t)(hue - (uint16_t)(seg * (float)FLOW_TRAIL_PREV_HUE));
     s = 255;
   }
-  return Adafruit_NeoPixel::ColorHSV(h, s, (uint8_t)(bright * 255.0f));
+  return LedStrip::ColorHSV(h, s, (uint8_t)(bright * 255.0f));
 }
 
 // Blend a packed RGB color toward white by amt (0 = unchanged, 1 = full white).
@@ -96,7 +94,7 @@ static uint32_t whiten(uint32_t c, float amt) {
   r = (uint8_t)(r + (255 - r) * amt);
   g = (uint8_t)(g + (255 - g) * amt);
   b = (uint8_t)(b + (255 - b) * amt);
-  return Adafruit_NeoPixel::Color(r, g, b);
+  return LedStrip::Color(r, g, b);
 }
 
 void FlowPattern::update(const PatternInput& in) {
@@ -107,15 +105,8 @@ void FlowPattern::update(const PatternInput& in) {
   while (hue_ >= 65536.0f) hue_ -= 65536.0f;
   uint16_t hueU = (uint16_t)hue_;
 
-  // Deadzone + rescale: rest flat near level; a firm tilt reaches full pooling.
-  float tilt = in.tiltFwd;
-  float at = fabsf(tilt);
-  if (at <= FLOW_TILT_DEADZONE) {
-    tilt = 0.0f;
-  } else {
-    float scaled = (at - FLOW_TILT_DEADZONE) / (1.0f - FLOW_TILT_DEADZONE);
-    tilt = (tilt < 0.0f) ? -scaled : scaled;
-  }
+  // The motion service reports exactly 0 inside its dead zone, so that's what level means.
+  const float tilt = in.tiltFwd;
 
   // A tilted stomp pours directional trails from the down-point; a flat stomp
   // has no down direction, so it flashes the whole strip white instead.
@@ -140,7 +131,7 @@ void FlowPattern::update(const PatternInput& in) {
   // far each survivor brightens toward full. Each pixel's litFrac fades across
   // its own one-pixel span (pxW) as the edge sweeps past, so pixels extinguish
   // one-by-one from the up-end. At level (at 0) every pixel is lit at baseline.
-  at = fabsf(tilt);                                  // post-deadzone magnitude / fill edge
+  const float at = fabsf(tilt);                      // magnitude / fill edge
   const bool  toeDown   = (tilt >= 0.0f);
   const float pxW       = 1.0f / (float)stripPlainArcLen(STRIP_TOE_INDEX, STRIP_HEEL_INDEX);
   const float litBright = FLOW_BASELINE + at * (1.0f - FLOW_BASELINE);  // survivors → full
@@ -153,7 +144,7 @@ void FlowPattern::update(const PatternInput& in) {
     if (litFrac < 0.0f) litFrac = 0.0f;
     if (litFrac > 1.0f) litFrac = 1.0f;
     float b = litFrac * litBright;
-    uint32_t c = Adafruit_NeoPixel::ColorHSV(hueU, 255, (uint8_t)(b * 255.0f));
+    uint32_t c = LedStrip::ColorHSV(hueU, 255, (uint8_t)(b * 255.0f));
     if (flash > 0.0f) c = whiten(c, flash);
     strip.setPixelColor(i, c);
   }
@@ -163,7 +154,7 @@ void FlowPattern::update(const PatternInput& in) {
   }
 
   // Stomp trails overlay the background, each clamped to its arc; unwrapped
-  // positions (medial arc past index 39) fold back to real pixels here.
+  // positions (wrap arc past the last index) fold back to real pixels here.
   for (uint8_t k = 0; k < FLOW_MAX_FRONTS; k++) {
     if (!fronts_[k].active) continue;
     for (uint8_t d = 0; d < FLOW_TRAIL_LEN; d++) {

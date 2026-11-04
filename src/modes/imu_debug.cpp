@@ -1,8 +1,8 @@
-// imu_debug — bench / calibration build for the GY-521 (MPU-6050). It logs raw
-// accel + gyro, the fused fore-aft tilt, and stomp events over serial, and
-// mirrors the live tilt as strip brightness so you can confirm the axis mapping
-// by eye. Use it to set the IMU_MOUNT_* axis indices/signs and the stomp
-// thresholds in config.h before running the app. See docs/wiring-mpu6050.md.
+// imu_debug is the bench calibration build for the onboard sensor. It logs raw
+// accel and gyro, the fused fore-aft angle, and stomp events over USB serial, and
+// mirrors the live tilt as strip brightness so the axis mapping can be confirmed by
+// eye. Use it to check firewalker_mg24_mount.h and the stomp thresholds in config.h.
+// It applies no saved calibration, so tilt here is relative to sensor level.
 
 #include "modes/imu_debug.h"
 
@@ -15,9 +15,8 @@
 
 namespace ImuDebugMode {
 
-// Map the fused tilt magnitude to a 0..LED_BRIGHTNESS idle level (floor so a
-// level board still glows). Tilting the shoe should ramp the strip up — a quick
-// visual check that the tilt axis is mapped sensibly.
+// Maps tilt magnitude to a 0..LED_BRIGHTNESS level, with a floor so a level board
+// still glows. Tilting the shoe should ramp the strip up.
 static uint8_t tiltBrightness(float tilt) {
   float t = fabsf(tilt);
   if (t > 1.0f) t = 1.0f;
@@ -26,10 +25,13 @@ static uint8_t tiltBrightness(float tilt) {
 
 void setup() {
   Firewalker::setupCore(F("imu_debug"));
-  Firewalker::imuBegin();  // prints the mpu / threshold / axis banner
+  Firewalker::imuBegin();  // prints the sensor, threshold, and axis banner
 }
 
 void loop() {
+  Firewalker::updateStatusLight(Firewalker::imuReady() ? Firewalker::StatusLight::Running
+                                                       : Firewalker::StatusLight::SensorMissing);
+
   bool sampled = Firewalker::imuUpdate();
   if (sampled) Firewalker::imuLog();
 
@@ -41,11 +43,6 @@ void loop() {
 
   if (sampled) {
     Firewalker::renderIdleBrightness(tiltBrightness(Firewalker::imuTiltFwd()));
-  }
-
-  // D6 here just logs a marker — handy while probing on the bench.
-  if (Firewalker::debugButtonPressed()) {
-    Serial.println(F("[firewalker] button press"));
   }
 }
 
