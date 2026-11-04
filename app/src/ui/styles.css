@@ -224,6 +224,10 @@ dd {
   box-shadow: 0 0 18px rgb(255 106 31 / 18%);
 }
 
+.tab-offline .tab-name {
+  opacity: 0.5;
+}
+
 .dot {
   display: inline-block;
   flex: none;

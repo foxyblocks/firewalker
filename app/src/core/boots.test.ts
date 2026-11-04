@@ -1,3 +1,4 @@
+// Tests BootsStore through its interface, with FakeBoots behind the real BootClient.
 import { BootsStore, type KeyValueStore } from "./boots";
 import { FakeBoot, FakeTransport } from "../transport/fakeBoot";
 
@@ -62,6 +63,20 @@ describe("knowing the boots", () => {
     expect(left.connected && right.connected).toBe(true);
   });
 
+  it("keeps hearing from a boot after a swap and then forgetting the other", async () => {
+    const { left, store } = await pair();
+    store.assign({ deviceId: left.deviceId, name: left.name }, "right");
+    await settle();
+    store.forget("left");
+    await settle();
+
+    const heard = vi.fn();
+    store.subscribe(heard);
+    store.client("right")?.setBrightness(30);
+    await settle();
+    expect(heard).toHaveBeenCalled();
+  });
+
   it("forgets a boot and lets go of its connection", async () => {
     const { right, store } = await pair();
     store.forget("right");
@@ -98,6 +113,25 @@ describe("blinking from the Find boots list", () => {
     expect(boot.blinks).toBe(1);
     expect(boot.connected).toBe(false);
     expect(store.sides()).toEqual([]);
+  });
+
+  it("keeps the connection when a boot is labeled mid-blink", async () => {
+    const boot = new FakeBoot();
+    const transport = new FakeTransport([boot]);
+    const open = vi.spyOn(transport, "open");
+    const store = new BootsStore(transport, memoryStorage());
+    await store.load();
+    const found = { deviceId: boot.deviceId, name: boot.name };
+
+    const done = store.blinkFound(found);
+    await vi.advanceTimersByTimeAsync(500);
+    store.assign(found, "left");
+    await vi.advanceTimersByTimeAsync(3000);
+    await done;
+
+    expect(boot.connected).toBe(true);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(store.client("left")?.getState().link).toBe("online");
   });
 
   it("uses the existing connection for a labeled boot", async () => {
@@ -201,10 +235,49 @@ describe("the pattern tiles", () => {
     expect(store.view().needsUpdate).toBeUndefined();
   });
 
+  it("keeps showing the patterns of a boot that went offline", async () => {
+    const { left, store } = await pair({ patterns: ["flow", "pattern-3"] });
+    store.setTarget("left");
+    left.reachable = false;
+    left.dropLink();
+    await settle();
+
+    expect(store.view().tiles.map((tile) => tile.id)).toEqual(["flow", "pattern-3"]);
+    expect(store.view().controllable).toBe(false);
+  });
+
   it("shows a pending choice right away", async () => {
     const { store } = await pair();
     store.selectPattern("fire-trail");
     expect(store.view().tiles.find((tile) => tile.id === "fire-trail")?.runningOn).toEqual(["left", "right"]);
+  });
+});
+
+describe("calibrating and naming", () => {
+  it("only calibrates boots that are online with a working sensor", async () => {
+    const { right, store } = await pair({}, { sensor: "unavailable" });
+    expect(store.calibrationSides()).toEqual(["left"]);
+
+    right.sensor = "ok";
+    store.client("right")?.requestStatus();
+    await settle();
+    expect(store.calibrationSides()).toEqual(["left", "right"]);
+
+    right.reachable = false;
+    right.dropLink();
+    await settle();
+    expect(store.calibrationSides()).toEqual(["left"]);
+  });
+
+  it("names a boot from its own id, even if the scan had no name yet", async () => {
+    const boot = new FakeBoot({ id: "3ED8" });
+    const store = new BootsStore(new FakeTransport([boot]), memoryStorage());
+    await store.load();
+    store.assign({ deviceId: boot.deviceId, name: "Firewalker" }, "left");
+    expect(store.bootName("left")).toBe("Firewalker");
+
+    await settle();
+    expect(store.bootName("left")).toBe("Firewalker-3ED8");
   });
 });
 

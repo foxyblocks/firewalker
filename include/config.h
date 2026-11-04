@@ -126,6 +126,8 @@ constexpr unsigned long CALIBRATION_WINDOW_MS      = 2000;  // how long a captur
 constexpr unsigned long CALIBRATION_NO_SAMPLE_MS   = 500;   // gap in sensor samples that fails a capture
 constexpr uint16_t      CALIBRATION_MIN_SAMPLES    = 50;    // half the samples expected at 50 Hz
 constexpr float         CALIBRATION_MAX_SPREAD_DEG = 8.0f;  // the middle half of the samples must fit in this
+static_assert(CALIBRATION_WINDOW_MS / IMU_SAMPLE_MS <= Firewalker::POSE_CAPTURE_MAX_SAMPLES,
+              "A longer capture needs a larger POSE_CAPTURE_MAX_SAMPLES, or it loses its end");
 
 // ── Saved settings ───────────────────────────────────────────────────────
 // A burst of slider changes turns into one flash write: it saves after the changes

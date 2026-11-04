@@ -8,7 +8,7 @@
  */
 
 import { useEffect, useState } from "react";
-import type { BootsStore, Side } from "../core/boots";
+import { SIDE_NAMES, type BootsStore, type Side } from "../core/boots";
 import type { FoundBoot } from "../transport/transport";
 
 const signalWord = (rssi?: number) => {
@@ -45,8 +45,7 @@ export function FindBoots({ store, onDone }: { store: BootsStore; onDone: () => 
 
   // Labeled boots first, then anything the scan found that isn't labeled yet.
   const labeled: FoundBoot[] = store.sides().map((side) => {
-    const known = store.known(side)!;
-    return { deviceId: known.deviceId, name: known.name };
+    return { deviceId: store.known(side)!.deviceId, name: store.bootName(side) };
   });
   const rows = [...labeled, ...found.filter((boot) => !labeled.some((known) => known.deviceId === boot.deviceId))];
 
@@ -91,6 +90,7 @@ export function FindBoots({ store, onDone }: { store: BootsStore; onDone: () => 
 function BootRow({ store, boot }: { store: BootsStore; boot: FoundBoot }) {
   const [blinking, setBlinking] = useState(false);
   const currentSide = store.sides().find((side) => store.known(side)?.deviceId === boot.deviceId);
+  const online = currentSide && store.client(currentSide)?.getState().link === "online";
 
   const label = (side: Side) => (
     <button
@@ -99,7 +99,7 @@ function BootRow({ store, boot }: { store: BootsStore; boot: FoundBoot }) {
       aria-pressed={currentSide === side}
       onClick={() => store.assign(boot, side)}
     >
-      {side === "left" ? "Left" : "Right"}
+      {SIDE_NAMES[side]}
     </button>
   );
 
@@ -107,7 +107,7 @@ function BootRow({ store, boot }: { store: BootsStore; boot: FoundBoot }) {
     <article className="boot-card">
       <div className="boot-head">
         <span className="card-name">{boot.name}</span>
-        <span className="card-hint">{currentSide ? "Connected" : signalWord(boot.rssi)}</span>
+        <span className="card-hint">{currentSide ? (online ? "Connected" : "Reconnecting") : signalWord(boot.rssi)}</span>
       </div>
       <div className="actions">
         <button

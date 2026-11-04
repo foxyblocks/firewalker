@@ -27,11 +27,12 @@ type Phase = { kind: "ready" } | { kind: "countdown"; seconds: number } | { kind
 const resultKey = (side: Side, pose: Pose) => `${side}:${pose}`;
 
 export function CalibrateSheet({ store, onClose }: { store: BootsStore; onClose: () => void }) {
-  const multiple = store.targetSides().length > 1;
   // The plan is fixed when the sheet opens, so a boot dropping mid-flow can't reorder it.
+  const [sides] = useState(() => store.calibrationSides());
+  const multiple = sides.length > 1;
   const steps = useMemo(
-    () => calibrationSteps(store.targetSides(), (side) => store.client(side)?.getState().supportsPoses ?? false),
-    [store],
+    () => calibrationSteps(sides, (side) => store.client(side)?.getState().supportsPoses ?? false),
+    [store, sides],
   );
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>({ kind: "ready" });
@@ -90,7 +91,7 @@ export function CalibrateSheet({ store, onClose }: { store: BootsStore; onClose:
   const busy = phase.kind !== "ready";
   const title = multiple
     ? "Calibrate both"
-    : `Calibrate ${joinNames(store.targetSides().map((side) => store.displayName(side)))}`;
+    : `Calibrate ${joinNames(sides.map((side) => store.displayName(side)))}`;
 
   return (
     <div className="sheet-backdrop">

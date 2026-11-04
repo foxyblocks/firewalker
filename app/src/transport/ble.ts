@@ -20,6 +20,13 @@ export class BleTransport implements Transport {
 
   private started: Promise<void> | null = null;
 
+  constructor() {
+    // The plugin's default queue runs one call at a time across all devices, so a connect
+    // to a boot that's switched off would hold up every command to the boot that's on.
+    // Each BootClient already keeps its own boot to one command at a time.
+    BleClient.disableQueue();
+  }
+
   /**
    * Starts Bluetooth, once. On iOS, each `initialize` builds a new Bluetooth manager and
    * discards the old one along with any scan or connection it was running, so checking

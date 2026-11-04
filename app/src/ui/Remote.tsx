@@ -6,7 +6,7 @@
  * reported, plus any tap still on its way.
  */
 
-import type { BootsStore, PatternTile, RemoteView, Side, Target } from "../core/boots";
+import { SIDE_NAMES, type BootsStore, type PatternTile, type RemoteView, type Side, type Target } from "../core/boots";
 import { patternDisplay } from "../core/patternNames";
 import { BrightnessStrip, joinNames, LinkDot, SideBadge, Toggle } from "./parts";
 
@@ -24,7 +24,7 @@ export function Remote({
   const view = store.view();
   const names = (sides: Side[]) => joinNames(sides.map((side) => store.displayName(side)));
   const percent = view.maxBrightness > 0 ? Math.round((view.brightness / view.maxBrightness) * 100) : 0;
-  const canCalibrate = view.controllable && view.sensorMissing.length < store.targetSides().length;
+  const canCalibrate = store.calibrationSides().length > 0;
 
   return (
     <>
@@ -50,7 +50,13 @@ export function Remote({
         </div>
         <div className="tiles">
           {view.tiles.map((tile) => (
-            <Tile key={tile.id} tile={tile} names={names} onSelect={() => store.selectPattern(tile.id)} />
+            <Tile
+              key={tile.id}
+              tile={tile}
+              names={names}
+              disabled={!view.controllable}
+              onSelect={() => store.selectPattern(tile.id)}
+            />
           ))}
         </div>
       </main>
@@ -94,18 +100,22 @@ function TargetTabs({ store, onBoots }: { store: BootsStore; onBoots: () => void
     if (target !== "both" && !known.includes(target)) onBoots();
     else store.setTarget(target);
   };
-  const tab = (target: Side) => (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={store.target === target}
-      className={`tab${store.target === target ? " tab-on" : ""}`}
-      onClick={() => select(target)}
-    >
-      <LinkDot link={store.client(target)?.getState().link} />
-      <span className="tab-name">{store.known(target) ? store.displayName(target) : target === "left" ? "Left" : "Right"}</span>
-    </button>
-  );
+  const tab = (target: Side) => {
+    const link = store.client(target)?.getState().link;
+    const dimmed = store.known(target) && link !== "online";
+    return (
+      <button
+        type="button"
+        role="tab"
+        aria-selected={store.target === target}
+        className={`tab${store.target === target ? " tab-on" : ""}${dimmed ? " tab-offline" : ""}`}
+        onClick={() => select(target)}
+      >
+        <LinkDot link={link} />
+        <span className="tab-name">{store.known(target) ? store.displayName(target) : SIDE_NAMES[target]}</span>
+      </button>
+    );
+  };
 
   return (
     <div className="tabs" role="tablist">
@@ -126,14 +136,24 @@ function TargetTabs({ store, onBoots }: { store: BootsStore; onBoots: () => void
 }
 
 /** One pattern. Its strip previews the pattern, and the badges show which boots run it. */
-function Tile({ tile, names, onSelect }: { tile: PatternTile; names: (sides: Side[]) => string; onSelect: () => void }) {
+function Tile({
+  tile,
+  names,
+  disabled,
+  onSelect,
+}: {
+  tile: PatternTile;
+  names: (sides: Side[]) => string;
+  disabled: boolean;
+  onSelect: () => void;
+}) {
   const { name, description } = patternDisplay(tile.id);
   const running = tile.runningOn.length > 0;
   const hint = tile.missingOn.length > 0 ? `${names(tile.missingOn)} needs update` : description;
   const previewClass = tile.id === "flow" ? "preview-flow" : tile.id === "fire-trail" ? "preview-fire" : "preview-other";
 
   return (
-    <button type="button" className={`tile${running ? " tile-on" : ""}`} aria-pressed={running} onClick={onSelect}>
+    <button type="button" className={`tile${running ? " tile-on" : ""}`} aria-pressed={running} disabled={disabled} onClick={onSelect}>
       <span className="tile-head">
         <span className="tile-name">{name}</span>
         <span className="tile-badges">

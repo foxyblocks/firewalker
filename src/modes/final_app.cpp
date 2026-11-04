@@ -178,6 +178,10 @@ static void handleCommand(const Command& command) {
       // previous one still sends its own calibrate line.
       reportedCaptureState = CaptureState::Idle;
       poseCapture.start(millis(), imuReady());
+      // The status line this command triggers can go out later in this same loop pass,
+      // before updatePoseCapture runs again, and it must not report the previous capture's
+      // result as if it were this one's.
+      calibrationState = poseCapture.capturing() ? "capturing" : captureFailureReason(poseCapture.state());
       sendAck(command.type, poseCapture.capturing(), captureFailureReason(poseCapture.state()));
       break;
 

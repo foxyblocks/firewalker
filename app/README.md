@@ -28,7 +28,7 @@ Open <http://localhost:5173/?boot=fake&paired=1>. These options set up a scenari
 | `paired=1` | Skips Find boots, with both boots already labeled |
 | `patterns=6` | Gives the boots more patterns |
 | `mismatch=1` | Right lacks the last pattern |
-| `firmware=current` | Firmware without the newer commands |
+| `firmware=older` | Firmware without the newer commands |
 | `sensor=missing` | Right's motion sensor is unavailable |
 | `save=fail` | Left's flash writes fail |
 | `offline=1` | Right is out of range |

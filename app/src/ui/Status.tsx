@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import type { BootState } from "../core/boot";
-import type { BootsStore, Side } from "../core/boots";
+import { SIDE_NAMES, type BootsStore, type Side } from "../core/boots";
 import { patternDisplay } from "../core/patternNames";
 import { LinkDot, TiltStrip, Toggle } from "./parts";
 
@@ -90,7 +90,7 @@ function BootDetails({
   return (
     <>
       <div className="boot-head">
-        <span className="card-name">{store.known(side)?.name}</span>
+        <span className="card-name">{store.bootName(side)}</span>
         <span className="save-line">
           <LinkDot link={state.link} />
           {state.link === "online" ? "Connected" : state.link === "connecting" ? "Connecting" : "Reconnecting"}
@@ -107,7 +107,7 @@ function BootDetails({
           <Fact label="Saved" value={saveText(status)} tone={status.saveFailed ? "bad" : undefined} />
           <Fact
             label="Firmware"
-            value={status.proto !== undefined ? `Protocol ${status.proto}` : "Older, needs update"}
+            value={status.proto !== undefined ? `Protocol ${status.proto}` : "Update this boot's firmware"}
             tone={status.proto !== undefined ? undefined : "warn"}
           />
         </dl>
@@ -157,7 +157,7 @@ function BootDetails({
             value={draftName}
             maxLength={12}
             autoFocus
-            placeholder={side === "left" ? "Left" : "Right"}
+            placeholder={SIDE_NAMES[side]}
             aria-label="Boot name"
             onChange={(event) => setDraftName(event.target.value)}
           />

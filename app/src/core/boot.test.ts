@@ -1,3 +1,5 @@
+// Tests BootClient through its interface, against a FakeBoot that speaks the real text
+// protocol, so the parsing, queue, and reconnect code all run as they do on a real boot.
 import { BootClient, type BootState } from "./boot";
 import { FakeBoot, FakeTransport } from "../transport/fakeBoot";
 
@@ -36,6 +38,49 @@ describe("connecting", () => {
     expect(state(client).link).toBe("online");
   });
 
+  it("keeps asking until a quiet boot answers", async () => {
+    const { boot, client } = setup();
+    boot.silentOnSubscribe = true;
+    boot.unresponsive = true;
+    client.connect();
+    await vi.advanceTimersByTimeAsync(4500);
+    expect(state(client).link).toBe("connecting");
+
+    boot.unresponsive = false;
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(state(client).link).toBe("online");
+  });
+
+  it("starts over on a connection that never says anything", async () => {
+    const { boot, transport, client } = setup();
+    const open = vi.spyOn(transport, "open");
+    boot.silentOnSubscribe = true;
+    boot.unresponsive = true;
+    client.connect();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(open.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("gets the pattern list right away when status beats the connection finishing", async () => {
+    const { transport, client } = setup({ patterns: ["flow", "pattern-3"] });
+    transport.openDelayMs = 100;
+    client.connect();
+    await settle();
+    expect(state(client).patterns).toEqual(["flow", "pattern-3"]);
+  });
+
+  it("keeps a boot's pattern list if asking again goes unanswered", async () => {
+    const { boot, client } = setup({ patterns: ["flow", "pattern-3"] });
+    client.connect();
+    await settle();
+
+    boot.ignoring = ["patterns"];
+    boot.dropLink();
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(state(client).link).toBe("online");
+    expect(state(client).patterns).toEqual(["flow", "pattern-3"]);
+  });
+
   it("uses the pattern list the boot reports", async () => {
     const { client } = setup({ patterns: ["flow", "fire-trail", "pattern-3"] });
     client.connect();
@@ -44,7 +89,7 @@ describe("connecting", () => {
   });
 
   it("falls back to flow and fire-trail on firmware without the command", async () => {
-    const { client } = setup({ firmware: "current" });
+    const { client } = setup({ firmware: "older" });
     client.connect();
     await settle();
     expect(state(client).patterns).toEqual(["flow", "fire-trail"]);
@@ -103,6 +148,39 @@ describe("commands", () => {
     expect(state(client).pending.pattern).toBeUndefined();
     expect(state(client).status?.pattern).toBe("flow");
     expect(state(client).notice).toBe("no-answer");
+  });
+
+  it("drops the no-answer message once the boot reports again", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+    boot.unresponsive = true;
+    client.setPattern("fire-trail");
+    await vi.advanceTimersByTimeAsync(2100);
+    expect(state(client).notice).toBe("no-answer");
+
+    boot.unresponsive = false;
+    client.requestStatus();
+    await settle();
+    expect(state(client).notice).toBeUndefined();
+  });
+
+  it("doesn't credit a late ack to the next command", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+    boot.received.length = 0;
+
+    boot.replyDelayMs = 2500;
+    client.setPattern("fire-trail");
+    await vi.advanceTimersByTimeAsync(2100);
+
+    boot.replyDelayMs = 5000;
+    client.setDebug(true);
+    client.setBrightness(30);
+    await vi.advanceTimersByTimeAsync(600);
+
+    expect(boot.received).toEqual(["pattern fire-trail", "debug on"]);
   });
 
   it("reports a command the boot rejects and drops the pending value", async () => {
@@ -216,7 +294,7 @@ describe("calibrating", () => {
   });
 
   it("hides heel and toe on firmware without them", async () => {
-    const { client } = setup({ firmware: "current" });
+    const { client } = setup({ firmware: "older" });
     client.connect();
     await settle();
     expect(state(client).supportsPoses).toBe(false);
@@ -254,9 +332,30 @@ describe("calibrating", () => {
     boot.silentCaptureResult = true;
 
     const result = client.calibrate("neutral");
-    await vi.advanceTimersByTimeAsync(2500);
+    await vi.advanceTimersByTimeAsync(4500);
 
     await expect(result).resolves.toEqual({ ok: false, pose: "neutral", reason: "motion" });
+  });
+
+  it("isn't fooled by a status still holding the previous capture's result", async () => {
+    const { boot, client } = setup({ calibrated: true, neutralDeg: 1.56 });
+    client.connect();
+    await settle();
+    const heel = client.calibrate("heel");
+    await vi.advanceTimersByTimeAsync(2100);
+    await heel;
+    await settle();
+
+    boot.staleStatusAfterAck = true;
+    const finished = vi.fn();
+    const toe = client.calibrate("toe");
+    void toe.then(finished);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(finished).not.toHaveBeenCalled();
+    expect(state(client).capture).toEqual({ pose: "toe" });
+
+    await vi.advanceTimersByTimeAsync(1700);
+    await expect(toe).resolves.toEqual({ ok: true, pose: "toe", angleDeg: 34.2 });
   });
 
   it("gives up with no-answer if the boot goes quiet mid-capture", async () => {
@@ -308,6 +407,31 @@ describe("losing the connection", () => {
 
     boot.reachable = true;
     await vi.advanceTimersByTimeAsync(16_000);
+    expect(state(client).link).toBe("online");
+  });
+
+  it("doesn't open a second connection when the app returns mid-connect", async () => {
+    const { transport, client } = setup();
+    const open = vi.spyOn(transport, "open");
+    transport.openDelayMs = 500;
+    client.connect();
+    await vi.advanceTimersByTimeAsync(100);
+
+    client.resume();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(state(client).link).toBe("online");
+  });
+
+  it("still connects when asked again while a cancelled attempt finishes", async () => {
+    const { transport, client } = setup();
+    transport.openDelayMs = 300;
+    client.connect();
+    await vi.advanceTimersByTimeAsync(50);
+    await client.disconnect();
+    client.connect();
+
+    await vi.advanceTimersByTimeAsync(2500);
     expect(state(client).link).toBe("online");
   });
 
@@ -386,7 +510,7 @@ describe("debug and live tilt", () => {
     await vi.advanceTimersByTimeAsync(500);
     expect(state(planned.client).motion?.accelPeak).toBeGreaterThan(0);
 
-    const current = setup({ firmware: "current" });
+    const current = setup({ firmware: "older" });
     current.client.connect();
     await settle();
     current.client.setDebug(true);
@@ -424,7 +548,7 @@ describe("blinking a boot", () => {
   });
 
   it("flips the lights off and back on otherwise, leaving them as they were", async () => {
-    const { boot, client } = setup({ firmware: "current" });
+    const { boot, client } = setup({ firmware: "older" });
     client.connect();
     await settle();
     boot.received.length = 0;
@@ -436,7 +560,7 @@ describe("blinking a boot", () => {
   });
 
   it("flips on and back off when the boot starts off", async () => {
-    const { boot, client } = setup({ firmware: "current", pattern: "off" });
+    const { boot, client } = setup({ firmware: "older", pattern: "off" });
     client.connect();
     await settle();
     boot.received.length = 0;
@@ -457,7 +581,7 @@ describe("the pattern On will bring back", () => {
   });
 
   it("is the last lit pattern the app saw on older firmware", async () => {
-    const { client } = setup({ firmware: "current", pattern: "fire-trail" });
+    const { client } = setup({ firmware: "older", pattern: "fire-trail" });
     client.connect();
     await settle();
     client.setPower(false);
@@ -466,7 +590,7 @@ describe("the pattern On will bring back", () => {
   });
 
   it("is unknown when older firmware is off from the start", async () => {
-    const { client } = setup({ firmware: "current", pattern: "off" });
+    const { client } = setup({ firmware: "older", pattern: "off" });
     client.connect();
     await settle();
     expect(state(client).litPattern).toBeUndefined();

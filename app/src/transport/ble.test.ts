@@ -4,6 +4,7 @@ import { BleTransport } from "./ble";
 vi.mock("@capacitor/core", () => ({ Capacitor: { isNativePlatform: () => true } }));
 vi.mock("@capacitor-community/bluetooth-le", () => ({
   BleClient: {
+    disableQueue: vi.fn(),
     initialize: vi.fn(async () => undefined),
     isEnabled: vi.fn(async () => true),
     requestLEScan: vi.fn(async () => undefined),
@@ -54,6 +55,15 @@ describe("checking Bluetooth", () => {
     const transport = new BleTransport();
     client.initialize.mockRejectedValueOnce(new Error("BLE unsupported"));
     expect(await transport.radioState()).toBe("unsupported");
+  });
+});
+
+describe("two boots at once", () => {
+  // The plugin's default queue runs one call at a time across all devices, so a connect to
+  // a boot that's switched off would hold up every command to the boot that's on.
+  it("turns off the plugin's shared queue", () => {
+    new BleTransport();
+    expect(client.disableQueue).toHaveBeenCalled();
   });
 });
 

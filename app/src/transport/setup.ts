@@ -10,7 +10,7 @@
  *   ?boot=fake&paired=1            skip Find boots with both boots already labeled
  *   &patterns=6                    how many patterns the boots have
  *   &mismatch=1                    Right lacks the last pattern
- *   &firmware=current              firmware without the newer commands
+ *   &firmware=older                firmware without the newer commands
  *   &sensor=missing                Right's motion sensor is unavailable
  *   &save=fail                     Left's flash writes fail
  *   &offline=1                     Right is out of range
@@ -47,7 +47,7 @@ function memoryStorage(initial: Record<string, string> = {}): KeyValueStore {
 }
 
 function fakeSetup(params: URLSearchParams): { transport: Transport; storage: KeyValueStore } {
-  const firmware = params.get("firmware") === "current" ? "current" : "planned";
+  const firmware = params.get("firmware") === "older" ? "older" : "current";
   const count = Number(params.get("patterns") ?? DEFAULT_PATTERNS.length);
   const patterns = [
     ...DEFAULT_PATTERNS,

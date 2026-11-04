@@ -28,6 +28,8 @@ import type { BootLink, Transport } from "../transport/transport";
 
 const COMMAND_TIMEOUT_MS = 2000;
 const FIRST_STATUS_WAIT_MS = 2000;
+// A new link this quiet is dead even though it opened, so it gets dropped and retried.
+const FIRST_STATUS_MAX_ASKS = 3;
 const RECONNECT_MIN_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
 // A capture collects for two seconds, so anything past this means a lost result.
@@ -86,6 +88,8 @@ export class BootClient {
 
   private link: BootLink | null = null;
   private wanted = false;
+  /** True while a connection attempt is running. A boot only gets one at a time. */
+  private opening = false;
   private wantDebug = false;
   private dragging = false;
   private desiredBrightness = 0;
@@ -98,6 +102,7 @@ export class BootClient {
 
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private firstStatusTimer: ReturnType<typeof setTimeout> | null = null;
+  private firstStatusAsks = 0;
   private commandTimer: ReturnType<typeof setTimeout> | null = null;
 
   private capture: {
@@ -131,7 +136,7 @@ export class BootClient {
   /** Starts connecting, and keeps the boot connected until `disconnect`. */
   connect(): void {
     this.wanted = true;
-    if (this.link || this.state.link === "connecting") return;
+    if (this.link || this.opening) return;
     this.update({ link: this.state.status ? "reconnecting" : "connecting" });
     void this.attempt();
   }
@@ -156,15 +161,24 @@ export class BootClient {
     if (!this.wanted) return;
     if (this.state.link === "online") {
       this.requestStatus();
-    } else if (!this.link) {
+    } else if (!this.link && !this.opening) {
       this.clearReconnect();
       this.reconnectDelay = RECONNECT_MIN_MS;
       void this.attempt();
     }
   }
 
+  /**
+   * Opens one connection. Only one runs at a time, because a second one would share the
+   * same device, and closing either would drop both. A boot's first status line can arrive
+   * before the connection finishes opening, so this runs whatever that line queued. An
+   * attempt that `disconnect` cancelled mid-way closes what it opened, and tries again if
+   * `connect` has since been called.
+   */
   private async attempt(): Promise<void> {
+    this.opening = true;
     const generation = ++this.generation;
+    this.splitter.reset();
     try {
       const link = await this.transport.open(this.deviceId, {
         onData: (text) => {
@@ -174,17 +188,38 @@ export class BootClient {
           if (generation === this.generation) this.onLinkLost();
         },
       });
+      this.opening = false;
       if (generation !== this.generation) {
         await link.close().catch(() => undefined);
+        if (this.wanted) this.scheduleReconnect();
         return;
       }
       this.link = link;
-      this.splitter.reset();
-      // A boot normally sends status on subscribe. Asking covers one that didn't.
-      this.firstStatusTimer = setTimeout(() => this.enqueue(this.statusJob()), FIRST_STATUS_WAIT_MS);
+      if (this.state.link === "online") this.pump();
+      else this.scheduleFirstStatusAsk();
     } catch {
-      if (generation === this.generation) this.scheduleReconnect();
+      this.opening = false;
+      if (this.wanted) this.scheduleReconnect();
     }
+  }
+
+  /**
+   * A boot normally sends status on subscribe. This keeps asking in case that line got
+   * lost, and gives up on a link that never answers, so a boot can't sit at "connecting"
+   * forever over a dead connection.
+   */
+  private scheduleFirstStatusAsk(): void {
+    this.firstStatusTimer = setTimeout(() => {
+      if (this.firstStatusAsks++ >= FIRST_STATUS_MAX_ASKS) {
+        const link = this.link;
+        this.generation++;
+        this.onLinkLost();
+        void link?.close().catch(() => undefined);
+        return;
+      }
+      this.askForStatus();
+      this.scheduleFirstStatusAsk();
+    }, FIRST_STATUS_WAIT_MS);
   }
 
   private onLinkLost(): void {
@@ -220,6 +255,7 @@ export class BootClient {
     this.inFlight = null;
     this.queue = [];
     this.dragging = false;
+    this.firstStatusAsks = 0;
     this.finishCapture({ reason: "offline" });
     this.update({ pending: {}, motion: undefined });
   }
@@ -246,6 +282,10 @@ export class BootClient {
         if (this.inFlight?.expect === "patterns") this.finishJob();
         return;
       case "ack":
+        // Acks name a command but carry no request ID, so one arriving after its command
+        // timed out mustn't settle whichever command came next. The firmware reports
+        // anything it can't parse as "unknown".
+        if (!this.inFlight || (reply.cmd !== "unknown" && reply.cmd !== jobVerb(this.inFlight))) return;
         if (reply.ok) {
           this.inFlight?.onAck?.();
           this.finishJob();
@@ -256,14 +296,21 @@ export class BootClient {
     }
   }
 
+  /**
+   * Takes in a status line. It's the source of truth, so it settles pending taps and shows
+   * the boot is alive again. The first one on a new connection is what makes a boot
+   * online, and it starts the pattern list request and the debug cleanup.
+   */
   private onStatus(status: StatusReply): void {
     const firstSinceConnecting = this.state.link !== "online";
     if (this.firstStatusTimer) clearTimeout(this.firstStatusTimer);
     this.firstStatusTimer = null;
+    this.firstStatusAsks = 0;
 
     this.update({
       status,
       link: "online",
+      notice: this.state.notice === "no-answer" ? undefined : this.state.notice,
       supportsPoses: status.heelDeg !== undefined,
       litPattern: status.lit ?? (status.pattern !== "off" ? status.pattern : this.state.litPattern),
       motion: status.debug ? this.state.motion : undefined,
@@ -272,12 +319,9 @@ export class BootClient {
 
     if (firstSinceConnecting) {
       this.reconnectDelay = RECONNECT_MIN_MS;
-      this.enqueue({
-        line: commands.patterns,
-        expect: "patterns",
-        quiet: true,
-        onFail: () => this.update({ patterns: DEFAULT_PATTERNS }),
-      });
+      // A boot that can't answer this keeps the list it already has, which starts as the
+      // two patterns every firmware has.
+      this.enqueue({ line: commands.patterns, expect: "patterns", quiet: true });
       // Debug stays on after a disconnect, so clean up after an earlier session.
       if (status.debug && !this.wantDebug) this.setDebug(false);
     }
@@ -322,7 +366,9 @@ export class BootClient {
     if (!job) return;
     this.inFlight = job;
     this.commandTimer = setTimeout(() => this.failJob("no-answer"), COMMAND_TIMEOUT_MS);
-    this.link.write(job.line()).catch(() => this.failJob("no-answer"));
+    this.link.write(job.line()).catch(() => {
+      if (this.inFlight === job) this.failJob("no-answer");
+    });
   }
 
   private finishJob(): void {
@@ -412,7 +458,10 @@ export class BootClient {
 
   /** Asks for a fresh status line, unless one is already on its way. */
   requestStatus(): void {
-    if (!this.online) return;
+    if (this.online) this.askForStatus();
+  }
+
+  private askForStatus(): void {
     const asked = this.inFlight?.expect === "status" || this.queue.some((job) => job.expect === "status");
     if (!asked) this.enqueue(this.statusJob());
   }
@@ -449,10 +498,9 @@ export class BootClient {
   // ── Calibration ────────────────────────────────────────────────────────
 
   /**
-   * Captures one pose, resolving when the boot reports the outcome. The result can
-   * arrive three ways, and the first one wins: an ack that refuses the capture, a
-   * `calibrate` line, or the `calibration` field of a status line. If none arrives in
-   * time, it asks for status once more and then gives up with "no-answer".
+   * Captures one pose, resolving when the boot reports the outcome. Normally that's an
+   * ack refusing the capture, or a `calibrate` line. If neither arrives in time, it asks
+   * for status and reads the `calibration` field, then gives up with "no-answer".
    */
   calibrate(pose: Pose): Promise<CaptureResult> {
     if (!this.online) return Promise.resolve({ ok: false, pose, reason: "offline" });
@@ -499,12 +547,13 @@ export class BootClient {
   }
 
   /**
-   * Picks up a result from a status line. Replies arrive in order, so any status after
-   * the ack reflects this capture rather than an earlier one.
+   * Picks up a lost result from a status line, but only one asked for after the wait. A
+   * status arriving sooner may still hold the previous capture's result, which would
+   * finish this capture while the boot is still collecting.
    */
   private checkCaptureInStatus(status: StatusReply): void {
     const capture = this.capture;
-    if (!capture?.acked) return;
+    if (!capture?.askedStatus) return;
     if (status.calibration === "capturing" || status.calibration === "idle") return;
     if (status.calibration === "ok") {
       this.finishCapture({ angleDeg: this.angleForPose(capture.pose, status) });
@@ -531,4 +580,9 @@ export class BootClient {
         : { ok: true, pose: capture.pose, angleDeg: outcome.angleDeg },
     );
   }
+}
+
+/** The word a job's command starts with, which is what its ack names. */
+function jobVerb(job: Job): string {
+  return job.line().split(" ")[0] ?? "";
 }

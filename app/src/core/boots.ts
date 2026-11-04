@@ -1,7 +1,8 @@
 /**
  * The pair of boots, and what a tap applies to. It owns one `BootClient` per side, the
- * Both, Left, or Right choice, and the labels saved on this phone. Screens read from
- * `view()` and call the actions here, so they never talk to a boot directly.
+ * Both, Left, or Right choice, and the labels saved on this phone. The Remote screen reads
+ * from `view()` and calls the actions here. Status and Calibrate are about one boot at a
+ * time, so they use its `BootClient` from `client(side)` directly.
  *
  * Left and Right exist only on the phone. Both boots run the same firmware and don't
  * know which foot they're on, so a boot's side is whatever you labeled it.
@@ -17,7 +18,7 @@ export type Side = "left" | "right";
 export type Target = "both" | Side;
 
 const SIDES: Side[] = ["left", "right"];
-const SIDE_NAMES: Record<Side, string> = { left: "Left", right: "Right" };
+export const SIDE_NAMES: Record<Side, string> = { left: "Left", right: "Right" };
 const STORAGE_KEY = "boots";
 const BLINK_CONNECT_WAIT_MS = 6000;
 // Long enough to finish a blink that flips the lights off and back on.
@@ -70,8 +71,9 @@ export class BootsStore {
   ready = false;
 
   private knownBoots: KnownBoot[] = [];
-  private readonly clients = new Map<Side, BootClient>();
-  private readonly unsubscribes = new Map<Side, () => void>();
+  private readonly connections = new Map<Side, { client: BootClient; unsubscribe: () => void }>();
+  /** Short-lived connections to unlabeled boots, for Blink. Labeling one adopts it. */
+  private readonly blinking = new Map<string, BootClient>();
   private readonly listeners = new Set<() => void>();
   private needsUpdate: RemoteView["needsUpdate"];
   private version = 0;
@@ -109,18 +111,17 @@ export class BootsStore {
   }
 
   private startClient(boot: KnownBoot): void {
-    const client = new BootClient(this.transport, boot.deviceId);
-    this.clients.set(boot.side, client);
-    this.unsubscribes.set(boot.side, client.subscribe(() => this.notify()));
+    const client = this.blinking.get(boot.deviceId) ?? new BootClient(this.transport, boot.deviceId);
+    this.blinking.delete(boot.deviceId);
+    this.connections.set(boot.side, { client, unsubscribe: client.subscribe(() => this.notify()) });
     client.connect();
   }
 
   private stopClient(side: Side): void {
-    const client = this.clients.get(side);
-    this.unsubscribes.get(side)?.();
-    this.unsubscribes.delete(side);
-    this.clients.delete(side);
-    void client?.disconnect();
+    const connection = this.connections.get(side);
+    connection?.unsubscribe();
+    this.connections.delete(side);
+    void connection?.client.disconnect();
   }
 
   /** Both only makes sense with two boots, and a tab needs a boot behind it. */
@@ -142,7 +143,16 @@ export class BootsStore {
   }
 
   client(side: Side): BootClient | undefined {
-    return this.clients.get(side);
+    return this.connections.get(side)?.client;
+  }
+
+  /**
+   * The boot's own name, such as Firewalker-3EB5. Its status has the real id, so this is
+   * right even if the scan saw the boot before its name arrived.
+   */
+  bootName(side: Side): string {
+    const id = this.client(side)?.getState().status?.id;
+    return id ? `Firewalker-${id}` : (this.known(side)?.name ?? "Firewalker");
   }
 
   displayName(side: Side): string {
@@ -160,19 +170,16 @@ export class BootsStore {
 
     if (existing && occupant) {
       // A swap keeps both connections up and only changes which side each one is on.
-      const existingClient = this.clients.get(existing.side)!;
-      const occupantClient = this.clients.get(side)!;
-      this.clients.set(side, existingClient);
-      this.clients.set(existing.side, occupantClient);
+      const existingConnection = this.connections.get(existing.side)!;
+      const occupantConnection = this.connections.get(side)!;
+      this.connections.set(side, existingConnection);
+      this.connections.set(existing.side, occupantConnection);
       occupant.side = existing.side;
       existing.side = side;
     } else if (existing) {
-      const client = this.clients.get(existing.side)!;
-      const unsubscribe = this.unsubscribes.get(existing.side)!;
-      this.clients.delete(existing.side);
-      this.unsubscribes.delete(existing.side);
-      this.clients.set(side, client);
-      this.unsubscribes.set(side, unsubscribe);
+      const connection = this.connections.get(existing.side)!;
+      this.connections.delete(existing.side);
+      this.connections.set(side, connection);
       existing.side = side;
     } else {
       if (occupant) this.removeBoot(side);
@@ -196,15 +203,17 @@ export class BootsStore {
   /**
    * Blinks a boot so you can tell which physical one a list row means. A boot with no
    * label yet has no connection, so this makes a short-lived one and lets it go, since
-   * each boot only accepts one connection at a time.
+   * each boot only accepts one connection at a time. Labeling the boot mid-blink keeps
+   * that connection rather than dropping it and connecting again.
    */
   async blinkFound(found: FoundBoot): Promise<void> {
     const existing = this.knownBoots.find((boot) => boot.deviceId === found.deviceId);
     if (existing) {
-      this.clients.get(existing.side)?.blink();
+      this.client(existing.side)?.blink();
       return;
     }
     const client = new BootClient(this.transport, found.deviceId);
+    this.blinking.set(found.deviceId, client);
     await new Promise<void>((resolve) => {
       const giveUp = setTimeout(finish, BLINK_CONNECT_WAIT_MS);
       const unsubscribe = client.subscribe(() => {
@@ -219,6 +228,8 @@ export class BootsStore {
     });
     client.blink();
     await new Promise((resolve) => setTimeout(resolve, BLINK_HOLD_MS));
+    if (this.blinking.get(found.deviceId) !== client) return;
+    this.blinking.delete(found.deviceId);
     await client.disconnect();
   }
 
@@ -249,7 +260,7 @@ export class BootsStore {
 
   /** Call when the app returns to the foreground. */
   resume(): void {
-    this.clients.forEach((client) => client.resume());
+    this.connections.forEach(({ client }) => client.resume());
   }
 
   /** The sides the current tab controls. */
@@ -257,9 +268,19 @@ export class BootsStore {
     return this.target === "both" ? this.sides() : this.sides().filter((side) => side === this.target);
   }
 
+  /**
+   * The boots Calibrate can walk through: chosen, online, and with a working sensor. A boot
+   * that can't capture would otherwise block the flow for the one that can.
+   */
+  calibrationSides(): Side[] {
+    return this.onlineTargets()
+      .filter(({ state }) => state.status?.sensor === "ok")
+      .map(({ side }) => side);
+  }
+
   private onlineTargets(): { side: Side; client: BootClient; state: BootState }[] {
     return this.targetSides().flatMap((side) => {
-      const client = this.clients.get(side);
+      const client = this.client(side);
       return client && client.getState().link === "online"
         ? [{ side, client, state: client.getState() }]
         : [];
@@ -292,9 +313,14 @@ export class BootsStore {
     this.onlineTargets().forEach(({ client }) => client.setDragging(dragging));
   }
 
+  /**
+   * Everything the Remote screen shows for the current tab: what the chosen boots last
+   * reported, plus any taps still on their way. An offline boot keeps its pattern tiles so
+   * the screen doesn't go empty while it reconnects, but it can't be running one.
+   */
   view(): RemoteView {
     const chosen = this.targetSides().flatMap((side) => {
-      const client = this.clients.get(side);
+      const client = this.client(side);
       return client ? [{ side, state: client.getState() }] : [];
     });
     const online = chosen.filter(({ state }) => state.link === "online" && state.status);
@@ -302,7 +328,8 @@ export class BootsStore {
       chosen.filter(({ state }) => test(state)).map(({ side }) => side);
 
     // The union, in the order each boot reports, so Both shows everything either has.
-    const patternIds = [...new Set(online.flatMap(({ state }) => state.patterns))];
+    const reported = chosen.filter(({ state }) => state.status);
+    const patternIds = [...new Set(reported.flatMap(({ state }) => state.patterns))];
     const tiles: PatternTile[] = patternIds.map((id) => ({
       id,
       runningOn: online.filter(({ state }) => shownPattern(state) === id).map(({ side }) => side),

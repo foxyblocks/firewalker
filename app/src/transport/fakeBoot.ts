@@ -6,13 +6,13 @@
  * It mirrors the firmware's behavior rather than just its message formats, because
  * that's where the app's logic gets tested: status lines are rate limited, a burst of
  * changes becomes one flash write, replies split across 20-byte notifications, and a
- * capture takes a second and can fail. See src/modes/final_app.cpp on the firmware
+ * capture takes two seconds and can fail. See src/modes/final_app.cpp on the firmware
  * side and docs/remote-protocol.md.
  *
  * Two firmware generations are modeled, because the app has to work on both:
- * - "current" is what the migration PR ships today.
- * - "planned" adds `patterns`, `identify`, `proto`, `lit`, `accelPeak`, and heel and
- *   toe calibration, as agreed with the firmware.
+ * - "current" has `patterns`, `identify`, `proto`, `lit`, `accelPeak`, and heel and toe
+ *   calibration.
+ * - "older" has none of those, and only understands plain `calibrate`.
  */
 
 import type { BootLink, FoundBoot, LinkEvents, RadioState, Transport } from "./transport";
@@ -31,8 +31,8 @@ const NEUTRAL_DEAD_ZONE_DEG = 3;
 
 export interface FakeBootOptions {
   id?: string;
-  firmware?: "current" | "planned";
-  /** What this boot can run. Only "planned" firmware can report it. */
+  firmware?: "older" | "current";
+  /** What this boot can run. Only "current" firmware can report it. */
   patterns?: string[];
   pattern?: string;
   lastLit?: string;
@@ -57,7 +57,7 @@ export class FakeBoot {
   readonly id: string;
   readonly deviceId: string;
   readonly name: string;
-  readonly firmware: "current" | "planned";
+  readonly firmware: "older" | "current";
   readonly availablePatterns: string[];
 
   /** Every command received, for tests to inspect. */
@@ -78,6 +78,10 @@ export class FakeBoot {
   moving = false;
   /** The next capture ends with no `calibrate` line, leaving only the status field. */
   silentCaptureResult = false;
+  /** Sends a status holding the previous capture's result right after the ack. */
+  staleStatusAfterAck = false;
+  /** Commands it drops without answering, by first word. */
+  ignoring: string[] = [];
 
   pattern: string;
   lastLit: string;
@@ -110,7 +114,7 @@ export class FakeBoot {
     this.id = options.id ?? "3ED1";
     this.deviceId = `fake-${this.id}`;
     this.name = `Firewalker-${this.id}`;
-    this.firmware = options.firmware ?? "planned";
+    this.firmware = options.firmware ?? "current";
     this.availablePatterns = options.patterns ?? ["flow", "fire-trail"];
     this.pattern = options.pattern ?? "flow";
     this.lastLit = options.lastLit ?? (this.pattern === "off" ? "flow" : this.pattern);
@@ -159,17 +163,18 @@ export class FakeBoot {
     const line = rawLine.trim();
     this.received.push(line);
     if (this.unresponsive) return;
+    if (this.ignoring.includes(line.split(/\s+/)[0] ?? "")) return;
 
     const words = line.split(/\s+/);
     const verb = words[0] ?? "";
     const arg = words[1];
-    const planned = this.firmware === "planned";
+    const isCurrent = this.firmware === "current";
 
     switch (verb) {
       case "status":
         return this.sendStatus();
       case "patterns":
-        if (!planned) return this.ackInvalid("unknown-command");
+        if (!isCurrent) return this.ackInvalid("unknown-command");
         return this.send(JSON.stringify({ t: "patterns", list: this.availablePatterns }));
       case "pattern":
         if (!arg) return this.ackInvalid("expected-one-argument");
@@ -195,7 +200,7 @@ export class FakeBoot {
         return this.ackThenStatus("brightness");
       }
       case "calibrate":
-        if (arg && !planned) return this.ackInvalid("too-many-arguments");
+        if (arg && !isCurrent) return this.ackInvalid("too-many-arguments");
         if (arg && arg !== "neutral" && arg !== "heel" && arg !== "toe") {
           return this.ackInvalid("unknown-pose");
         }
@@ -206,7 +211,7 @@ export class FakeBoot {
         this.startMotion();
         return this.ackThenStatus("debug");
       case "identify":
-        if (!planned) return this.ackInvalid("unknown-command");
+        if (!isCurrent) return this.ackInvalid("unknown-command");
         this.blinks++;
         return this.send(JSON.stringify({ t: "ack", cmd: "identify", ok: true }));
       default:
@@ -246,8 +251,9 @@ export class FakeBoot {
     }
 
     this.capturing = true;
-    this.calibration = "capturing";
     this.send(JSON.stringify({ t: "ack", cmd: "calibrate", ok: true }));
+    if (this.staleStatusAfterAck) this.sendStatus();
+    this.calibration = "capturing";
     this.send(this.calibrateLine(pose, { state: "capturing" }));
     this.queueStatus();
 
@@ -282,7 +288,7 @@ export class FakeBoot {
       this.send(
         this.calibrateLine(
           pose,
-          this.firmware === "planned"
+          this.firmware === "current"
             ? { state: "ok", angleDeg: angle, tilt: this.tiltAt(angle) }
             : { state: "ok", neutralDeg: angle, tilt: 0 },
         ),
@@ -335,7 +341,7 @@ export class FakeBoot {
   }
 
   private calibrateLine(pose: Pose, fields: Record<string, unknown>): string {
-    const withPose = this.firmware === "planned" ? { pose } : {};
+    const withPose = this.firmware === "current" ? { pose } : {};
     return JSON.stringify({ t: "calibrate", ...withPose, ...fields });
   }
 
@@ -371,7 +377,7 @@ export class FakeBoot {
   private sendStatus(): void {
     this.lastStatusAt = Date.now();
     const planned =
-      this.firmware === "planned"
+      this.firmware === "current"
         ? { proto: 1, lit: this.lastLit, heelDeg: this.heelDeg, toeDeg: this.toeDeg }
         : {};
     this.send(
@@ -410,7 +416,7 @@ export class FakeBoot {
   private sendMotion(): void {
     const angle = this.liveAngle();
     const accel = 9.81 + Math.abs(Math.sin(Date.now() / 300)) * 2;
-    const planned = this.firmware === "planned" ? { accelPeak: round2(accel + 1.4) } : {};
+    const planned = this.firmware === "current" ? { accelPeak: round2(accel + 1.4) } : {};
     this.send(
       JSON.stringify({
         t: "motion",
@@ -443,6 +449,8 @@ export class FakeTransport implements Transport {
   readonly simulated = true;
   finding: "scan" | "picker";
   radio: RadioState = "on";
+  /** How long a connection takes, during which the boot's first replies can already arrive. */
+  openDelayMs = 0;
   private readonly boots: FakeBoot[];
   private scanTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -482,6 +490,7 @@ export class FakeTransport implements Transport {
     const boot = this.boots.find((candidate) => candidate.deviceId === deviceId);
     if (!boot || !boot.reachable || boot.connected) throw new Error("Boot not reachable");
     boot.attach(events);
+    if (this.openDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.openDelayMs));
     return {
       write: async (line) => {
         if (!boot.connected) throw new Error("Not connected");
