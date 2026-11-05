@@ -40,6 +40,8 @@ It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
   your screen, so it shows those lost steps rather than how dim the boot really is. Pattern
   list thumbnails don't use it.
 - **Undo** and **Redo** with ⌘Z and ⇧⌘Z. **Save** with ⌘S.
+- **The size at the top**, such as `103 / 254 bytes`, is what a recipe takes on a boot. A draft
+  can go over while you work, but it turns red and can't be saved until it fits.
 
 ## Where recipes are kept
 
@@ -69,7 +71,9 @@ import only. Save and Delete stay off, and a banner says why.
 
 - `src/recipe/`: the format. `spec.ts` has every layer's fields, ranges, and defaults, which
   the validator and the settings panel both read. `serialize.ts` writes files the same way
-  every time.
+  every time. `compile.ts` turns a recipe into the binary a boot runs. `generateTables.ts` gives
+  the firmware its copy of the format, and `bun run build-recipes` rewrites that after a format
+  change.
 - `src/engine/`: runs a recipe one 16 ms frame at a time, like the firmware's patterns.
   `strip.ts` is a port of `include/firewalker_strip_map.h`, and `output.ts` is a port of how
   the strip driver applies brightness. `referenceFrames.ts` saves what this engine draws for a

@@ -10,6 +10,7 @@ import { Inspector } from "./Inspector";
 import { LayerList } from "./LayerList";
 import { download } from "./PatternsScreen";
 import { SimulatorPanel } from "./SimulatorPanel";
+import { MAX_COMPILED_BYTES } from "../recipe/compile";
 import { recipeToJson } from "../recipe/serialize";
 import { newLayer } from "../recipe/spec";
 import { MAX_DESCRIPTION_LENGTH, type Layer, type LayerType, type Recipe } from "../recipe/types";
@@ -140,6 +141,14 @@ export function DesignScreen({ name }: { name: string }) {
             Rename
           </button>
           <span className={`badge ${entry.status}`}>{statusText}</span>
+          {entry.compiledSize !== null && (
+            <span
+              className={entry.compiledSize > MAX_COMPILED_BYTES ? "size-meter over" : "size-meter"}
+              title="What this recipe takes on a boot, which stores each one in a single flash entry"
+            >
+              {entry.compiledSize} / {MAX_COMPILED_BYTES} bytes
+            </span>
+          )}
         </div>
         <div className="topbar-actions">
           <button type="button" className="button" onClick={undo} disabled={history.current.past.length === 0} title="Undo (⌘Z)">

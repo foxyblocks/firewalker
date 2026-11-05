@@ -10,6 +10,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { listPatterns } from "./patternStore";
+import { compileRecipe } from "../src/recipe/compile";
 import { recipeToJson } from "../src/recipe/serialize";
 import type { Recipe } from "../src/recipe/types";
 
@@ -26,6 +27,11 @@ describe("patterns/", () => {
     // Comparing the errors, not just the recipe, makes a failure say what's wrong with the file.
     expect(pattern?.errors).toBeUndefined();
     expect(pattern?.recipe?.name).toBe(file.replace(/\.json$/, ""));
+  });
+
+  it.each(FILES)("%s compiles to fit on a boot", (file) => {
+    const compiled = compileRecipe(JSON.parse(readFileSync(path.join(PATTERNS_DIR, file), "utf8")) as Recipe);
+    expect(compiled.ok ? [] : compiled.errors).toEqual([]);
   });
 
   // The fixed field order and spacing is what keeps a recipe's diffs small.

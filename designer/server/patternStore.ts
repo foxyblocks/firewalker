@@ -1,7 +1,7 @@
 // Reads and writes recipe files in the repo's patterns/ folder, one `<name>.json` per pattern.
 // The dev server calls these for the designer's Save, Delete, and pattern list. Every write is
-// validated first, and names are checked before they touch a path, so nothing outside the
-// folder can be read or written.
+// compiled first, so a kept recipe can always run on a boot, and names are checked before they
+// touch a path, so nothing outside the folder can be read or written.
 //
 // Each file has a version, a hash of its contents. The designer remembers the version a draft
 // started from and sends it with the save, so a file changed behind the designer's back, such
@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { compileRecipe } from "../src/recipe/compile.ts";
 import { recipeToJson } from "../src/recipe/serialize.ts";
 import type { Recipe } from "../src/recipe/types.ts";
 import { nameProblem, validateRecipe } from "../src/recipe/validate.ts";
@@ -123,6 +124,8 @@ async function writePattern(
   const result = validateRecipe(body);
   if (!result.ok) throw new PatternStoreError("The recipe isn't valid.", 422, result.errors);
   if (result.recipe.name !== name) throw new PatternStoreError("The recipe's name doesn't match its file.", 422);
+  const compiled = compileRecipe(result.recipe);
+  if (!compiled.ok) throw new PatternStoreError("The recipe can't run on a boot.", 422, compiled.errors);
   if (expected !== undefined) await checkExpected(dir, name, replaces, expected);
 
   await mkdir(dir, { recursive: true });

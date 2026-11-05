@@ -119,6 +119,14 @@ describe("pattern store", () => {
     expect(await readdir(dir)).toEqual([]);
   });
 
+  it("refuses a recipe that can't run on a boot", async () => {
+    const palette = Array.from({ length: 16 }, () => "#102030");
+    const tooBig = { ...recipe("glow"), layers: Array.from({ length: 8 }, () => ({ ...newLayer("fill"), palette })) };
+    await expect(savePattern(dir, "glow", tooBig)).rejects.toMatchObject({ status: 422, errors: [expect.stringMatching(/over a boot's limit/)] });
+    await expect(savePattern(dir, "glow", { ...recipe("glow"), layers: [{ ...newLayer("fill"), enabled: false }] })).rejects.toMatchObject({ status: 422 });
+    expect(await readdir(dir)).toEqual([]);
+  });
+
   it("reports broken files instead of failing the whole list", async () => {
     await writeFile(path.join(dir, "broken.json"), "{ nope");
     await savePattern(dir, "glow", recipe("glow"));

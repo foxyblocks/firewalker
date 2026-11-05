@@ -277,6 +277,18 @@ input[type="range"] {
   border: 1px solid var(--line);
 }
 
+.size-meter {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.size-meter.over {
+  color: var(--bad);
+  font-weight: 600;
+}
+
 .badge.saved {
   color: var(--good);
 }

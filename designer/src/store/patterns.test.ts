@@ -73,6 +73,20 @@ describe("PatternLibrary", () => {
     expect(entry.problems).toEqual([]);
   });
 
+  it("reports what a pattern takes on a boot, and won't save one over the limit", async () => {
+    const lib = await library();
+    expect(lib.entry("glow")?.compiledSize).toBeGreaterThan(0);
+
+    const palette = Array.from({ length: 16 }, () => "#102030");
+    const tooBig = { ...recipe("glow"), layers: Array.from({ length: 8 }, () => ({ ...newLayer("fill"), palette })) } as Recipe;
+    lib.update("glow", tooBig);
+    const entry = lib.entry("glow")!;
+    expect(entry.compiledSize).toBeGreaterThan(254);
+    expect(entry.problems[0]).toMatch(/over a boot's limit/);
+    expect(await lib.save("glow")).toEqual(entry.problems);
+    expect(files.get("glow")?.layers).toHaveLength(1);
+  });
+
   it("lists saved files", async () => {
     const lib = await library();
     expect(lib.getSnapshot().entries.map((e) => [e.name, e.status])).toEqual([["glow", "saved"]]);

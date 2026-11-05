@@ -5,10 +5,11 @@
 // (`baseVersion`), so if the file then changes, for example in a git pull, the pattern reports a
 // conflict and Save won't overwrite the file unless told to.
 
+import { compileRecipe } from "../recipe/compile";
 import { recipeToJson } from "../recipe/serialize";
 import { withDefaults } from "../recipe/spec";
 import { MAX_NAME_LENGTH, type Recipe } from "../recipe/types";
-import { nameProblem, validateRecipe } from "../recipe/validate";
+import { nameProblem } from "../recipe/validate";
 
 export type PatternStatus = "saved" | "changed" | "new";
 // What happened to a draft's file after the draft started. Null when nothing has.
@@ -19,7 +20,10 @@ export interface PatternEntry {
   recipe: Recipe;
   savedAs: string | null;
   status: PatternStatus;
+  // Why this pattern can't be saved yet, or run on a boot.
   problems: string[];
+  // What it takes on a boot, in bytes. Null if it's too broken to compile.
+  compiledSize: number | null;
   conflict: FileConflict;
 }
 
@@ -199,8 +203,8 @@ export class PatternLibrary {
   async save(name: string, { overwrite = false }: { overwrite?: boolean } = {}): Promise<string[]> {
     const entry = this.entry(name);
     if (!entry) return ["That pattern no longer exists."];
-    const result = validateRecipe(entry.recipe);
-    if (!result.ok) return result.errors;
+    const compiled = compileRecipe(entry.recipe);
+    if (!compiled.ok) return compiled.errors;
     if (!this.repoAvailable) return ["Saving to the repo needs the designer's dev server (bun run dev)."];
 
     const params = new URLSearchParams();
@@ -334,8 +338,8 @@ export class PatternLibrary {
 }
 
 function makeEntry(name: string, recipe: Recipe, savedAs: string | null, status: PatternStatus, conflict: FileConflict): PatternEntry {
-  const result = validateRecipe(recipe);
-  return { name, recipe, savedAs, status, problems: result.ok ? [] : result.errors, conflict };
+  const compiled = compileRecipe(recipe);
+  return { name, recipe, savedAs, status, problems: compiled.ok ? [] : compiled.errors, compiledSize: compiled.size, conflict };
 }
 
 // A draft restored from storage can be any shape, so a failure to compare just means "different".
