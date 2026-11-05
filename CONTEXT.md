@@ -82,8 +82,16 @@ code, issues, and docs rather than drifting to synonyms.
   brightness, and poses. They live in the controller's own flash, never in the build,
   so both shoes run the same firmware binary.
 - **Recipe** — a pattern described as data rather than code: a JSON file of **layers**
-  (`docs/recipe-format.md`). The **designer** makes them, and `patterns/` keeps them. The
-  firmware doesn't run recipes yet (ADR-0005). The built-in patterns stay C++.
+  (`docs/recipe-format.md`). The **designer** makes them, and `patterns/` keeps them. A boot
+  runs the compiled form, which a recipe has to fit in 254 bytes to have (ADR-0005).
+- **Native pattern** — a pattern written in C++: `flow` and `fire-trail`. A recipe can't take
+  one of their names.
+- **Kept recipe**, or **keeper** — any recipe in `patterns/`. It's in the repo, but it only
+  reaches a boot by being built in or uploaded.
+- **Built-in recipe** — a keeper listed in `patterns/built-ins.txt`, compiled into the firmware
+  so every boot ships with it.
+- **Uploaded recipe** — a recipe stored in one boot's flash, in one of its **slots**, sent over
+  BLE or USB with no firmware build. One can hide a built-in of the same name on that boot.
 - **Layer** — one part of a recipe that paints the strip (fill, pool, trail, flash,
   sparkle, chase), combined with the layers below it by its blend.
 - **Knob** — a recipe number that is either fixed or a **binding**: it follows tilt, tilt
@@ -102,9 +110,9 @@ code, issues, and docs rather than drifting to synonyms.
 ## Scope guardrails (current phase)
 
 In scope now: one strip per shoe; the **IMU** as the sole stomp sensor; runtime
-**patterns** (`flow` + `fire-trail`) on the app; the BLE and USB **remote**;
-per-controller **settings**; the `imu_debug` build and the `cli` bench tool; the
-**designer** and the **recipe** format, ahead of a firmware recipe engine. Still
+**patterns** on the app, both native and **recipes**, built in or uploaded; the BLE and USB
+**remote**; per-controller **settings**; the `imu_debug` build and the `cli` bench tool; and the
+**designer**. Still
 explicitly **out** of scope: the 2-D "perimeter bubble" flow (roll as well as pitch),
 multiple strips per shoe, synchronization between shoes, battery management and the
 wearable power plan, and premature performance work.

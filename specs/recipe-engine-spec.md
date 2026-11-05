@@ -510,9 +510,11 @@ If a case fails, fix it in this order, before version 1 freezes:
   identical recipe, sends the current version with no need to Save first, selects it, and shows
   progress. Errors use plain language.
 - **Each boot is sent to separately,** because a boot takes one connection and keeps its own flash.
-- **It shares the app's connection code, without copying it,** through a Bun workspace: the `Transport`
-  seam, `protocol.ts`, and `ble.ts`. USB comes from draft PR #8's `usb.ts`, so that PR merges first.
-- The upload steps are one pure function over `write(line)`, tested against `fakeBoot`.
+- **It shares the app's connection code, without copying it,** by relative import: the `Transport` seam,
+  `ble.ts`, and `usb.ts`. A Bun workspace would move `node_modules`, and the app's iOS build points at
+  `app/node_modules`.
+- The upload steps are one pure class over `write(line)`, tested against a fake boot that speaks the
+  recipe commands. `?boot=fake` shows the panel with pretend boots.
 
 ## Risks and Mitigations
 

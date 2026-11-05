@@ -2,8 +2,9 @@
 
 A **recipe** describes a pattern as data: a stack of layers that each paint the strip, with
 knobs that can follow the boot's tilt and stomps. The designer (`designer/`) makes and
-previews recipes, and `patterns/` keeps the ones worth keeping. The firmware doesn't run
-recipes yet; that's the next phase (see [ADR-0005](adr/0005-pattern-recipes.md)).
+previews recipes, and `patterns/` keeps the ones worth keeping. A boot runs them in a compiled
+form, [below](#compiled-form), either built into its firmware or uploaded (see
+[ADR-0005](adr/0005-pattern-recipes.md)).
 
 This page is the contract between the two. The designer's code is the reference:
 `designer/src/recipe/spec.ts` holds every range and default, `validate.ts` checks a file,
@@ -179,3 +180,59 @@ The strip starts each frame black. Colors are linear LED drive levels from 0 to 
 boot's own brightness setting scales them. Positions along the foot use the boot's saved
 strip layout, the same map as `include/firewalker_strip_map.h`, so a recipe looks right on
 any boot's ring.
+
+## Compiled form
+
+A boot never reads JSON. `designer/src/recipe/compile.ts` turns a recipe into this binary, and
+`include/firewalker_recipe.h` reads it. The two are checked against each other using the test recipes in
+`test/fixtures/recipe-frames/`.
+
+A compiled recipe is at most **254 bytes**, because that's the largest entry the boot's flash store holds,
+and one entry saves all at once. The designer shows the size, and won't save or send a recipe over it.
+Compiling drops what a boot has no use for: the description, labels, and disabled layers. A recipe needs at
+least one enabled layer.
+
+Numbers are little-endian. The first byte is the same `version` as the file, so changing a field, its
+order, or an option means a new version.
+
+| Bytes | Recipe |
+|---|---|
+| 1 | `version` |
+| 1 | Name length, 1 to 12 |
+| 1 to 12 | Name, ASCII |
+| 1 | Layer count, 1 to 8 |
+| varies | Layers, first drawn first |
+| 4 | CRC-32 of everything before it |
+
+| Bytes | Layer |
+|---|---|
+| 1 | Type: fill 0, pool 1, trail 2, flash 3, sparkle 4, chase 5 |
+| 1 | Bound-knob mask. Bit k set means the layer's k-th knob is a binding |
+| varies | Its fields, in the order below |
+
+| Type | Fields in order (knobs marked \*) |
+|---|---|
+| fill | palette, spread, repeat\*, offset\*, scroll\*, brightness\*, blend, opacity\* |
+| pool | baseline\*, blend, opacity\* |
+| trail | trigger, from, flatZone, palette, speed\*, length, brightness\*, maxFronts, blend, opacity\* |
+| flash | trigger, palette, fadeMs, brightness\*, blend, opacity\* |
+| sparkle | palette, density\*, fadeMs, brightness\*, blend, opacity\* |
+| chase | path, palette, count, speed\*, length, brightness\*, blend, opacity\* |
+
+| Field | Bytes | Encoding |
+|---|---|---|
+| A choice, such as `spread` or `blend` | 1 | The option's place in its list above |
+| `length`, `fadeMs`, `count`, `maxFronts` | 2 | `uint16` |
+| `flatZone` | 2 | Scaled |
+| Palette | 1 + 3n | Color count, then R, G, B per color |
+| Fixed knob | 2 | Scaled |
+| Bound knob | 5 or 7 | Source (tilt 0, tiltAmount 1, stompStrength 2, stompFade 3, wave 4), scaled `min`, scaled `max`, and for `wave` or `stompFade`, a `uint16` for `periodMs` or `fadeMs` |
+
+A **scaled** number is an `int16` across the field's range. With `range` as the larger of the field's `|min|`
+and `|max|`, it's stored as `round(value / range × 32767)` and read as `raw / 32767 × range` in single
+precision, limited to the field's `min` and `max`. A speed of 60 on a field from -400 to 400 is stored as 4915
+and reads as 59.9994.
+
+A boot checks everything it reads, because anyone in Bluetooth range can send one. It refuses a wrong version,
+a bad checksum, a bad or reserved name, an unknown type, option, or source, a bad palette size, and data that
+ends early or runs long.

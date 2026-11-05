@@ -6,7 +6,7 @@ watch a simulated boot react as you tilt it and stomp. Recipes save to the repo'
 [`docs/recipe-format.md`](../docs/recipe-format.md), and why it works this way is in
 [ADR-0005](../docs/adr/0005-pattern-recipes.md).
 
-Boots can't run recipes yet. Sending one to a boot comes with the firmware's recipe engine.
+**Send to boot** tries a pattern on a real boot, with no firmware build.
 
 ## Run it
 
@@ -40,6 +40,10 @@ It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
   move in jumps and very dim colors can shift or go black. It keeps full white at full on
   your screen, so it shows those lost steps rather than how dim the boot really is. Pattern
   list thumbnails don't use it.
+- **Send to boot** connects to boots over USB or Bluetooth, and sends the pattern as it is right
+  now, with no need to save first. It works in Chrome and Arc, and it lists and deletes what's on a
+  boot too. A boot takes one connection at a time, so disconnect the iPhone app or `pio device
+  monitor` first. Add `?boot=fake` to the URL to try it with pretend boots.
 - **Undo** and **Redo** with ⌘Z and ⇧⌘Z. **Save** with ⌘S.
 - **The size at the top**, such as `103 / 254 bytes`, is what a recipe takes on a boot. A draft
   can go over while you work, but it turns red and can't be saved until it fits.
@@ -89,6 +93,8 @@ import only. Save and Delete stay off, and a banner says why.
   rewrites them.
 - `src/sim/`: the boot drawings and the frame loop. The drawings assume the controller, and
   so pixel 0, is on the boot's outer side.
+- `src/boot/`: connecting to boots and sending recipes. It reuses the iPhone app's Bluetooth and USB
+  code from `app/`.
 - `server/`: the dev server's `/api/patterns` endpoints, and `builtins.ts`, which keeps the
   firmware's built-in recipes in step with `patterns/built-ins.txt`.
 
