@@ -5,9 +5,28 @@ import { createContext, useContext, useEffect, useMemo, useState, useSyncExterna
 
 import { DesignScreen } from "./DesignScreen";
 import { PatternsScreen } from "./PatternsScreen";
+import { BootConnections, type BootTransport } from "../boot/connections";
 import { PatternLibrary, type LibraryState } from "../store/patterns";
 
 const LibraryContext = createContext<PatternLibrary | null>(null);
+const BootsContext = createContext<BootConnections | null>(null);
+
+export function useBoots(): BootConnections {
+  const boots = useContext(BootsContext);
+  if (!boots) throw new Error("useBoots needs the App's provider.");
+  return boots;
+}
+
+// Real boots, or pretend ones with ?boot=fake, for trying the panel with no boot around. Both load only
+// when the panel opens, because the real ones pull in the iPhone app's Bluetooth plugin.
+async function loadBootTransport(): Promise<BootTransport> {
+  if (new URLSearchParams(window.location.search).get("boot") === "fake") {
+    const { FakeBootTransport } = await import("../boot/fakeBoot");
+    return new FakeBootTransport();
+  }
+  const { createRealTransport } = await import("../boot/realTransport");
+  return createRealTransport();
+}
 
 export function useLibrary(): [PatternLibrary, LibraryState] {
   const library = useContext(LibraryContext);
@@ -29,6 +48,7 @@ function readRoute(): Route {
 
 export function App() {
   const library = useMemo(() => new PatternLibrary(), []);
+  const boots = useMemo(() => new BootConnections(loadBootTransport), []);
   const [route, setRoute] = useState(readRoute);
 
   useEffect(() => {
@@ -46,7 +66,9 @@ export function App() {
 
   return (
     <LibraryContext.Provider value={library}>
-      {route.screen === "design" ? <DesignScreen key={route.name} name={route.name} /> : <PatternsScreen />}
+      <BootsContext.Provider value={boots}>
+        {route.screen === "design" ? <DesignScreen key={route.name} name={route.name} /> : <PatternsScreen />}
+      </BootsContext.Provider>
     </LibraryContext.Provider>
   );
 }

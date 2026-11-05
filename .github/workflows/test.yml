@@ -16,6 +16,11 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
+      # The designer reuses the iPhone app's connection code, so it needs the app's packages too.
+      - name: App packages
+        working-directory: app
+        run: bun install --frozen-lockfile
+
       - name: Designer
         working-directory: designer
         run: |

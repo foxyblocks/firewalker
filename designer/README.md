@@ -11,6 +11,7 @@ Boots can't run recipes yet. Sending one to a boot comes with the firmware's rec
 ## Run it
 
 ```bash
+cd app && bun install && cd ..   # Send to boot reuses the iPhone app's connection code
 cd designer
 bun install
 bun run dev          # http://localhost:5174

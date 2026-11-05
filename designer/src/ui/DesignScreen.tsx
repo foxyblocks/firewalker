@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { navigate, useLibrary } from "./App";
+import { BootPanel } from "./BootPanel";
 import { NameDialog } from "./dialogs";
 import { Inspector } from "./Inspector";
 import { LayerList } from "./LayerList";
@@ -28,6 +29,7 @@ export function DesignScreen({ name }: { name: string }) {
   const [renaming, setRenaming] = useState(false);
   const [saveErrors, setSaveErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [bootPanelOpen, setBootPanelOpen] = useState(false);
   const history = useRef({ past: [] as Recipe[], future: [] as Recipe[], lastEdit: 0 });
   const [, setHistoryVersion] = useState(0);
 
@@ -165,6 +167,9 @@ export function DesignScreen({ name }: { name: string }) {
           <button type="button" className="button" onClick={() => download(recipe)}>
             Download
           </button>
+          <button type="button" className={bootPanelOpen ? "button on" : "button"} aria-expanded={bootPanelOpen} onClick={() => setBootPanelOpen(!bootPanelOpen)}>
+            Send to boot
+          </button>
           {entry.status === "changed" && (
             <button
               type="button"
@@ -194,6 +199,8 @@ export function DesignScreen({ name }: { name: string }) {
           </button>
         </div>
       </header>
+
+      {bootPanelOpen && <BootPanel recipe={recipe} canSend={entry.problems.length === 0} onClose={() => setBootPanelOpen(false)} />}
 
       {problems.length > 0 && (
         <div className="banner bad">

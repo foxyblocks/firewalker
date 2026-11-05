@@ -20,6 +20,7 @@ const builtinsHeader = process.env.PATTERNS_DIR ? undefined : fileURLToPath(new 
 // Port 5174, so the designer and the iPhone app's dev server (5173) can run side by side.
 export default defineConfig({
   plugins: [react(), patternsApi(patternsDir, shownDir, builtinsHeader)],
-  server: { host: "localhost", port: 5174 },
+  // Send to boot reuses the iPhone app's connection code from ../app.
+  server: { host: "localhost", port: 5174, fs: { allow: [".."] } },
   test: { environment: "node", globals: true },
 });
