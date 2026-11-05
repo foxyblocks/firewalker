@@ -1,0 +1,33 @@
+# Runs the designer's checks and the firmware's off-hardware tests on every pull request. The
+# generated recipe files, the reference frames, and the recipes in patterns/ only stay honest if
+# these run, and this repo has no commit hooks.
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Designer
+        working-directory: designer
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun run test
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Firmware logic
+        run: |
+          pip install platformio
+          pio test -e native
