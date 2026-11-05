@@ -23,7 +23,7 @@ const COLOR_PATTERN = /^#[0-9a-f]{6}$/;
 // Names a recipe can't take. `off` is how the remote turns the strip off, and `flow` and
 // `fire-trail` are the firmware's own patterns, which a boot lists alongside its recipes by
 // name. Keep this in step with SELECTABLE_PATTERNS in include/firewalker_remote_protocol.h.
-const RESERVED_NAMES = new Set(["off", "flow", "fire-trail"]);
+export const RESERVED_NAMES: ReadonlySet<string> = new Set(["off", "flow", "fire-trail"]);
 
 // Returns a reason the name can't be used, or null if it's fine.
 export function nameProblem(name: string): string | null {
