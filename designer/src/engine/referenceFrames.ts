@@ -25,8 +25,11 @@ export const REFERENCE_FRAMES = 400;
 // a difference in how state builds up shows at the next saved frame.
 export const CHECK_EVERY = 16;
 
-// Frame times in ms. The firmware's frames aren't perfectly even, and a stall happens now and then.
+// Frame times in ms. The firmware's frames aren't perfectly even, and a stall happens now and then,
+// including one past the 250 ms that both engines limit a step to.
 const FRAME_TIMES = [16, 16, 17, 16, 16, 16, 33, 16, 15, 16];
+const STALL_FRAME = 200;
+const STALL_MS = 400;
 
 // Stomps as frame number and strength. Some land at exactly level, so `flat` triggers fire, and
 // frames 40 and 42 overlap, so a second stomp lands while the first one's effects are running.
@@ -68,7 +71,7 @@ export function referenceInputs(): EngineInput[] {
       tiltFwd: Math.fround(scriptTilt(frame)),
       stomp: strength !== undefined,
       stompStrength: Math.fround(strength ?? 0),
-      dt: FRAME_TIMES[frame % FRAME_TIMES.length]!,
+      dt: frame === STALL_FRAME ? STALL_MS : FRAME_TIMES[frame % FRAME_TIMES.length]!,
     };
   });
 }
