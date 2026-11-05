@@ -34,6 +34,11 @@ It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
   it, and the pattern gets the stomp the moment it lands, at the **Strength** you set.
   **Beat** stomps on every beat at the BPM beside it, and **Walk** plays a steady gait. The
   strip menu switches between each boot's saved layout and the uncut bench strip.
+- **Boot brightness** shows what a boot's brightness setting does to a pattern, using the
+  firmware's own math. At the default of 16 each color channel has only 17 steps, so fades
+  move in jumps and very dim colors can shift or go black. It keeps full white at full on
+  your screen, so it shows those lost steps rather than how dim the boot really is. Pattern
+  list thumbnails don't use it.
 - **Undo** and **Redo** with ⌘Z and ⇧⌘Z. **Save** with ⌘S.
 
 ## Where recipes are kept
@@ -60,7 +65,8 @@ import only. Save and Delete stay off, and a banner says why.
   the validator and the settings panel both read. `serialize.ts` writes files the same way
   every time.
 - `src/engine/`: runs a recipe one 16 ms frame at a time, like the firmware's patterns.
-  `strip.ts` is a port of `include/firewalker_strip_map.h`.
+  `strip.ts` is a port of `include/firewalker_strip_map.h`, and `output.ts` is a port of how
+  the strip driver applies brightness.
 - `src/sim/`: the boot drawings and the frame loop. The drawings assume the controller, and
   so pixel 0, is on the boot's outer side.
 - `server/`: the dev server's `/api/patterns` endpoints.

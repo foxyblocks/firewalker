@@ -1,10 +1,11 @@
 // The boot from above and from the outer side, the strip in index order, and the motion
 // controls: a tilt slider, a stomp button (or the space bar), a stomp on every beat, and a
-// walking gait.
+// walking gait. The boot brightness setting shows what a boot's brightness does to the colors.
 
 import { useEffect, useRef, useState } from "react";
 
 import { Segmented, Slider } from "./controls";
+import { BOOT_BRIGHTNESS, channelSteps } from "../engine/output";
 import { STRIP_PRESETS } from "../engine/strip";
 import { Simulation, type Readout } from "../sim/simulation";
 import type { Recipe } from "../recipe/types";
@@ -14,6 +15,26 @@ const STRIPS = Object.fromEntries(STRIP_PRESETS.map((preset) => [preset.key, pre
 const TILT_SNAP = 0.04;
 const BPM_MIN = 30;
 const BPM_MAX = 240;
+const BRIGHTNESS_KEY = "firewalker-designer:boot-brightness";
+
+// The brightness last used in this browser, so it carries from one pattern to the next.
+function readStoredBrightness(): number {
+  try {
+    const stored = Number(localStorage.getItem(BRIGHTNESS_KEY));
+    if (Number.isInteger(stored) && stored >= BOOT_BRIGHTNESS.min && stored <= BOOT_BRIGHTNESS.max) return stored;
+  } catch {
+    // Storage can be blocked. The setting still works until the page closes.
+  }
+  return BOOT_BRIGHTNESS.default;
+}
+
+function storeBrightness(brightness: number): void {
+  try {
+    localStorage.setItem(BRIGHTNESS_KEY, String(brightness));
+  } catch {
+    // Storage can be blocked or full, and this is only a convenience.
+  }
+}
 
 export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
   const topRef = useRef<HTMLCanvasElement>(null);
@@ -33,6 +54,7 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
   const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState("1");
   const [strip, setStrip] = useState(STRIP_PRESETS[0]!.key);
+  const [brightness, setBrightness] = useState(readStoredBrightness);
   const [readout, setReadout] = useState<Readout>({ tilt: 0, lastStomp: null, stomps: 0, timeMs: 0 });
   const [flash, setFlash] = useState(false);
 
@@ -50,6 +72,7 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
   useEffect(() => simRef.current?.setPaused(paused), [paused]);
   useEffect(() => simRef.current?.setSpeed(Number(speed)), [speed]);
   useEffect(() => simRef.current?.setLayout(recipeRef.current, STRIPS[strip]!.layout), [strip]);
+  useEffect(() => simRef.current?.setBootBrightness(brightness), [brightness]);
 
   const stomp = () => simRef.current?.stomp(strength);
 
@@ -130,6 +153,25 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
           <span className="quiet small">
             {readout.lastStomp === null ? "No stomp yet" : `Last stomp ${readout.lastStomp.toFixed(2)}`}
           </span>
+        </div>
+
+        <div className="control brightness" title="What a boot's brightness setting does to this pattern. A new boot starts at 16.">
+          <div className="field-head">
+            <span className="field-label">Boot brightness</span>
+            <span className="readout">{channelSteps(brightness)} steps per color</span>
+          </div>
+          <Slider
+            label="Boot brightness"
+            value={brightness}
+            min={BOOT_BRIGHTNESS.min}
+            max={BOOT_BRIGHTNESS.max}
+            step={1}
+            integer
+            onChange={(value) => {
+              setBrightness(value);
+              storeBrightness(value);
+            }}
+          />
         </div>
 
         <div className="control playback">

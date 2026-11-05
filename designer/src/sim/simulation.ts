@@ -8,6 +8,7 @@
 import { sideGeometry, topGeometry, type SideGeometry, type TopGeometry } from "./bootGeometry";
 import { drawSideView, drawStripView, drawTopView, type SidePose } from "./draw";
 import { RecipeEngine } from "../engine/engine";
+import { applyBootBrightness, BOOT_BRIGHTNESS } from "../engine/output";
 import type { StripLayout } from "../engine/strip";
 import type { Recipe } from "../recipe/types";
 
@@ -66,6 +67,9 @@ export interface Drop {
 export class Simulation {
   private engine: RecipeEngine;
   private layout: StripLayout;
+  // The engine's frame after the boot's brightness setting, which is what the canvases draw.
+  private shownFrame: Float32Array;
+  private bootBrightness: number = BOOT_BRIGHTNESS.default;
   private top: TopGeometry;
   private side: SideGeometry;
   private canvases: Canvases | null = null;
@@ -99,6 +103,7 @@ export class Simulation {
     this.layout = layout;
     this.engine = new RecipeEngine(recipe, layout);
     this.engine.enter();
+    this.shownFrame = new Float32Array(layout.count * 3);
     this.top = topGeometry(layout);
     this.side = sideGeometry(layout);
   }
@@ -128,8 +133,13 @@ export class Simulation {
     this.layout = layout;
     this.engine = new RecipeEngine(recipe, layout);
     this.engine.enter();
+    this.shownFrame = new Float32Array(layout.count * 3);
     this.top = topGeometry(layout);
     this.side = sideGeometry(layout);
+  }
+
+  setBootBrightness(brightness: number): void {
+    this.bootBrightness = brightness;
   }
 
   setTilt(tilt: number): void {
@@ -278,9 +288,10 @@ export class Simulation {
       impact: this.impactMs / IMPACT_MS,
       impactStrength: this.impactStrength,
     };
-    drawTopView(this.canvases.top, this.engine.frame, this.top);
-    drawSideView(this.canvases.side, this.engine.frame, this.side, pose);
-    drawStripView(this.canvases.strip, this.engine.frame, this.layout);
+    applyBootBrightness(this.engine.frame, this.bootBrightness, this.shownFrame);
+    drawTopView(this.canvases.top, this.shownFrame, this.top);
+    drawSideView(this.canvases.side, this.shownFrame, this.side, pose);
+    drawStripView(this.canvases.strip, this.shownFrame, this.layout);
   }
 }
 
