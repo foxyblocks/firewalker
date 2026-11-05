@@ -1,7 +1,7 @@
 # Recipe engine, built-in recipes, and upload
 
-Status: Draft for foxy's review. No firmware code starts until foxy approves this spec and
-the branch name.
+Status: Approved by foxy on 2026-11-04, with `starfield` and `lava-pour` taken out of the built-ins.
+Firmware work starts on the `recipe-engine` branch, cut from `main` once PR #9 merges.
 Date: 2026-11-04
 
 ## Summary
@@ -18,7 +18,7 @@ built-ins and uploads. The firmware only ever sees the binary.
 
 ## Decisions
 
-Every decision here is a proposal until foxy approves the spec, except the first and the last.
+foxy approved these on 2026-11-04.
 
 | # | Decision | Why |
 |---|---|---|
@@ -527,8 +527,8 @@ If a case fails, fix it in this order, before version 1 freezes:
 
 Each step lands on its own, building and passing its tests.
 
-1. **Compiler.** `compile.ts`, generated tables, reference frames from compiled recipes, size meter. No
-   firmware changes.
+1. **Compiler.** `compile.ts`, generated tables, reference frames from compiled recipes, size meter, and
+   the CI job from the Open Questions. No firmware changes.
 2. **Engine, off hardware.** Decoder and engine in pure C++, passing reference frames under
    `pio test -e native`.
 3. **Budgets.** Run the keepers and the heavy recipes on one board. Change limits if needed. Then freeze
@@ -606,7 +606,7 @@ Each step lands on its own, building and passing its tests.
 
 ## Open Questions
 
-Each has a recommendation. These are foxy's to confirm.
+Approving the plan accepted these recommendations. They stand unless foxy says otherwise.
 
 1. **Branch and merge order.** Recommend a new branch named `recipe-engine`, cut from `main` once PR #9
    merges, because this work builds on the designer and `patterns/`. PR #8 merges before step 6.
