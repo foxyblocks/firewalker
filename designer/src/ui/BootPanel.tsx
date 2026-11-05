@@ -5,6 +5,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 
 import { useBoots } from "./App";
+import { BootAudioControls } from "./BootAudioControls";
 import type { ConnectedBoot } from "../boot/connections";
 import { describeHolder } from "../boot/portHolders";
 import type { Recipe } from "../recipe/types";
@@ -74,13 +75,14 @@ function BootRow({ boot, recipe, canSend }: { boot: ConnectedBoot; recipe: Recip
           title={canSend ? undefined : "Fix the problems above first"}
           onClick={() => void boots.send(boot.deviceId, recipe)}
         >
-          {boot.sending ? "Sending…" : `Send ${recipe.name}`}
+          {boot.sending ? "Working…" : `Send ${recipe.name}`}
         </button>
         <button type="button" className="button small" onClick={() => void boots.disconnect(boot.deviceId)}>
           Disconnect
         </button>
         {boot.activity && <span className={boot.failed ? "small bad" : "quiet small"}>{boot.activity}</span>}
       </div>
+      {boot.audio && <BootAudioControls boot={boot} />}
       {boot.uploads && boot.slots !== null && (
         <div className="boot-row-uploads quiet small">
           <span>
@@ -93,6 +95,7 @@ function BootRow({ boot, recipe, canSend }: { boot: ConnectedBoot; recipe: Recip
               <button
                 type="button"
                 className="link"
+                disabled={boot.sending}
                 aria-label={`Delete ${name} from ${boot.name}`}
                 onClick={() => void boots.deleteUpload(boot.deviceId, name)}
               >

@@ -1,5 +1,5 @@
-// Exercise the kept recipe so its audio, tilt, and stomp bindings are checked
-// together with the band geometry, on rings that run in either direction.
+// Exercise fixed audio/tilt/stomp bindings on rings that run in either direction.
+// The kept Bass Ripple recipe stays editable without changing this geometry contract.
 import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
@@ -8,7 +8,7 @@ import { RecipeEngine, type EngineInput } from "./engine";
 import { BENCH_STRIP, BOOT_3EB5, BOOT_3ED8, foreAft, type StripLayout } from "./strip";
 import { validateRecipe } from "../recipe/validate";
 
-const parsed = validateRecipe(JSON.parse(readFileSync(new URL("../../../patterns/bass-ripple.json", import.meta.url), "utf8")));
+const parsed = validateRecipe(JSON.parse(readFileSync(new URL("../../../test/fixtures/recipe-frames/recipes/band.json", import.meta.url), "utf8")));
 if (!parsed.ok) throw new Error(parsed.errors.join("\n"));
 const BASS_RIPPLE = parsed.recipe;
 const LAYOUTS = [BENCH_STRIP, BOOT_3EB5, BOOT_3ED8];

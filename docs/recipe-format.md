@@ -72,8 +72,11 @@ between `min` and `max`.
 In the simulator, choose Microphone or Computer audio above the boot and click Listen.
 Every audio-bound knob follows the same live level shown by the meter. Its `min` and `max`
 set the output range, so brightness from 0 to 1 fades with sound, or speed from 20 to 200
-speeds up with sound. Stopping capture returns to `min`. The C++ engine accepts the same normalized input through `PatternInput.audioLevel`. The
-application supplies silence until the MG24 microphone capture is connected and checked on a boot.
+speeds up with sound. Stopping capture returns to `min`. The boot samples its onboard microphone through a timed ADC and DMA block. It removes the
+resting voltage, measures RMS, applies a noise floor and logarithmic level mapping, and uses a
+fast attack and slower release. A short noise gate rejects isolated clicks. `PatternInput.audioLevel` carries that 0..1 level to the engine.
+A stalled capture reads silence. Hardware sensitivity lives in `config.h` under `AUDIO_*`,
+independent of the browser's input gain.
 
 `min` and `max` stay inside the knob's own range. `min` can be larger than `max`, which runs
 the binding backward. `periodMs` is only allowed on `wave`, and `fadeMs` only on `stompFade`.

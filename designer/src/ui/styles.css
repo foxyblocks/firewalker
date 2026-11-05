@@ -1081,3 +1081,14 @@ input[type="range"] {
   width: auto;
   margin-left: auto;
 }
+
+/* Hardware audio settings share the boot's connection and apply across recipes. */
+.boot-audio {
+  display: grid;
+  gap: 10px;
+  max-width: 480px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}

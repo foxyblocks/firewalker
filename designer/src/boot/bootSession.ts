@@ -62,6 +62,13 @@ interface Waiter {
   timer: ReturnType<typeof setTimeout>;
 }
 
+export interface BootAudioConfig {
+  ready: boolean;
+  noiseFloor: number;
+  sensitivity: number;
+  calibrating: boolean;
+}
+
 export class BootSession {
   private partial = "";
   private waiter: Waiter | null = null;
@@ -135,6 +142,28 @@ export class BootSession {
     }
     if (last) return last;
     throw new Error("The boot stopped answering.");
+  }
+
+  async audioConfig(): Promise<BootAudioConfig> {
+    const reply = await this.ask("audio", (answer) => answer.t === "audio-config");
+    if (typeof reply.noiseFloor !== "number" || typeof reply.sensitivity !== "number") {
+      throw new Error("The boot returned incomplete audio settings.");
+    }
+    return { ready: reply.ready === true, noiseFloor: reply.noiseFloor,
+      sensitivity: reply.sensitivity, calibrating: reply.calibrating === true };
+  }
+
+  async configureAudio(sensitivity?: number): Promise<BootAudioConfig> {
+    const command = sensitivity === undefined ? "audio calibrate" : `audio gain ${Math.round(sensitivity)}`;
+    const reply = await this.ask(command, (answer) => answer.t === "ack" && answer.cmd === "audio", (answer) => answer.ok === true);
+    if (!reply.ok) throw new Error(String(reply.error ?? "Couldn't change audio settings."));
+    for (let attempt = 0; attempt < 15; attempt++) {
+      const config = await this.audioConfig();
+      if (!config.ready) throw new Error("Microphone capture is unavailable.");
+      if (!config.calibrating) return config;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+    throw new Error("Quiet calibration did not finish. Try again with the room quiet.");
   }
 
   status(): Promise<Reply> {

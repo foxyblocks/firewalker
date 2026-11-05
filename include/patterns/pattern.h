@@ -17,7 +17,7 @@ struct PatternInput {
   bool          stomp;         // true on the tick a stomp fires
   float         stompStrength; // 0..1 force of that stomp (valid when stomp is true)
   unsigned long dt;            // ms since the previous update
-  float         audioLevel = 0.0f; // normalized 0..1 sound level; silence until capture supplies it
+  float         audioLevel = 0.0f; // normalized 0..1 sound level; from the onboard microphone service
 };
 
 class Pattern {

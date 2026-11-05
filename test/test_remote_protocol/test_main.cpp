@@ -324,7 +324,7 @@ static void test_status_reports_the_actual_state() {
   char line[REMOTE_LINE_MAX];
   formatStatus(line, sizeof(line), sampleStatus());
   TEST_ASSERT_EQUAL_STRING(
-      "{\"t\":\"status\",\"proto\":3,\"id\":\"A1B2\",\"pattern\":\"off\",\"lit\":\"fire-trail\","
+      "{\"t\":\"status\",\"proto\":4,\"id\":\"A1B2\",\"pattern\":\"off\",\"lit\":\"fire-trail\","
       "\"brightness\":32,\"maxBrightness\":64,\"sensor\":\"ok\",\"tilt\":-0.25,\"calibrated\":true,"
       "\"neutralDeg\":4.50,\"heelDeg\":null,\"toeDeg\":34.00,\"calibration\":\"ok\",\"saved\":true,"
       "\"saveFailed\":false,\"saves\":3,\"debug\":false,\"ble\":true,\"leds\":110,\"maxLeds\":160,"
@@ -377,8 +377,21 @@ static void test_motion_line() {
       line);
 }
 
+static void test_audio_commands() {
+  TEST_ASSERT_EQUAL(CommandType::Audio, parseCommand("audio").type);
+  TEST_ASSERT_EQUAL(CommandType::AudioCalibrate, parseCommand("audio calibrate").type);
+  const Command sensitivity = parseCommand("audio gain 100");
+  TEST_ASSERT_EQUAL(CommandType::AudioSensitivity, sensitivity.type);
+  TEST_ASSERT_EQUAL_INT32(100, sensitivity.value);
+  TEST_ASSERT_LESS_OR_EQUAL(20, strlen("audio gain 100"));
+  const char* invalid[] = {"audio gain -1", "audio gain 101", "audio gain 2.5",
+                          "audio calibrate extra", "audio gain", "audio unknown"};
+  for (const char* line : invalid) TEST_ASSERT_EQUAL(CommandType::Invalid, parseCommand(line).type);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_audio_commands);
   RUN_TEST(test_commands_with_no_arguments);
   RUN_TEST(test_calibrate_takes_an_optional_pose);
   RUN_TEST(test_strip_commands_name_a_setting_and_a_value);

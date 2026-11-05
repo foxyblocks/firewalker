@@ -201,6 +201,14 @@ describe("sending a recipe", () => {
     expect(boot.stored.get("spark")).toEqual(bytes);
   });
 
+  it("reads, changes, and calibrates per-boot audio settings", async () => {
+    const boot = new FakeBoot();
+    const session = connect(boot);
+    expect(await session.audioConfig()).toMatchObject({sensitivity:65, noiseFloor:8, ready:true});
+    expect(await session.configureAudio(80)).toMatchObject({sensitivity:80, noiseFloor:8});
+    expect(await session.configureAudio()).toMatchObject({sensitivity:80, noiseFloor:7, calibrating:false});
+  });
+
   it("tells you when a boot's firmware is too old", async () => {
     const old = new FakeBoot({ proto: 2 });
     expect(await connect(old).sendRecipe("spark", compiled())).toEqual({ ok: false, error: NEEDS_FIRMWARE });
