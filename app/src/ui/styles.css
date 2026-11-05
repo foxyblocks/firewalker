@@ -590,6 +590,10 @@ dd {
   width: 100%;
 }
 
+.button-wide + .button-wide {
+  margin-top: 8px;
+}
+
 .actions {
   display: flex;
   gap: 8px;
@@ -698,6 +702,10 @@ dd {
   margin-top: 24px;
   color: var(--ink-quiet);
   font-size: 12.5px;
+}
+
+.help p + p {
+  margin-top: 8px;
 }
 
 .help h2 {
