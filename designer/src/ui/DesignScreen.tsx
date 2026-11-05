@@ -76,6 +76,12 @@ export function DesignScreen({ name }: { name: string }) {
     setSaving(false);
   }, [library, name]);
 
+  const overwrite = useCallback(async () => {
+    setSaving(true);
+    setSaveErrors(await library.save(name, { overwrite: true }));
+    setSaving(false);
+  }, [library, name]);
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey)) return;
@@ -118,6 +124,9 @@ export function DesignScreen({ name }: { name: string }) {
       : entry.status === "changed"
         ? "Unsaved changes, kept in this browser"
         : "Not saved yet, kept in this browser";
+  // The conflict banner explains a save that a conflict stopped, so it isn't listed twice.
+  const problems = [...new Set([...entry.problems, ...(entry.conflict ? [] : saveErrors)])];
+  const conflictFile = `${entry.savedAs ?? name}.json`;
 
   return (
     <div className="design">
@@ -158,22 +167,63 @@ export function DesignScreen({ name }: { name: string }) {
             type="button"
             className="button primary"
             onClick={() => void save()}
-            disabled={saving || entry.status === "saved" || entry.problems.length > 0 || !state.repoAvailable}
-            title={state.repoAvailable ? "Save to the repo (⌘S)" : "Needs the designer's dev server"}
+            disabled={saving || entry.status === "saved" || entry.problems.length > 0 || !state.repoAvailable || entry.conflict !== null}
+            title={
+              !state.repoAvailable
+                ? "Needs the designer's dev server"
+                : entry.conflict
+                  ? "The file changed on disk. Choose what to do in the message below."
+                  : "Save to the repo (⌘S)"
+            }
           >
             {saving ? "Saving…" : "Save"}
           </button>
         </div>
       </header>
 
-      {[...entry.problems, ...saveErrors].length > 0 && (
+      {problems.length > 0 && (
         <div className="banner bad">
           <strong>Can't save yet:</strong>
           <ul>
-            {[...new Set([...entry.problems, ...saveErrors])].map((problem) => (
+            {problems.map((problem) => (
               <li key={problem}>{problem}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {entry.conflict && (
+        <div className="banner bad" role="alert">
+          {entry.conflict === "changed" ? (
+            <p>
+              <strong>{conflictFile} changed on disk</strong> after this draft started, maybe from a git pull. Saving would
+              overwrite that change.
+            </p>
+          ) : (
+            <p>
+              <strong>{conflictFile} was deleted on disk</strong> after this draft started, maybe by a git pull. Saving would
+              bring it back.
+            </p>
+          )}
+          <div className="banner-actions">
+            <button type="button" className="button small" disabled={saving} onClick={() => void overwrite()}>
+              {entry.conflict === "changed" ? "Overwrite with my draft" : "Save my draft anyway"}
+            </button>
+            <button
+              type="button"
+              className="button small"
+              onClick={() => {
+                library.discard(name);
+                if (entry.conflict === "deleted") navigate({ screen: "patterns" });
+                else if (entry.savedAs && entry.savedAs !== name) navigate({ screen: "design", name: entry.savedAs });
+              }}
+            >
+              {entry.conflict === "changed" ? "Use the file, drop my draft" : "Drop my draft"}
+            </button>
+            <button type="button" className="button small" onClick={() => download(recipe)}>
+              Download my draft
+            </button>
+          </div>
         </div>
       )}
 

@@ -165,6 +165,11 @@ export function PatternsScreen() {
                   ))}
                 </p>
                 {entry.problems.length > 0 && <p className="small bad">{entry.problems[0]}</p>}
+                {entry.conflict && (
+                  <p className="small bad">
+                    {entry.conflict === "changed" ? "The file changed on disk after this draft started." : "The file was deleted on disk after this draft started."}
+                  </p>
+                )}
                 <div className="card-actions">
                   <button type="button" className="button small" onClick={() => navigate({ screen: "design", name: library.duplicate(entry.name) ?? entry.name })}>
                     Duplicate

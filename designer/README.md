@@ -48,6 +48,12 @@ close the tab. **Save** writes `patterns/<name>.json` through the dev server and
 draft. A rename moves the file on the next save, and **Discard changes** goes back to the
 saved file.
 
+Save won't overwrite a file that changed after its draft started, such as in a `git pull`. The
+designer rereads the folder when its window regains focus, and checks again at Save. If a file
+moved on, you choose whether to overwrite it with your draft or drop the draft and use the
+file. Drafts live in this browser rather than in a checkout, so a draft from one branch also
+shows up on another, and this check covers that too.
+
 The dev server only listens on localhost. It only writes `.json` files with valid recipe
 names, inside the patterns folder, and checks each recipe before writing it. To try things
 without touching the repo, point it somewhere else:

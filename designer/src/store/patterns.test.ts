@@ -18,6 +18,9 @@ function recipe(name: string, description = ""): Recipe {
   return { format: "firewalker-recipe", version: 1, name, description, layers: [newLayer("fill")] };
 }
 
+// A file's version in the fake server: its contents, which change whenever the file does.
+const versionOf = (file: Recipe | undefined) => (file ? JSON.stringify(file) : undefined);
+
 // A stand-in for the dev server's patterns API over a map of files.
 function fakeServer(files: Map<string, Recipe>) {
   return vi.fn(async (url: string, init?: RequestInit) => {
@@ -25,13 +28,21 @@ function fakeServer(files: Map<string, Recipe>) {
     const name = decodeURIComponent(u.pathname.replace("/api/patterns", "").replace(/^\//, ""));
     const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
     if (!init?.method || init.method === "GET") {
-      return json(200, { dir: "/repo/patterns", patterns: [...files].map(([n, r]) => ({ name: n, recipe: r })) });
+      return json(200, { dir: "/repo/patterns", patterns: [...files].map(([n, r]) => ({ name: n, recipe: r, version: versionOf(r) })) });
     }
     if (init.method === "PUT") {
-      files.set(name, JSON.parse(init.body as string));
       const replaces = u.searchParams.get("replaces");
+      const expected = u.searchParams.get("expected");
+      if (expected !== null) {
+        const source = versionOf(files.get(replaces ?? name));
+        if (expected === "none" ? files.has(name) : source !== expected || (replaces && files.has(name))) {
+          return json(409, { ok: false, error: "The file changed." });
+        }
+      }
+      const saved = JSON.parse(init.body as string) as Recipe;
+      files.set(name, saved);
       if (replaces) files.delete(replaces);
-      return json(200, { ok: true });
+      return json(200, { ok: true, version: versionOf(saved) });
     }
     files.delete(name);
     return json(200, { ok: true });
@@ -130,6 +141,143 @@ describe("PatternLibrary", () => {
     expect(await lib.remove("glow")).toBeNull();
     expect(files.size).toBe(0);
     expect(lib.getSnapshot().entries).toEqual([]);
+  });
+
+  describe("when a file changes outside the designer", () => {
+    it("reports nothing while the file stays as the draft found it", async () => {
+      const lib = await library();
+      lib.update("glow", recipe("glow", "warmer"));
+      await lib.refresh();
+      expect(lib.entry("glow")?.conflict).toBeNull();
+    });
+
+    it("shows the change on refresh, with no draft involved", async () => {
+      const lib = await library();
+      files.set("glow", recipe("glow", "pulled"));
+      await lib.refresh();
+      expect(lib.entry("glow")).toMatchObject({ status: "saved", conflict: null, recipe: { description: "pulled" } });
+    });
+
+    it("flags the draft on refresh", async () => {
+      const lib = await library();
+      lib.update("glow", recipe("glow", "warmer"));
+      files.set("glow", recipe("glow", "pulled"));
+      await lib.refresh();
+      expect(lib.entry("glow")).toMatchObject({ status: "changed", conflict: "changed", recipe: { description: "warmer" } });
+    });
+
+    it("won't save over it, even without a refresh, and reports why", async () => {
+      const lib = await library();
+      lib.update("glow", recipe("glow", "warmer"));
+      files.set("glow", recipe("glow", "pulled"));
+      expect(await lib.save("glow")).toEqual(["The file changed."]);
+      expect(files.get("glow")?.description).toBe("pulled");
+      expect(lib.entry("glow")?.conflict).toBe("changed");
+    });
+
+    it("overwrites when told to", async () => {
+      const lib = await library();
+      lib.update("glow", recipe("glow", "warmer"));
+      files.set("glow", recipe("glow", "pulled"));
+      expect(await lib.save("glow", { overwrite: true })).toEqual([]);
+      expect(files.get("glow")?.description).toBe("warmer");
+      expect(lib.entry("glow")).toMatchObject({ status: "saved", conflict: null });
+    });
+
+    it("can drop the draft and use the file", async () => {
+      const lib = await library();
+      lib.update("glow", recipe("glow", "warmer"));
+      files.set("glow", recipe("glow", "pulled"));
+      await lib.refresh();
+      lib.discard("glow");
+      expect(lib.entry("glow")).toMatchObject({ status: "saved", conflict: null, recipe: { description: "pulled" } });
+    });
+
+    it("keeps the draft's starting point across more edits", async () => {
+      const lib = await library();
+      lib.update("glow", recipe("glow", "warmer"));
+      files.set("glow", recipe("glow", "pulled"));
+      lib.update("glow", recipe("glow", "warmer still"));
+      expect(await lib.save("glow")).toEqual(["The file changed."]);
+    });
+
+    it("starts a new draft from the file as it is now", async () => {
+      const lib = await library();
+      files.set("glow", recipe("glow", "pulled"));
+      await lib.refresh();
+      lib.update("glow", recipe("glow", "warmer"));
+      expect(await lib.save("glow")).toEqual([]);
+      expect(files.get("glow")?.description).toBe("warmer");
+    });
+
+    it("saves again after a save, with no false alarm", async () => {
+      const lib = await library();
+      lib.update("glow", recipe("glow", "warmer"));
+      await lib.save("glow");
+      lib.update("glow", recipe("glow", "warmer still"));
+      expect(await lib.save("glow")).toEqual([]);
+      expect(files.get("glow")?.description).toBe("warmer still");
+    });
+
+    it("drops a draft the pull has caught up with", async () => {
+      const lib = await library();
+      lib.update("glow", recipe("glow", "warmer"));
+      files.set("glow", recipe("glow", "warmer"));
+      await lib.refresh();
+      expect(lib.entry("glow")).toMatchObject({ status: "saved", conflict: null });
+    });
+
+    it("flags a draft whose file was deleted, and can bring it back", async () => {
+      const lib = await library();
+      lib.update("glow", recipe("glow", "warmer"));
+      files.delete("glow");
+      await lib.refresh();
+      expect(lib.entry("glow")?.conflict).toBe("deleted");
+      expect(await lib.save("glow", { overwrite: true })).toEqual([]);
+      expect(files.get("glow")?.description).toBe("warmer");
+    });
+
+    it("merges a new draft with a same-named file that has appeared", async () => {
+      const lib = await library();
+      lib.create(recipe("spark", "mine"));
+      files.set("spark", recipe("spark", "pulled"));
+      await lib.refresh();
+      const entries = lib.getSnapshot().entries.filter((e) => e.name === "spark");
+      expect(entries).toHaveLength(1);
+      expect(entries[0]).toMatchObject({ conflict: "changed", recipe: { description: "mine" } });
+      expect(await lib.save("spark")).toEqual(["The file changed."]);
+    });
+
+    it("flags a rename onto a file that has appeared, listing the name once", async () => {
+      const lib = await library();
+      lib.rename("glow", "ember");
+      files.set("ember", recipe("ember", "pulled"));
+      await lib.refresh();
+      const entries = lib.getSnapshot().entries.filter((e) => e.name === "ember");
+      expect(entries).toHaveLength(1);
+      expect(entries[0]?.conflict).toBe("changed");
+      expect(await lib.save("ember")).toEqual(["The file changed."]);
+      expect(files.get("ember")?.description).toBe("pulled");
+    });
+
+    it("saves a draft from before versions existed without checking", async () => {
+      storage.setItem("firewalker-designer:drafts:v1", JSON.stringify({ glow: { recipe: recipe("glow", "old"), savedAs: "glow", updatedAt: 0 } }));
+      const lib = await library();
+      expect(lib.entry("glow")?.conflict).toBeNull();
+      expect(await lib.save("glow")).toEqual([]);
+      expect(files.get("glow")?.description).toBe("old");
+    });
+
+    it("tells listeners only when a refresh found something", async () => {
+      const lib = await library();
+      const listener = vi.fn();
+      lib.subscribe(listener);
+      await lib.refresh();
+      expect(listener).not.toHaveBeenCalled();
+      files.set("glow", recipe("glow", "pulled"));
+      await lib.refresh();
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("works from drafts alone when the dev server isn't there", async () => {

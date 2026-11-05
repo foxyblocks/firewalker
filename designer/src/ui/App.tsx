@@ -34,8 +34,14 @@ export function App() {
   useEffect(() => {
     void library.load();
     const onHash = () => setRoute(readRoute());
+    // Coming back to this window is the likely moment for a git pull to have changed the files.
+    const onFocus = () => void library.refresh();
     window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("hashchange", onHash);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [library]);
 
   return (

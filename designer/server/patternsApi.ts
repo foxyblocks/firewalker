@@ -1,7 +1,9 @@
 // A Vite plugin that serves the patterns/ folder to the designer while `bun run dev` runs:
 //
-//   GET    /api/patterns                       every pattern file, with any problems
-//   PUT    /api/patterns/<name>[?replaces=old]  save a recipe, renaming from `old` if given
+//   GET    /api/patterns                       every pattern file, with its version and any problems
+//   PUT    /api/patterns/<name>                save a recipe. Takes `replaces=old` to rename from
+//                                              `old`, and `expected=<version>` or `expected=none`
+//                                              to fail with a 409 if the file has moved on
 //   DELETE /api/patterns/<name>                delete a pattern file
 //
 // The dev server only listens on localhost, so only this machine can reach it.
@@ -36,8 +38,15 @@ async function handle(dir: string, shownDir: string, req: IncomingMessage, res: 
     return;
   }
   if (req.method === "PUT" && name !== "") {
-    const recipe = await savePattern(dir, name, await readJson(req), url.searchParams.get("replaces") ?? undefined);
-    send(res, 200, { ok: true, recipe });
+    const expected = url.searchParams.get("expected");
+    const saved = await savePattern(
+      dir,
+      name,
+      await readJson(req),
+      url.searchParams.get("replaces") ?? undefined,
+      expected === null ? undefined : expected === "none" ? null : expected,
+    );
+    send(res, 200, { ok: true, ...saved });
     return;
   }
   if (req.method === "DELETE" && name !== "") {

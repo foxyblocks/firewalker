@@ -22,7 +22,7 @@ describe("pattern store", () => {
   it("saves, lists, and deletes a recipe", async () => {
     await savePattern(dir, "glow", recipe("glow"));
     expect(await readdir(dir)).toEqual(["glow.json"]);
-    expect(await listPatterns(dir)).toEqual([{ name: "glow", recipe: recipe("glow") }]);
+    expect(await listPatterns(dir)).toMatchObject([{ name: "glow", recipe: recipe("glow") }]);
     await deletePattern(dir, "glow");
     expect(await listPatterns(dir)).toEqual([]);
   });
@@ -37,6 +37,62 @@ describe("pattern store", () => {
     await savePattern(dir, "glow", recipe("glow"));
     await savePattern(dir, "ember", recipe("ember"), "glow");
     expect(await readdir(dir)).toEqual(["ember.json"]);
+  });
+
+  it("gives a file a version that changes with its contents", async () => {
+    const saved = await savePattern(dir, "glow", recipe("glow"));
+    const [listed] = await listPatterns(dir);
+    expect(listed?.version).toBe(saved.version);
+    await savePattern(dir, "glow", { ...recipe("glow"), description: "warmer" });
+    const [changed] = await listPatterns(dir);
+    expect(changed?.version).not.toBe(saved.version);
+  });
+
+  describe("when told what to expect on disk", () => {
+    const warmer = { ...recipe("glow"), description: "warmer" };
+
+    it("saves over a file that still has the expected version", async () => {
+      const { version } = await savePattern(dir, "glow", recipe("glow"));
+      await savePattern(dir, "glow", warmer, undefined, version);
+      expect((await listPatterns(dir))[0]?.recipe?.description).toBe("warmer");
+    });
+
+    it("refuses a file that changed, and leaves it alone", async () => {
+      const { version } = await savePattern(dir, "glow", recipe("glow"));
+      await writeFile(path.join(dir, "glow.json"), JSON.stringify({ ...recipe("glow"), description: "pulled" }));
+      await expect(savePattern(dir, "glow", warmer, undefined, version)).rejects.toMatchObject({ status: 409 });
+      expect((await listPatterns(dir))[0]?.recipe?.description).toBe("pulled");
+    });
+
+    it("refuses a file that was deleted", async () => {
+      const { version } = await savePattern(dir, "glow", recipe("glow"));
+      await deletePattern(dir, "glow");
+      await expect(savePattern(dir, "glow", warmer, undefined, version)).rejects.toMatchObject({ status: 409 });
+      expect(await readdir(dir)).toEqual([]);
+    });
+
+    it("refuses a new pattern whose name now has a file", async () => {
+      await savePattern(dir, "glow", recipe("glow"));
+      await expect(savePattern(dir, "glow", warmer, undefined, null)).rejects.toMatchObject({ status: 409 });
+    });
+
+    it("saves a new pattern when its name is still free", async () => {
+      await savePattern(dir, "glow", recipe("glow"), undefined, null);
+      expect(await readdir(dir)).toEqual(["glow.json"]);
+    });
+
+    it("refuses a rename onto a file that has appeared, keeping both files", async () => {
+      const { version } = await savePattern(dir, "glow", recipe("glow"));
+      await savePattern(dir, "ember", recipe("ember"));
+      await expect(savePattern(dir, "ember", recipe("ember"), "glow", version)).rejects.toMatchObject({ status: 409 });
+      expect(await readdir(dir)).toEqual(["ember.json", "glow.json"]);
+    });
+
+    it("renames when the old file is as expected", async () => {
+      const { version } = await savePattern(dir, "glow", recipe("glow"));
+      await savePattern(dir, "ember", recipe("ember"), "glow", version);
+      expect(await readdir(dir)).toEqual(["ember.json"]);
+    });
   });
 
   it("refuses names that could escape the folder", async () => {
