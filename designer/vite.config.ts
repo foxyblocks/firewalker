@@ -14,10 +14,12 @@ const patternsDir = process.env.PATTERNS_DIR ?? fileURLToPath(new URL("../patter
 // What the designer shows as the save location: repo-relative when it's inside the repo.
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const shownDir = relative(repoRoot, patternsDir).startsWith("..") ? patternsDir : `${relative(repoRoot, patternsDir)}/`;
+// Saving a built-in recipe updates the firmware's copy, unless this is a scratch folder.
+const builtinsHeader = process.env.PATTERNS_DIR ? undefined : fileURLToPath(new URL("../include/generated/recipe_builtins.h", import.meta.url));
 
 // Port 5174, so the designer and the iPhone app's dev server (5173) can run side by side.
 export default defineConfig({
-  plugins: [react(), patternsApi(patternsDir, shownDir)],
+  plugins: [react(), patternsApi(patternsDir, shownDir, builtinsHeader)],
   server: { host: "localhost", port: 5174 },
   test: { environment: "node", globals: true },
 });

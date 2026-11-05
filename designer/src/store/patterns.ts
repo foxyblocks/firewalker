@@ -25,6 +25,8 @@ export interface PatternEntry {
   // What it takes on a boot, in bytes. Null if it's too broken to compile.
   compiledSize: number | null;
   conflict: FileConflict;
+  // Its file is on patterns/built-ins.txt, so every boot ships with it.
+  builtIn: boolean;
 }
 
 export interface BrokenFile {
@@ -57,6 +59,7 @@ export class PatternLibrary {
   private repo = new Map<string, Recipe>();
   // Every readable file's version, including files too broken to be in `repo`.
   private versions = new Map<string, string>();
+  private builtIns = new Set<string>();
   // The last list from the server, to tell whether a refresh found anything new.
   private lastRepoText: string | null = null;
   private broken: BrokenFile[] = [];
@@ -100,9 +103,10 @@ export class PatternLibrary {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const text = await response.text();
       if (this.repoAvailable && text === this.lastRepoText) return false;
-      const body = JSON.parse(text) as { dir: string; patterns: { name: string; recipe: Recipe | null; version?: string; errors?: string[] }[] };
+      const body = JSON.parse(text) as { dir: string; patterns: { name: string; recipe: Recipe | null; version?: string; builtIn?: boolean; errors?: string[] }[] };
       this.repo = new Map(body.patterns.filter((p) => p.recipe).map((p) => [p.name, p.recipe!]));
       this.versions = new Map(body.patterns.filter((p) => p.version).map((p) => [p.name, p.version!]));
+      this.builtIns = new Set(body.patterns.filter((p) => p.builtIn).map((p) => p.name));
       this.broken = body.patterns.filter((p) => !p.recipe).map((p) => ({ name: p.name, errors: p.errors ?? [] }));
       this.repoAvailable = true;
       this.repoDir = body.dir;
@@ -224,6 +228,8 @@ export class PatternLibrary {
     if (entry.savedAs && entry.savedAs !== name) {
       this.repo.delete(entry.savedAs);
       this.versions.delete(entry.savedAs);
+      // The server moved a renamed recipe's place on the built-ins list.
+      if (this.builtIns.delete(entry.savedAs)) this.builtIns.add(name);
     }
     this.repo.set(name, entry.recipe);
     if (body.version) this.versions.set(name, body.version);
@@ -243,6 +249,7 @@ export class PatternLibrary {
       if (!response.ok) return `Delete failed (HTTP ${response.status}).`;
       this.repo.delete(entry.savedAs);
       this.versions.delete(entry.savedAs);
+      this.builtIns.delete(entry.savedAs);
       this.lastRepoText = null;
     }
     delete this.drafts[name];
@@ -291,17 +298,17 @@ export class PatternLibrary {
     for (const [file, recipe] of this.repo) {
       const draft = draftFor.get(file);
       if (draft) {
-        entries.push(makeEntry(draft[0], draft[1].recipe, file, "changed", this.conflictFor(draft[0], draft[1])));
+        entries.push(makeEntry(draft[0], draft[1].recipe, file, "changed", this.conflictFor(draft[0], draft[1]), this.builtIns.has(file)));
       } else if (!this.drafts[file]) {
         // A draft renamed onto this file's name stands in for it until its conflict is settled.
-        entries.push(makeEntry(file, recipe, file, "saved", null));
+        entries.push(makeEntry(file, recipe, file, "saved", null, this.builtIns.has(file)));
       }
     }
     for (const [name, draft] of Object.entries(this.drafts)) {
       if (this.repo.has(draft.savedAs ?? name)) continue;
       // While the repo is still loading, or unreachable, a draft of a saved file shows as changed.
       const status: PatternStatus = draft.savedAs && (this.loading || !this.repoAvailable) ? "changed" : "new";
-      entries.push(makeEntry(name, draft.recipe, status === "new" ? null : draft.savedAs, status, this.conflictFor(name, draft)));
+      entries.push(makeEntry(name, draft.recipe, status === "new" ? null : draft.savedAs, status, this.conflictFor(name, draft), false));
     }
     entries.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -337,9 +344,9 @@ export class PatternLibrary {
   }
 }
 
-function makeEntry(name: string, recipe: Recipe, savedAs: string | null, status: PatternStatus, conflict: FileConflict): PatternEntry {
+function makeEntry(name: string, recipe: Recipe, savedAs: string | null, status: PatternStatus, conflict: FileConflict, builtIn: boolean): PatternEntry {
   const compiled = compileRecipe(recipe);
-  return { name, recipe, savedAs, status, problems: compiled.ok ? [] : compiled.errors, compiledSize: compiled.size, conflict };
+  return { name, recipe, savedAs, status, problems: compiled.ok ? [] : compiled.errors, compiledSize: compiled.size, conflict, builtIn };
 }
 
 // A draft restored from storage can be any shape, so a failure to compare just means "different".

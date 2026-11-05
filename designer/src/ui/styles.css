@@ -277,6 +277,11 @@ input[type="range"] {
   border: 1px solid var(--line);
 }
 
+.badge.built-in {
+  color: var(--ember);
+  border-color: rgb(255 106 31 / 40%);
+}
+
 .size-meter {
   font-size: 12px;
   font-variant-numeric: tabular-nums;

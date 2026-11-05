@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { readBuiltInNames, renameBuiltIn, writeBuiltinsHeader } from "./builtins.ts";
 import { compileRecipe } from "../src/recipe/compile.ts";
 import { recipeToJson } from "../src/recipe/serialize.ts";
 import type { Recipe } from "../src/recipe/types.ts";
@@ -21,6 +22,8 @@ export interface StoredPattern {
   recipe: Recipe | null;
   // Identifies the file's exact contents, so it changes whenever the file does.
   version?: string;
+  // On patterns/built-ins.txt, so every boot ships with it.
+  builtIn?: boolean;
   // Why the file couldn't be used, when recipe is null.
   errors?: string[];
 }
@@ -44,6 +47,7 @@ export async function listPatterns(dir: string): Promise<StoredPattern[]> {
     throw error;
   }
 
+  const builtIns = new Set(await readBuiltInNames(dir));
   const patterns: StoredPattern[] = [];
   for (const file of files.filter((f) => f.endsWith(".json")).sort()) {
     const name = file.slice(0, -".json".length);
@@ -60,7 +64,7 @@ export async function listPatterns(dir: string): Promise<StoredPattern[]> {
       } else if (result.recipe.name !== name) {
         patterns.push({ name, recipe: null, version, errors: [`The file says its name is "${result.recipe.name}".`] });
       } else {
-        patterns.push({ name, recipe: result.recipe, version });
+        patterns.push({ name, recipe: result.recipe, version, ...(builtIns.has(name) ? { builtIn: true } : {}) });
       }
     } catch (error) {
       patterns.push({ name, recipe: null, version, errors: [`Not valid JSON: ${(error as Error).message}`] });
@@ -76,20 +80,32 @@ export async function listPatterns(dir: string): Promise<StoredPattern[]> {
 // before anything is written. A version means the file being saved over (`replaces`, or else
 // `name`) still has that version. Null means this is a new pattern, so `<name>.json` shouldn't
 // exist yet. Leaving it out writes without checking.
+//
+// A rename also updates patterns/built-ins.txt. When the saved recipe is on that list and
+// `builtinsHeader` is given, the firmware's header is rewritten too, so the two change in one commit.
+// Saving any other recipe leaves the header alone. A scratch folder doesn't pass a header.
 export function savePattern(
   dir: string,
   name: string,
   body: unknown,
   replaces?: string,
   expected?: string | null,
+  builtinsHeader?: string,
 ): Promise<{ recipe: Recipe; version: string }> {
-  return oneAtATime(dir, () => writePattern(dir, name, body, replaces, expected));
+  return oneAtATime(dir, async () => {
+    const saved = await writePattern(dir, name, body, replaces, expected);
+    if (replaces !== undefined && replaces !== name) await renameBuiltIn(dir, replaces, name);
+    if (builtinsHeader && (await readBuiltInNames(dir)).includes(name)) await writeBuiltinsHeader(dir, builtinsHeader);
+    return saved;
+  });
 }
 
-export function deletePattern(dir: string, name: string): Promise<void> {
+// Deleting a built-in takes it off patterns/built-ins.txt too, and rewrites the firmware's header.
+export function deletePattern(dir: string, name: string, builtinsHeader?: string): Promise<void> {
   return oneAtATime(dir, async () => {
     checkName(name);
     await rm(path.join(dir, `${name}.json`), { force: true });
+    if ((await renameBuiltIn(dir, name, null)) && builtinsHeader) await writeBuiltinsHeader(dir, builtinsHeader);
   });
 }
 

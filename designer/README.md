@@ -56,6 +56,11 @@ moved on, you choose whether to overwrite it with your draft or drop the draft a
 file. Drafts live in this browser rather than in a checkout, so a draft from one branch also
 shows up on another, and this check covers that too.
 
+Recipes on `patterns/built-ins.txt` are built into the firmware, and they show a "Built in" label.
+Saving one also updates `include/generated/recipe_builtins.h`, so commit the two together. Renaming
+one updates the list, and deleting one takes it off. To add or remove a built-in, edit that file and
+run `bun run build-recipes`.
+
 The dev server only listens on localhost. It only writes `.json` files with valid recipe
 names, inside the patterns folder, and checks each recipe before writing it. To try things
 without touching the repo, point it somewhere else:
@@ -83,7 +88,8 @@ import only. Save and Delete stay off, and a banner says why.
   rewrites them.
 - `src/sim/`: the boot drawings and the frame loop. The drawings assume the controller, and
   so pixel 0, is on the boot's outer side.
-- `server/`: the dev server's `/api/patterns` endpoints.
+- `server/`: the dev server's `/api/patterns` endpoints, and `builtins.ts`, which keeps the
+  firmware's built-in recipes in step with `patterns/built-ins.txt`.
 
 The screen shows LEDs brighter than the raw numbers, because LEDs are linear and screens
 aren't (a 1/2.2 gamma). Colors on a real strip will look a little different, especially

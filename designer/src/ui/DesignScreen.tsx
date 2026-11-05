@@ -141,6 +141,11 @@ export function DesignScreen({ name }: { name: string }) {
             Rename
           </button>
           <span className={`badge ${entry.status}`}>{statusText}</span>
+          {entry.builtIn && (
+            <span className="badge built-in" title="Listed in patterns/built-ins.txt, so every boot ships with it">
+              Built in
+            </span>
+          )}
           {entry.compiledSize !== null && (
             <span
               className={entry.compiledSize > MAX_COMPILED_BYTES ? "size-meter over" : "size-meter"}
