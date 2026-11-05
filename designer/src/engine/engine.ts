@@ -1,6 +1,6 @@
-// Runs a recipe the way a boot would: once per frame it takes the fused tilt, whether a stomp
-// fired, and the elapsed time, and draws every layer into one frame of pixel colors. It mirrors
-// the firmware's Pattern interface (include/patterns/pattern.h), and the pool and down-point
+// Runs a recipe one frame at a time using fused tilt, stomps, live audio level, and elapsed
+// time. It draws every layer into one frame of pixel colors and mirrors the firmware's
+// Pattern interface (include/patterns/pattern.h). The pool and down-point
 // trail math are ports of src/patterns/flow.cpp, so a future C++ engine can be checked against
 // this one frame for frame.
 //
@@ -12,6 +12,7 @@ import { foreAft, heelToToeLength, toeToHeelLength, wrapIndex, type StripLayout 
 import { STOMP_FADE, WAVE_PERIOD } from "../recipe/spec";
 import {
   isBinding,
+  type BandLayer,
   type Binding,
   type ChaseLayer,
   type FillLayer,
@@ -29,6 +30,7 @@ export interface EngineInput {
   tiltFwd: number; // -1 heel pose, 0 level, +1 toe pose
   stomp: boolean; // a stomp fired since the previous frame
   stompStrength: number; // 0..1, valid when stomp is true
+  audioLevel?: number; // 0..1 from the audio meter; omitted inputs act as silence
   dt: number; // ms since the previous frame
 }
 
@@ -49,6 +51,7 @@ interface Front {
 type LayerState =
   | { type: "fill"; phase: number }
   | { type: "pool" }
+  | { type: "band" }
   | { type: "trail"; fronts: Front[] }
   | { type: "flash"; remainMs: number; bright: number }
   | { type: "sparkle"; level: Float32Array; hue: Float32Array; pending: number }
@@ -68,6 +71,7 @@ export class RecipeEngine {
 
   private timeMs = 0;
   private tilt = 0;
+  private audioLevel = 0;
   private lastStrength = 0;
   private sinceStompMs = Number.POSITIVE_INFINITY;
   private rng = RNG_SEED;
@@ -91,6 +95,7 @@ export class RecipeEngine {
   enter(): void {
     this.timeMs = 0;
     this.tilt = 0;
+    this.audioLevel = 0;
     this.lastStrength = 0;
     this.sinceStompMs = Number.POSITIVE_INFINITY;
     this.rng = RNG_SEED;
@@ -116,6 +121,10 @@ export class RecipeEngine {
     this.timeMs += dt;
     this.sinceStompMs += dt;
     this.tilt = Math.max(-1, Math.min(1, input.tiltFwd));
+    // Audio is a live value, so a missing input clears it instead of holding the
+    // last loud frame. Motion-only callers and reference recordings stay silent.
+    const audioLevel = input.audioLevel ?? 0;
+    this.audioLevel = Number.isFinite(audioLevel) ? clamp01(audioLevel) : 0;
     if (input.stomp) {
       this.lastStrength = Math.max(0, Math.min(1, input.stompStrength));
       this.sinceStompMs = 0;
@@ -145,6 +154,8 @@ export class RecipeEngine {
         return (this.tilt + 1) / 2;
       case "tiltAmount":
         return Math.abs(this.tilt);
+      case "audioLevel":
+        return this.audioLevel;
       case "stompStrength":
         return this.lastStrength;
       case "stompFade": {
@@ -170,6 +181,8 @@ export class RecipeEngine {
         return { type: "fill", phase: 0 };
       case "pool":
         return { type: "pool" };
+      case "band":
+        return { type: "band" };
       case "trail":
         return { type: "trail", fronts: Array.from({ length: MAX_FRONTS }, () => idleFront()) };
       case "flash":
@@ -193,6 +206,9 @@ export class RecipeEngine {
         return;
       case "pool":
         this.drawPool(layer);
+        return;
+      case "band":
+        this.drawBand(layer);
         return;
       case "trail":
         if (state.type === "trail") this.drawTrail(layer, state, palette, fired, dt);
@@ -236,6 +252,32 @@ export class RecipeEngine {
       const lit = clamp01(toeDown ? (s - at) / pixelSpan + 1 : (1 - at - s) / pixelSpan + 1);
       const b = lit * litBright;
       this.layerColor[i * 3] = this.layerColor[i * 3 + 1] = this.layerColor[i * 3 + 2] = b;
+      this.layerAlpha[i] = 1;
+    }
+  }
+
+  /**
+   * Masks the fill to one interval on both foot arcs. Position divides the unused
+   * space around the bar, so a half-width bar slides from [0, 0.5] at the heel,
+   * through [0.25, 0.75] when centered, to [0.5, 1] at the toe. Width stays fixed
+   * throughout that movement. A full-width bar fills the ring at every position.
+   */
+  private drawBand(layer: BandLayer): void {
+    const width = clamp01(this.knob(layer.width));
+    const start = (1 - width) * clamp01(this.knob(layer.position));
+    const end = start + width;
+    const halfPixel = 0.5 / Math.max(toeToHeelLength(this.layout), heelToToeLength(this.layout));
+
+    for (let i = 0; i < this.layout.count; i++) {
+      // Fractional coverage softens the moving edges by one pixel. Clip the
+      // endpoint cells at heel/toe so silence is fully off and full width fully on.
+      const s = this.positions[i]!;
+      const pixelStart = Math.max(0, s - halfPixel);
+      const pixelEnd = Math.min(1, s + halfPixel);
+      const overlap = Math.max(0, Math.min(end, pixelEnd) - Math.max(start, pixelStart));
+      const coverage = clamp01(overlap / (pixelEnd - pixelStart));
+      this.layerColor[i * 3] = this.layerColor[i * 3 + 1] = this.layerColor[i * 3 + 2] = coverage;
+      // Paint the dark part too, so multiply clears every pixel outside the band.
       this.layerAlpha[i] = 1;
     }
   }

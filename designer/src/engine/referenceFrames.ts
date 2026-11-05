@@ -84,6 +84,14 @@ const EMBER = ["#ffffff", "#ffc800", "#ff3c00"];
 const ICE = ["#ffffff", "#7fe8ff", "#0080ff"];
 
 export const FIXTURE_RECIPES: Recipe[] = [
+  fixture(
+    "band",
+    layer("fill", { palette: ["#ffffff"], scroll: 0 }),
+    layer("band", {
+      position: { source: "tilt", min: 0, max: 1 },
+      width: { source: "wave", min: 0, max: 1, periodMs: 1600 },
+    }),
+  ),
   fixture("fill-solid", layer("fill", { spread: "solid", palette: RAINBOW, scroll: { source: "tilt", min: -1, max: 1 } })),
   fixture(
     "fill-ring",

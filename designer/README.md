@@ -28,13 +28,16 @@ It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
   import, or delete.
 - **Design** has the layer stack on the left, the boot in the middle, and the selected
   layer's settings on the right. Drag a layer by its grip, or use its arrows, to restack it.
-  Any number can be **Fixed**, or **Follows** tilt, a stomp, or a wave. The JSON tab shows
+  Any knob can be **Fixed**, or **Follows** tilt, a stomp, a wave, or **Audio level**. The JSON tab shows
   the file as it will be saved.
 - **The boot** shows from above and from its outer side, with the strip in index order
   below. Drag **Tilt**, or press **Stomp** or the space bar. A stomp lifts the boot and drops
   it, and the pattern gets the stomp the moment it lands, at the **Strength** you set.
   **Beat** stomps on every beat at the BPM beside it, and **Walk** plays a steady gait. The
   strip menu switches between each boot's saved layout and the uncut bench strip.
+- **Audio source** above the boot selects Microphone or Computer audio. Click **Listen**
+  to start capture and see its level and spectrum. Set a knob to **Follows → Audio level**
+  and choose its Min and Max to make it react. Stopping capture returns the source to zero.
 - **Boot brightness** shows what a boot's brightness setting does to a pattern, using the
   firmware's own math. At the default of 16 each color channel has only 17 steps, so fades
   move in jumps and very dim colors can shift or go black. It keeps full white at full on

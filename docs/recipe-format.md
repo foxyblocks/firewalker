@@ -1,7 +1,7 @@
 # Pattern recipe format, version 1
 
 A **recipe** describes a pattern as data: a stack of layers that each paint the strip, with
-knobs that can follow the boot's tilt and stomps. The designer (`designer/`) makes and
+knobs that can follow tilt, stomps, time, and audio. The designer (`designer/`) makes and
 previews recipes, and `patterns/` keeps the ones worth keeping. The firmware doesn't run
 recipes yet; that's the next phase (see [ADR-0005](adr/0005-pattern-recipes.md)).
 
@@ -44,7 +44,7 @@ binding on one line, so they diff cleanly.
 
 | Field | Values | Default |
 | --- | --- | --- |
-| `type` | `fill`, `pool`, `trail`, `flash`, `sparkle`, `chase` | |
+| `type` | `fill`, `pool`, `trail`, `flash`, `sparkle`, `chase`, `band` | |
 | `label` | Optional, up to 24 characters, for the layer list | |
 | `enabled` | `true` or `false`. A disabled layer draws nothing | `true` |
 | `blend` | `over`, `add`, `max`, `multiply` | per type |
@@ -66,6 +66,13 @@ between `min` and `max`.
 | `stompStrength` | A threshold stomp, held until the next one | A full-force stomp |
 | `stompFade` | `fadeMs` (50 to 10000, default 1000) after a stomp | At the stomp |
 | `wave` | Low point of a smooth loop | High point, every `periodMs` (100 to 60000, default 2000) |
+| `audioLevel` | Silence, or audio capture stopped | Full level on the simulator's audio meter |
+
+In the simulator, choose Microphone or Computer audio above the boot and click Listen.
+Every audio-bound knob follows the same live level shown by the meter. Its `min` and `max`
+set the output range, so brightness from 0 to 1 fades with sound, or speed from 20 to 200
+speeds up with sound. Stopping capture returns to `min`. Audio input on the boots needs
+firmware microphone support.
 
 `min` and `max` stay inside the knob's own range. `min` can be larger than `max`, which runs
 the binding backward. `periodMs` is only allowed on `wave`, and `fadeMs` only on `stompFade`.
@@ -100,6 +107,24 @@ at full tilt. It paints gray, so use it with `multiply` to shape the layers belo
 | Field | Values | Default |
 | --- | --- | --- |
 | `baseline` | 0 to 1, knob | 0.8 |
+
+### `band`
+
+A gray mask over the same heel-to-toe interval on both sides of the boot. Use `multiply`
+above a fill to turn it into a bar. Its edges fade across one pixel as they move.
+
+| Field | Values | Default |
+| --- | --- | --- |
+| `position` | 0 to 1, knob. Heel at 0, centered at 0.5, toe at 1 | 0.5 |
+| `width` | 0 to 1, knob. Fraction of each side covered by the bar | 0.5 |
+
+Position slides the whole band while preserving its width. At width 0.5, flat lights the
+middle half of both sides, heel-down lights heel to midpoint, and toe-down lights midpoint
+to toe. Width 0 clears the ring, and width 1 lights every pixel, at any tilt.
+
+`bass-ripple` binds position to `tilt` and width to `audioLevel`, over a rainbow fill whose
+brightness follows `stompFade` from 0.7 to 1 with a 200 ms fade. Stomps brighten the current
+bar. At zero volume the ring stays dark, including during a stomp.
 
 ### `trail`
 

@@ -111,9 +111,10 @@ describe("reference frames", () => {
     expect(anyDifferent).toBe(true);
   });
 
-  // A new layer type, blend, choice, or source has to get a case, or the C++ engine could get it
-  // wrong with nothing to catch it.
-  it("cover every layer type, blend, choice, and knob source", () => {
+  // The reference input file stores motion, without audio. Audio bindings have
+  // live-level coverage in engine.test.ts; these frames cover the motion/time sources
+  // the firmware port can replay from this file.
+  it("cover every layer type, blend, choice, and motion/time knob source", () => {
     const recipes = referenceCases(KEEPERS).map((testCase) => testCase.recipe);
     const layers = recipes.flatMap((recipe) => recipe.layers) as unknown as (Record<string, unknown> & { type: (typeof LAYER_TYPES)[number] })[];
 
@@ -128,7 +129,9 @@ describe("reference frames", () => {
         }
       }
     }
-    expect(sources).toEqual(new Set(SOURCES));
+    // Kept recipes can bind audio, which reads zero in this motion-only recording.
+    sources.delete("audioLevel");
+    expect(sources).toEqual(new Set(SOURCES.filter((source) => source !== "audioLevel")));
 
     for (const type of LAYER_TYPES) {
       for (const field of fieldsFor(type)) {

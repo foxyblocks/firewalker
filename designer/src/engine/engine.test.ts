@@ -136,6 +136,34 @@ describe("fill", () => {
   });
 });
 
+describe("audio bindings", () => {
+  it("maps the live level through a knob's range, including reversed ranges", () => {
+    const engine = new RecipeEngine(recipe(layer("fill", {
+      palette: ["#ffffff"],
+      brightness: { source: "audioLevel", min: 0.2, max: 0.8 },
+    })), RING);
+
+    for (const [audioLevel, brightness, speed] of [[0, 0.2, 200], [0.5, 0.5, 110], [1, 0.8, 20]]) {
+      step(engine, { audioLevel });
+      expect(pixel(engine, 0)).toEqual([brightness, brightness, brightness]);
+      expect(engine.knob({ source: "audioLevel", min: 200, max: 20 })).toBe(speed);
+    }
+  });
+
+  it("clamps the level and treats missing or invalid input as silence", () => {
+    const engine = new RecipeEngine(recipe(layer("fill", {
+      palette: ["#ffffff"],
+      brightness: { source: "audioLevel", min: 0, max: 1 },
+    })), RING);
+
+    for (const [audioLevel, brightness] of [[2, 1], [-1, 0], [NaN, 0], [Infinity, 0], [undefined, 0]]) {
+      step(engine, { audioLevel: 1 });
+      step(engine, { audioLevel });
+      expect(pixel(engine, 0)).toEqual([brightness, brightness, brightness]);
+    }
+  });
+});
+
 describe("pool", () => {
   const white = layer("fill", { palette: ["#ffffff"], scroll: 0 });
 

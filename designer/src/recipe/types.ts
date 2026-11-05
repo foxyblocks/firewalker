@@ -1,5 +1,5 @@
 // The recipe format: a pattern described as data, not code. A recipe is a stack of up to
-// eight layers drawn bottom first, each wired to the boot's tilt, stomps, or time. The
+// eight layers drawn bottom first, each wired to tilt, stomps, time, or audio. The
 // designer saves recipes as JSON in the repo's patterns/ folder, and later firmware will run
 // them from flash. docs/recipe-format.md is the reference; this file and spec.ts are its
 // source of truth in code.
@@ -18,7 +18,7 @@ export const MAX_LABEL_LENGTH = 24;
 export type Color = string;
 
 // Inputs a knob can follow. Each reads 0..1, and the binding maps that onto min..max.
-export const SOURCES = ["tilt", "tiltAmount", "stompStrength", "stompFade", "wave"] as const;
+export const SOURCES = ["tilt", "tiltAmount", "stompStrength", "stompFade", "wave", "audioLevel"] as const;
 export type Source = (typeof SOURCES)[number];
 
 export interface Binding {
@@ -117,7 +117,16 @@ export interface ChaseLayer extends LayerCommon {
   brightness: Knob;
 }
 
-export type Layer = FillLayer | PoolLayer | TrailLayer | FlashLayer | SparkleLayer | ChaseLayer;
+// A gray mask over the same heel-to-toe interval on both sides of the boot.
+// Position slides the whole band between the ends, keeping its width intact.
+// Multiply it against a fill to turn that fill into a movable volume bar.
+export interface BandLayer extends LayerCommon {
+  type: "band";
+  position: Knob;
+  width: Knob;
+}
+
+export type Layer = FillLayer | PoolLayer | TrailLayer | FlashLayer | SparkleLayer | ChaseLayer | BandLayer;
 export type LayerType = Layer["type"];
 
 export interface Recipe {

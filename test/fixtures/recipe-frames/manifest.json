@@ -4,6 +4,22 @@
   "checkEvery": 16,
   "cases": [
     {
+      "file": "bass-ripple--bench.bin",
+      "recipe": "patterns/bass-ripple.json",
+      "layout": "bench",
+      "count": 160,
+      "toe": 52,
+      "heel": 132
+    },
+    {
+      "file": "bass-ripple--3eb5.bin",
+      "recipe": "patterns/bass-ripple.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
       "file": "comet--bench.bin",
       "recipe": "patterns/comet.json",
       "layout": "bench",
@@ -78,6 +94,14 @@
     {
       "file": "starfield--3eb5.bin",
       "recipe": "patterns/starfield.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "band--3eb5.bin",
+      "recipe": "test/fixtures/recipe-frames/recipes/band.json",
       "layout": "3eb5",
       "count": 107,
       "toe": 72,

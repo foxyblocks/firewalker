@@ -782,6 +782,94 @@ input[type="range"] {
   min-height: 0;
 }
 
+/* Input strip above the boot. The spectrum reads from bass on the left to treble. */
+.audio-monitor {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 7px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.audio-monitor-controls,
+.audio-monitor-signal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.audio-monitor-controls select {
+  width: auto;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.audio-monitor-signal {
+  margin-left: auto;
+  color: var(--ink-quiet);
+  font-size: 11px;
+}
+
+.audio-monitor-status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.audio-monitor-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+
+.audio-monitor-signal[data-status="live"] .audio-monitor-status::before {
+  background: var(--good);
+}
+
+.audio-monitor-signal[data-status="connecting"] .audio-monitor-status::before {
+  background: var(--wait);
+}
+
+.audio-monitor-spectrum {
+  display: flex;
+  gap: 3px;
+  align-items: end;
+  height: 20px;
+}
+
+.audio-monitor-spectrum span {
+  position: relative;
+  width: 4px;
+  height: 100%;
+  background: var(--surface-high);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.audio-monitor-spectrum i {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(var(--wait), var(--ember));
+  transform-origin: bottom;
+}
+
+.audio-monitor-signal .readout {
+  min-width: 4ch;
+  text-align: right;
+}
+
+.audio-monitor-message {
+  flex-basis: 100%;
+  color: var(--ink-quiet);
+  font-size: 11px;
+}
+
 /* The two boot views take whatever height the controls leave. */
 .views {
   flex: 1;

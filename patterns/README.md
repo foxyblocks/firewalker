@@ -11,6 +11,7 @@ Pattern recipes worth keeping, one `<name>.json` each. The designer in
 | `lava-pour` | Lava colors crawling around the ring, pooled hard toward the low end, with sparks |
 | `starfield` | A dim sky with twinkling stars, and an ice-blue flash on a stomp |
 | `comet` | Two neon comets circling faster the more you tilt |
+| `bass-ripple` | A rainbow volume bar on both sides, sliding downhill with tilt and flashing from 70% to 100% brightness on a stomp |
 
 Edit them in the designer rather than by hand. It checks every value and writes the file
 the same way each time, so diffs stay small. `bun run test` in `designer/` checks every file
