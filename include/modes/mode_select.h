@@ -9,6 +9,9 @@ namespace ActiveMode = ImuDebugMode;
 #elif defined(FIREWALKER_MODE_BENCH)
 #include "bench.h"
 namespace ActiveMode = BenchMode;
+#elif defined(FIREWALKER_MODE_RECIPE_BUDGET)
+#include "recipe_budget.h"
+namespace ActiveMode = RecipeBudgetMode;
 #else
-#error "Define one Firewalker mode: FIREWALKER_MODE_FINAL_APP, FIREWALKER_MODE_IMU_DEBUG, or FIREWALKER_MODE_BENCH"
+#error "Define one Firewalker mode: FIREWALKER_MODE_FINAL_APP, FIREWALKER_MODE_IMU_DEBUG, FIREWALKER_MODE_BENCH, or FIREWALKER_MODE_RECIPE_BUDGET"
 #endif

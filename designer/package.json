@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "reference-frames": "UPDATE_REFERENCE_FRAMES=1 vitest run src/engine/referenceFrames.test.ts",
-    "build-recipes": "bun run scripts/build-recipes.ts"
+    "build-recipes": "bun run scripts/build-recipes.ts",
+    "budget-recipes": "bun run scripts/budget-recipes.ts"
   },
   "dependencies": {
     "@fontsource-variable/big-shoulders-display": "^5.3.0",
