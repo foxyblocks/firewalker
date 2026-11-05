@@ -451,13 +451,11 @@ dd {
   position: relative;
 }
 
-/* A fine cross-hatch over each pixel past the mark, in a softer mix of the same yellow so the
-   strip still reads as a strip. A lit pixel keeps its own fill under it. */
+/* Fine diagonal stripes over each pixel past the mark, rising left to right, two or three to a
+   pixel. A gradient's stripes run across its angle, so 135deg draws them rising. A lit pixel keeps
+   its own fill under them. */
 .pixel-over {
-  --hatch: color-mix(in srgb, var(--wait) 70%, transparent);
-  background-image:
-    repeating-linear-gradient(45deg, var(--hatch) 0 1px, transparent 1px 4px),
-    repeating-linear-gradient(-45deg, var(--hatch) 0 1px, transparent 1px 4px);
+  background-image: repeating-linear-gradient(135deg, var(--wait) 0 0.75px, transparent 0.75px 4.5px);
 }
 
 /* The line, in the gap before the first pixel past the warning. */
