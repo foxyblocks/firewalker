@@ -18,11 +18,14 @@ export function LinkDot({ link }: { link?: LinkState }) {
 export function Toggle({
   on,
   label,
+  small,
   disabled,
   onChange,
 }: {
   on: boolean;
   label: string;
+  /** A compact size that fits beside a readout, as the brightness cap's does. */
+  small?: boolean;
   disabled?: boolean;
   onChange: (on: boolean) => void;
 }) {
@@ -32,7 +35,7 @@ export function Toggle({
       role="switch"
       aria-checked={on}
       aria-label={label}
-      className={`toggle${on ? " toggle-on" : ""}`}
+      className={`toggle${small ? " toggle-small" : ""}${on ? " toggle-on" : ""}`}
       disabled={disabled}
       onClick={() => onChange(!on)}
     >

@@ -1,9 +1,15 @@
 /**
  * The home screen: choose Both, Left, or Right, then control them. Patterns take the
- * middle of the screen and scroll, while brightness, power, and Calibrate stay pinned in
- * a dock at the bottom. So however many patterns a boot has, your thumb always knows
- * where those are. All the numbers come from `store.view()`, which shows what the boots
- * reported, plus any tap still on its way.
+ * middle of the screen and scroll, while brightness and power stay pinned in a dock at the
+ * bottom. So however many patterns a boot has, your thumb always knows where those are.
+ * All the numbers come from `store.view()`, which shows what the boots reported, plus any
+ * tap still on its way.
+ *
+ * The brightness percent is a share of what the boots accept right now, so it reads 100%
+ * at the soft cap while the cap is on, and the same level reads 38% with it off (96 of 255).
+ * The cap's toggle sits beside the percent, and turning it off shows a warning, because a
+ * full-white strip can then draw more than USB supplies. Calibrate lives on the Boots
+ * screen, so the Boots link carries a dot while a chosen boot isn't calibrated.
  */
 
 import { SIDE_NAMES, type BootsStore, type PatternTile, type RemoteView, type Side, type Target } from "../core/boots";
@@ -14,12 +20,10 @@ export function Remote({
   store,
   onStatus,
   onBoots,
-  onCalibrate,
 }: {
   store: BootsStore;
   onStatus: () => void;
   onBoots: () => void;
-  onCalibrate: () => void;
 }) {
   const view = store.view();
   const names = (sides: Side[]) => joinNames(sides.map((side) => store.displayName(side)));
@@ -32,6 +36,9 @@ export function Remote({
         <nav className="topbar-links">
           <button type="button" className="link" onClick={onBoots}>
             Boots
+            {view.uncalibrated.length > 0 && (
+              <span className="dot dot-wait link-dot" role="img" aria-label={`${names(view.uncalibrated)} not calibrated`} />
+            )}
           </button>
           <button type="button" className="link" onClick={onStatus}>
             Status
@@ -63,7 +70,23 @@ export function Remote({
       <footer className="dock">
         <div className="section-head">
           <span className="section-label">Brightness</span>
-          <span className="readout">{view.controllable ? `${percent}%` : "--"}</span>
+          <span className="brightness-head">
+            <span className="readout">{view.controllable ? `${percent}%` : "--"}</span>
+            {view.capped !== undefined && (
+              <span className="cap-control">
+                <span className="cap-label" aria-hidden="true">
+                  Cap
+                </span>
+                <Toggle
+                  on={view.capped}
+                  label="Brightness cap"
+                  small
+                  disabled={!view.controllable}
+                  onChange={(on) => store.setCap(on)}
+                />
+              </span>
+            )}
+          </span>
         </div>
         <PixelSlider
           label="Brightness"
@@ -75,6 +98,11 @@ export function Remote({
           onChange={(level) => store.setBrightness(level)}
           onEnd={() => store.setDragging(false)}
         />
+        {view.capped === false && (
+          <p className="cap-warning" role="status">
+            Cap off. Full white can draw about 1 A, more than USB gives, so use a 5 V supply.
+          </p>
+        )}
         <div className="dock-row">
           <div className="dock-card">
             <span className="card-name">Lights {view.on ? "on" : "off"}</span>
@@ -85,10 +113,6 @@ export function Remote({
               onChange={(on) => store.setPower(on)}
             />
           </div>
-          <button type="button" className="dock-card dock-button" disabled={!view.controllable} onClick={onCalibrate}>
-            <span className="card-name">Calibrate</span>
-            <CalibrateHint view={view} names={names} />
-          </button>
         </div>
       </footer>
     </>
@@ -176,16 +200,6 @@ function SaveLine({ view, names }: { view: RemoteView; names: (sides: Side[]) =>
     <span className="save-line">
       <span className={`dot ${view.saving ? "dot-wait" : "dot-good"}`} aria-hidden="true" />
       {view.saving ? "Saving" : `Saved on ${names(view.chosen.filter((side) => !view.offline.includes(side)))}`}
-    </span>
-  );
-}
-
-function CalibrateHint({ view, names }: { view: RemoteView; names: (sides: Side[]) => string }) {
-  if (view.uncalibrated.length === 0) return <span className="card-hint">Neutral set</span>;
-  return (
-    <span className="card-hint">
-      <span className="dot dot-wait" aria-hidden="true" />
-      {names(view.uncalibrated)} not set
     </span>
   );
 }

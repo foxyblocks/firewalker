@@ -45,7 +45,12 @@ export interface FakeBootOptions {
   pattern?: string;
   lastLit?: string;
   brightness?: number;
+  /** The most it accepts with no cap holding it back, which is all older firmware has. */
   maxBrightness?: number;
+  /** The soft cap's level, as current firmware has. Leave it out for firmware from before the cap. */
+  capBrightness?: number;
+  /** Whether the soft cap starts on, when there is one. */
+  capped?: boolean;
   sensor?: "ok" | "unavailable";
   calibrated?: boolean;
   neutralDeg?: number;
@@ -100,7 +105,11 @@ export class FakeBoot {
   pattern: string;
   lastLit: string;
   brightness: number;
-  readonly maxBrightness: number;
+  /** The most it accepts with no cap holding it back. */
+  readonly hardMaxBrightness: number;
+  /** The soft cap's level, or undefined for firmware that has no cap. */
+  readonly capBrightness: number | undefined;
+  capped: boolean;
   sensor: "ok" | "unavailable";
   calibrated: boolean;
   neutralDeg: number;
@@ -140,7 +149,9 @@ export class FakeBoot {
     this.pattern = options.pattern ?? "flow";
     this.lastLit = options.lastLit ?? (this.pattern === "off" ? "flow" : this.pattern);
     this.brightness = options.brightness ?? 24;
-    this.maxBrightness = options.maxBrightness ?? 64;
+    this.hardMaxBrightness = options.maxBrightness ?? 64;
+    this.capBrightness = options.capBrightness;
+    this.capped = options.capped ?? true;
     this.sensor = options.sensor ?? "ok";
     this.calibrated = options.calibrated ?? false;
     this.neutralDeg = options.neutralDeg ?? 0;
@@ -222,6 +233,14 @@ export class FakeBoot {
         this.markChanged();
         return this.ackThenStatus("brightness");
       }
+      case "cap":
+        // Firmware from before the cap doesn't know the command.
+        if (this.capBrightness === undefined) return this.ackInvalid("unknown-command");
+        if (arg !== "on" && arg !== "off") return this.ackInvalid("expected-on-or-off");
+        this.capped = arg === "on";
+        if (this.capped) this.brightness = Math.min(this.brightness, this.capBrightness);
+        this.markChanged();
+        return this.ackThenStatus("cap");
       case "calibrate":
         if (arg && arg !== "neutral" && arg !== "heel" && arg !== "toe") {
           return this.ackInvalid("unknown-pose");
@@ -241,6 +260,11 @@ export class FakeBoot {
       default:
         return this.ackInvalid("unknown-command");
     }
+  }
+
+  /** The most `brightness` accepts right now: the soft cap while it's on. */
+  get maxBrightness(): number {
+    return this.capBrightness !== undefined && this.capped ? this.capBrightness : this.hardMaxBrightness;
   }
 
   /** Keeps a preview going for another minute, the way each strip command does on a boot. */
@@ -459,6 +483,7 @@ export class FakeBoot {
         pattern: this.pattern,
         brightness: this.brightness,
         maxBrightness: this.maxBrightness,
+        ...(this.capBrightness === undefined ? {} : { capped: this.capped, capBrightness: this.capBrightness }),
         sensor: this.sensor,
         tilt: round2(this.sensor === "ok" ? this.tiltAt(this.liveAngle()) : 0),
         calibrated: this.calibrated,

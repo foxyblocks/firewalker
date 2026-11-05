@@ -53,37 +53,45 @@ static_assert(Firewalker::stripLayoutValid(STRIP_DEFAULT_LAYOUT, STRIP_MAX_PIXEL
 constexpr uint32_t STRIP_SPI_HZ   = 3250000;
 constexpr uint32_t STRIP_LATCH_US = 300;
 
-// Default brightness (0-255) on first boot: 67 is 70% of LED_BRIGHTNESS_MAX, which the
-// app shows as 70%. After that each controller restores its own saved value. Brightness
-// scales requested color and is not a current limit. Build flags set it for test builds.
-// The designer's simulator starts at this value too (designer/src/engine/output.ts).
+// The soft cap: the highest brightness a boot accepts while its cap is on. A new boot starts
+// with it on, and it stays on until someone turns it off from the remote (`cap off` in
+// docs/remote-protocol.md). Each boot saves whether its cap is on. A boot's strip is cut to at
+// most 107 pixels, rated about 10 mA each at full white, so 96/255 keeps a full-white frame
+// near 400 mA. That fits a USB 2.0 port's 500 mA, and the 1 A diode Seeed's schematic may put
+// in front of the XIAO's 5V pad. With the cap off, brightness goes up to LED_BRIGHTNESS_MAX,
+// about 1.07 A at full white on 107 pixels, which needs a dedicated 5 V supply rather than USB.
+// docs/power-budget.md has the numbers and that setup.
+#ifndef FIREWALKER_LED_BRIGHTNESS_SOFT_CAP
+#define FIREWALKER_LED_BRIGHTNESS_SOFT_CAP 96
+#endif
+constexpr uint8_t LED_BRIGHTNESS_SOFT_CAP = FIREWALKER_LED_BRIGHTNESS_SOFT_CAP;
+// The most a channel can be scaled to, so the highest brightness with the soft cap off.
+constexpr uint8_t LED_BRIGHTNESS_MAX = 255;
+constexpr uint8_t LED_BRIGHTNESS_MIN = 1;
+static_assert(LED_BRIGHTNESS_SOFT_CAP >= LED_BRIGHTNESS_MIN,
+              "The soft cap must leave room for at least LED_BRIGHTNESS_MIN");
+
+// Default brightness (0-255) on first boot: the soft cap, which the app shows as 100% while
+// the cap is on. After that each controller restores its own saved value. Brightness scales
+// requested color and is not a current limit. Build flags set it for test builds. The
+// designer's simulator starts at this value too (designer/src/engine/output.ts).
 #ifndef FIREWALKER_LED_BRIGHTNESS
-#define FIREWALKER_LED_BRIGHTNESS 67
+#define FIREWALKER_LED_BRIGHTNESS FIREWALKER_LED_BRIGHTNESS_SOFT_CAP
 #endif
 constexpr uint8_t LED_BRIGHTNESS = FIREWALKER_LED_BRIGHTNESS;
-
-// Highest brightness the remote may set. A boot's strip is cut to at most 107 pixels, rated
-// about 10 mA each at full white, so 96/255 keeps a full-white frame near 400 mA. That fits
-// a USB 2.0 port's 500 mA, and the 1 A diode Seeed's schematic may put in front of the
-// XIAO's 5V pad. The uncut 160-pixel strip would reach about 600 mA here.
-// docs/power-budget.md has the numbers and the dedicated 5V supply setup.
-#ifndef FIREWALKER_LED_BRIGHTNESS_MAX
-#define FIREWALKER_LED_BRIGHTNESS_MAX 96
-#endif
-constexpr uint8_t LED_BRIGHTNESS_MIN = 1;
-constexpr uint8_t LED_BRIGHTNESS_MAX = FIREWALKER_LED_BRIGHTNESS_MAX;
 static_assert(LED_BRIGHTNESS >= LED_BRIGHTNESS_MIN && LED_BRIGHTNESS <= 255,
               "Default brightness must be at least LED_BRIGHTNESS_MIN");
 
 // What the strip shows while a remote sets its layout (`strip preview`): the ring in blue,
 // with the toe and heel pixels in their own colors. These are the app's slider colors, and
-// the fixed brightness means the markers are easy to find even on a boot turned down low. A
+// the fixed brightness means the markers are easy to find even on a boot turned down low. It's
+// the soft cap, so a preview stays inside what USB can supply whether or not the cap is on. A
 // preview ends by itself this long after the latest strip command, so a phone that goes
 // away can't leave a boot stuck showing it.
 constexpr uint32_t      STRIP_PREVIEW_LEDS_COLOR = 0x0000FF;  // blue
 constexpr uint32_t      STRIP_PREVIEW_TOE_COLOR  = 0xFFC800;  // yellow
 constexpr uint32_t      STRIP_PREVIEW_HEEL_COLOR = 0x8000FF;  // purple
-constexpr uint8_t       STRIP_PREVIEW_BRIGHTNESS = LED_BRIGHTNESS_MAX;
+constexpr uint8_t       STRIP_PREVIEW_BRIGHTNESS = LED_BRIGHTNESS_SOFT_CAP;
 constexpr unsigned long STRIP_PREVIEW_HOLD_MS    = 60000;
 
 // ── Onboard status LED ───────────────────────────────────────────────────

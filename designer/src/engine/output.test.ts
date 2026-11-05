@@ -33,9 +33,12 @@ describe("boot brightness", () => {
   });
 
   it("shows a brightness as the phone app's percent", () => {
-    expect(brightnessPercent(BOOT_BRIGHTNESS.default)).toBe(70);
-    expect(brightnessPercent(BOOT_BRIGHTNESS.max)).toBe(100);
+    // Up to the soft cap, as a share of the cap, which is what the app shows with the cap on.
+    expect(brightnessPercent(BOOT_BRIGHTNESS.default)).toBe(100);
     expect(brightnessPercent(48)).toBe(50);
+    // Past it, as a share of 255, which is what the app shows with the cap off.
+    expect(brightnessPercent(128)).toBe(50);
+    expect(brightnessPercent(BOOT_BRIGHTNESS.max)).toBe(100);
   });
 
   it("rounds and limits a color to a whole channel value", () => {
@@ -65,8 +68,11 @@ describe("boot brightness", () => {
   it("matches the firmware's settings", () => {
     const config = readFileSync(new URL("../../../include/config.h", import.meta.url), "utf8");
     const value = (pattern: RegExp) => Number(pattern.exec(config)?.[1]);
-    expect(BOOT_BRIGHTNESS.default).toBe(value(/#define FIREWALKER_LED_BRIGHTNESS (\d+)/));
-    expect(BOOT_BRIGHTNESS.max).toBe(value(/#define FIREWALKER_LED_BRIGHTNESS_MAX (\d+)/));
+    expect(BOOT_BRIGHTNESS.cap).toBe(value(/#define FIREWALKER_LED_BRIGHTNESS_SOFT_CAP (\d+)/));
+    // A new boot starts at the soft cap, so config.h defines its default as the cap.
+    expect(config).toMatch(/#define FIREWALKER_LED_BRIGHTNESS FIREWALKER_LED_BRIGHTNESS_SOFT_CAP\b/);
+    expect(BOOT_BRIGHTNESS.default).toBe(BOOT_BRIGHTNESS.cap);
+    expect(BOOT_BRIGHTNESS.max).toBe(value(/LED_BRIGHTNESS_MAX = (\d+)/));
     expect(BOOT_BRIGHTNESS.min).toBe(value(/LED_BRIGHTNESS_MIN = (\d+)/));
   });
 });

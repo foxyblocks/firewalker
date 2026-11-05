@@ -63,6 +63,12 @@ export function Status({ store, onBack }: { store: BootsStore; onBack: () => voi
   );
 }
 
+/** Says whether the soft cap is on. Firmware from before the cap doesn't report it. */
+function capText(capped: boolean | undefined): string {
+  if (capped === undefined) return "";
+  return capped ? ", capped" : ", cap off";
+}
+
 function BootDetails({
   store,
   side,
@@ -107,7 +113,7 @@ function BootDetails({
       {status ? (
         <dl className="facts">
           <Fact label="Pattern" value={status.pattern === "off" ? "Off" : patternDisplay(status.pattern).name} />
-          <Fact label="Brightness" value={`${status.brightness} of ${status.maxBrightness}`} />
+          <Fact label="Brightness" value={`${status.brightness} of ${status.maxBrightness}${capText(status.capped)}`} />
           <Fact label="Motion sensor" value={status.sensor === "ok" ? "OK" : "Unavailable"} tone={status.sensor === "ok" ? undefined : "bad"} />
           <Fact {...calibrationFact(status)} />
           <Fact label="Last capture" value={captureText(status.calibration)} />

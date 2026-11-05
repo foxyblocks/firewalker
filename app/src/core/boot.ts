@@ -47,6 +47,7 @@ export interface Pending {
   pattern?: string;
   power?: boolean;
   brightness?: number;
+  capped?: boolean;
   debug?: boolean;
   leds?: number;
   toe?: number;
@@ -432,6 +433,16 @@ export class BootClient {
     if (!this.online) return;
     this.setPending({ power: on, pattern: undefined });
     this.enqueue({ line: () => commands.power(on), field: "power", expect: "ack" });
+  }
+
+  /**
+   * Turns the boot's soft brightness cap on or off. Turning it on can lower the boot's
+   * brightness, which its status line then reports.
+   */
+  setCap(on: boolean): void {
+    if (!this.online) return;
+    this.setPending({ capped: on });
+    this.enqueue({ line: () => commands.cap(on), field: "capped", expect: "ack" });
   }
 
   /**

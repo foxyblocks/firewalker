@@ -1,6 +1,6 @@
 // final_app is the shoe app, and the same binary runs on both shoes. The onboard
 // sensor drives the active pattern, the remote (BLE or the USB console) changes
-// settings, and each controller keeps its own pattern, brightness, calibrated
+// settings, and each controller keeps its own pattern, brightness, soft cap, calibrated
 // poses, and strip layout in flash. Losing the phone never matters: whatever is
 // running keeps running, and a reconnecting client is told the current state.
 //
@@ -33,7 +33,10 @@ namespace FinalAppMode {
 using namespace Firewalker;
 
 static constexpr SettingsBounds SETTINGS_BOUNDS = {LED_BRIGHTNESS_MIN, LED_BRIGHTNESS_MAX,
-                                                   TILT_LIMITS.maxNeutralDeg, STRIP_MAX_PIXELS};
+                                                   TILT_LIMITS.maxNeutralDeg, STRIP_MAX_PIXELS,
+                                                   LED_BRIGHTNESS_SOFT_CAP};
+static_assert(LED_BRIGHTNESS <= LED_BRIGHTNESS_SOFT_CAP,
+              "A new boot starts with the soft cap on, so its default brightness must fit under it");
 static constexpr PoseCaptureLimits CAPTURE_LIMITS = {
     CALIBRATION_WINDOW_MS, CALIBRATION_NO_SAMPLE_MS, CALIBRATION_MIN_SAMPLES,
     CALIBRATION_MAX_SPREAD_DEG};
@@ -78,7 +81,9 @@ static void sendStatus() {
   report.pattern = settings.pattern;
   report.lit = settings.lastLitPattern;
   report.brightness = settings.brightness;
-  report.maxBrightness = LED_BRIGHTNESS_MAX;
+  report.maxBrightness = brightnessCeiling(settings, SETTINGS_BOUNDS);
+  report.capped = settings.capped;
+  report.capBrightness = LED_BRIGHTNESS_SOFT_CAP;
   report.sensorReady = imuReady();
   report.tilt = imuTiltFwd();
   report.calibration = settings.calibration;
@@ -365,13 +370,25 @@ static void handleCommand(const Command& command) {
     }
 
     case CommandType::Brightness:
-      if (command.value < LED_BRIGHTNESS_MIN || command.value > LED_BRIGHTNESS_MAX) {
+      if (command.value < LED_BRIGHTNESS_MIN ||
+          command.value > brightnessCeiling(settings, SETTINGS_BOUNDS)) {
         sendAck(command.type, false, "out-of-range");
         return;
       }
       settings.brightness = (uint8_t)command.value;
       strip.setBrightness(settings.brightness);
       saveScheduler.markChanged(millis());
+      sendAck(command.type, true);
+      break;
+
+    // Turning the cap on can lower the brightness, so the strip takes the new level right away,
+    // unless a layout preview has it at its own fixed brightness for now. Either way the change
+    // is saved, so the boot powers up the same way.
+    case CommandType::Cap:
+      if (setBrightnessCap(settings, command.on, SETTINGS_BOUNDS)) {
+        if (!stripPreview) strip.setBrightness(settings.brightness);
+        saveScheduler.markChanged(millis());
+      }
       sendAck(command.type, true);
       break;
 

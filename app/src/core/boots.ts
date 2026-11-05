@@ -55,6 +55,11 @@ export interface RemoteView {
   on: boolean;
   brightness: number;
   maxBrightness: number;
+  /**
+   * Whether the soft brightness cap is on. False if any chosen boot has it off, so one tap
+   * caps them all. Undefined when no chosen boot's firmware has a cap, which hides the toggle.
+   */
+  capped?: boolean;
   /** A pattern just chosen that some boots can't run. */
   needsUpdate?: { pattern: string; sides: Side[] };
   offline: Side[];
@@ -346,6 +351,13 @@ export class BootsStore {
     this.onlineTargets().forEach(({ client }) => client.setBrightness(level));
   }
 
+  /** Turns the soft cap on or off on every chosen boot whose firmware has one. */
+  setCap(on: boolean): void {
+    this.onlineTargets()
+      .filter(({ client }) => client.getState().status?.capped !== undefined)
+      .forEach(({ client }) => client.setCap(on));
+  }
+
   setDragging(dragging: boolean): void {
     this.onlineTargets().forEach(({ client }) => client.setDragging(dragging));
   }
@@ -374,12 +386,17 @@ export class BootsStore {
     }));
 
     const first = online[0]?.state;
+    const caps = online.flatMap(({ state }) => {
+      const capped = state.pending.capped ?? state.status!.capped;
+      return capped === undefined ? [] : [capped];
+    });
     return {
       chosen: chosen.map(({ side }) => side),
       tiles,
       on: online.some(({ state }) => shownOn(state)),
       brightness: first?.pending.brightness ?? first?.status?.brightness ?? 0,
       maxBrightness: online.length > 0 ? Math.min(...online.map(({ state }) => state.status!.maxBrightness)) : 0,
+      capped: caps.length > 0 ? caps.every((capped) => capped) : undefined,
       needsUpdate: this.needsUpdate,
       offline: sidesWhere((state) => state.link !== "online" && state.link !== "needs-access"),
       accessLost: sidesWhere((state) => state.link === "needs-access"),

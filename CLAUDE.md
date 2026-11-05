@@ -14,7 +14,7 @@ the down-end by fused fore-aft tilt, where a stomp launches diverging trail fron
 `fire-trail` (stomp-spawned fire bands), and **recipes**, built in or uploaded
 (`specs/recipe-engine-spec.md`). A stomp is an IMU acceleration spike. Both
 shoes run one identical firmware binary. Each controller saves its own pattern,
-brightness, calibrated poses (neutral, heel, toe), and strip layout in flash. A **remote** controls running firmware
+brightness, soft brightness cap, calibrated poses (neutral, heel, toe), and strip layout in flash. A **remote** controls running firmware
 over BLE or the USB console with one line protocol. Out of scope: the 2-D "perimeter
 bubble" flow, multiple strips per shoe, synchronization between shoes, and the final
 battery and enclosure. Don't over-engineer ahead of working hardware.

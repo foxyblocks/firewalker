@@ -561,7 +561,7 @@ Version 1 is frozen, so a recipe that turns out too slow gets fixed in this orde
 - **Two engines drifting.** Reference frames, and the rule that behavior changes go into both at once.
 - **Anyone nearby can upload.** There's no pairing today, so anyone in range can already change a boot's
   pattern or calibration. Uploading adds a nuisance: filling slots. The decoder keeps bad data from
-  crashing a boot, and the brightness cap still limits current on any recipe.
+  crashing a boot, and the soft brightness cap, while it's on, still limits current on any recipe.
 - **Flash shared with BLE.** Test all 16 slots full, repeated uploads, and a power cut during a save.
   Measure any frame hiccup when NVM3 compacts.
 - **A status or list line getting too long.** The longest status line with 12-character names is about
@@ -569,7 +569,7 @@ Version 1 is frozen, so a recipe that turns out too slow gets fixed in this orde
 - **Web Serial's buffer.** PR #8 found a status line already passes Web Serial's default 255 bytes. Check
   that its buffer also fits a 520-byte `patterns` line.
 - **Recipes that look different on a boot.** Expected at low brightness, where steps run out: 16 gives
-  only 17 per channel, and even the default of 67 gives just 68. The simulator's Boot brightness setting shows that.
+  only 17 per channel, and even the default of 96 gives just 97. The simulator's Boot brightness setting shows that.
 - **Flashing boots other people are using.** Check the board is free and ask foxy first. A boot's settings
   can be lost by a flash during a check.
 

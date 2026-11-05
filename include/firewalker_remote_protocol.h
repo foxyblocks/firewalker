@@ -43,6 +43,7 @@ enum class CommandType : uint8_t {
   Pattern,
   Power,
   Brightness,
+  Cap,
   Calibrate,
   Debug,
   Identify,
@@ -66,7 +67,7 @@ struct Command {
   char pattern[PATTERN_NAME_SIZE] = "";
   char hex[REMOTE_RECIPE_HEX_MAX + 1] = "";  // for RecipeData
   CalibrationPose pose = CalibrationPose::Neutral;  // for Calibrate
-  bool on = false;                      // for Power, Debug, and StripPreview
+  bool on = false;                      // for Power, Debug, Cap, and StripPreview
   int32_t value = 0;                    // for Brightness, StripSet, RecipeBegin (size), and RecipeData (offset)
   StripField stripField = StripField::Count;   // for StripSet
   const char* error = nullptr;          // for Invalid: why it was rejected
@@ -89,6 +90,7 @@ inline const char* commandName(CommandType type) {
     case CommandType::Pattern: return "pattern";
     case CommandType::Power: return "power";
     case CommandType::Brightness: return "brightness";
+    case CommandType::Cap: return "cap";
     case CommandType::Calibrate: return "calibrate";
     case CommandType::Debug: return "debug";
     case CommandType::StripSet: return "strip";
@@ -324,7 +326,8 @@ inline Command parseCommand(const char* line) {
   }
 
   const bool isPattern = strcmp(verb, "pattern") == 0;
-  const bool isOnOff = strcmp(verb, "power") == 0 || strcmp(verb, "debug") == 0;
+  const bool isOnOff =
+      strcmp(verb, "power") == 0 || strcmp(verb, "debug") == 0 || strcmp(verb, "cap") == 0;
   const bool isBrightness = strcmp(verb, "brightness") == 0;
   if (!isPattern && !isOnOff && !isBrightness) {
     command.error = "unknown-command";
@@ -352,7 +355,9 @@ inline Command parseCommand(const char* line) {
       command.error = "expected-on-or-off";
       return command;
     }
-    command.type = (verb[0] == 'p') ? CommandType::Power : CommandType::Debug;
+    command.type = verb[0] == 'p'   ? CommandType::Power
+                   : verb[0] == 'd' ? CommandType::Debug
+                                    : CommandType::Cap;
     return command;
   }
 
@@ -466,7 +471,9 @@ struct StatusReport {
   const char* pattern;
   const char* lit;  // the pattern turning on returns to, even while the strip is off
   uint8_t brightness;
-  uint8_t maxBrightness;
+  uint8_t maxBrightness;  // the highest `brightness` accepts right now, which the cap lowers
+  bool capped;            // the soft cap is on
+  uint8_t capBrightness;  // the soft cap's level, whether or not it's on
   bool sensorReady;
   float tilt;
   TiltCalibration calibration;
@@ -502,13 +509,15 @@ inline void formatStatus(char* out, size_t size, const StatusReport& report) {
   formatOptionalAngle(toeText, sizeof(toeText), report.calibration.toeSet, report.calibration.toeDeg);
   snprintf(out, size,
            "{\"t\":\"status\",\"proto\":%u,\"id\":\"%s\",\"pattern\":\"%s\",\"lit\":\"%s\","
-           "\"brightness\":%u,\"maxBrightness\":%u,\"sensor\":\"%s\",\"tilt\":%s,"
+           "\"brightness\":%u,\"maxBrightness\":%u,\"capped\":%s,\"capBrightness\":%u,"
+           "\"sensor\":\"%s\",\"tilt\":%s,"
            "\"calibrated\":%s,\"neutralDeg\":%s,\"heelDeg\":%s,\"toeDeg\":%s,"
            "\"calibration\":\"%s\",\"saved\":%s,\"saveFailed\":%s,\"saves\":%lu,"
            "\"debug\":%s,\"ble\":%s,\"leds\":%u,\"maxLeds\":%u,\"toe\":%u,\"heel\":%u,"
            "\"preview\":%s}",
            (unsigned)REMOTE_PROTOCOL_VERSION, report.id, report.pattern,
            report.lit, (unsigned)report.brightness, (unsigned)report.maxBrightness,
+           report.capped ? "true" : "false", (unsigned)report.capBrightness,
            report.sensorReady ? "ok" : "unavailable", tiltText,
            report.calibration.neutralSet ? "true" : "false", neutralText, heelText, toeText,
            report.calibrationState, report.saved ? "true" : "false",
