@@ -22,6 +22,8 @@ export const BOOT_NAME_PREFIX = "Firewalker-";
 
 /** The oldest firmware protocol this app works with. */
 export const PROTOCOL_VERSION = 2;
+/** Firmware that supports saved microphone tuning. Other controls work on older boots. */
+export const AUDIO_PROTOCOL_VERSION = 4;
 
 export type Pose = "neutral" | "heel" | "toe";
 
@@ -86,12 +88,24 @@ export interface PatternsReply {
   list: string[];
 }
 
-export type BootReply = StatusReply | AckReply | CalibrateReply | MotionReply | PatternsReply;
+export interface AudioConfigReply {
+  t: "audio-config";
+  ready: boolean;
+  noiseFloor: number;
+  sensitivity: number;
+  calibrating: boolean;
+  saved: boolean;
+}
+
+export type BootReply = AudioConfigReply | StatusReply | AckReply | CalibrateReply | MotionReply | PatternsReply;
 
 // Every command fits the 20-byte Bluetooth write the firmware promises, as long as
 // pattern names stay at 12 characters or fewer.
 export const commands = {
   status: () => "status",
+  audio: () => "audio",
+  audioGain: (value: number) => `audio gain ${Math.round(value)}`,
+  audioCalibrate: () => "audio calibrate",
   patterns: () => "patterns",
   pattern: (id: string) => `pattern ${id}`,
   power: (on: boolean) => `power ${on ? "on" : "off"}`,
@@ -122,6 +136,12 @@ export function parseLine(line: string): BootReply | null {
   if (!isObject(value)) return null;
 
   switch (value.t) {
+    case "audio-config":
+      return typeof value.ready === "boolean" && typeof value.calibrating === "boolean" &&
+        typeof value.saved === "boolean" && typeof value.noiseFloor === "number" &&
+        typeof value.sensitivity === "number" && Number.isInteger(value.sensitivity) &&
+        value.sensitivity >= 0 && value.sensitivity <= 100
+        ? (value as unknown as AudioConfigReply) : null;
     case "status":
       return typeof value.id === "string" &&
         typeof value.pattern === "string" &&

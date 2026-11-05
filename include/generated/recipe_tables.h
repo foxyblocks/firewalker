@@ -8,7 +8,8 @@
 
 namespace Firewalker {
 
-constexpr uint8_t RECIPE_VERSION = 1;
+constexpr uint8_t RECIPE_MIN_VERSION = 1;
+constexpr uint8_t RECIPE_VERSION = 2;
 constexpr size_t RECIPE_MAX_BYTES = 254;
 constexpr uint8_t RECIPE_MAX_LAYERS = 8;
 constexpr uint8_t RECIPE_MAX_PALETTE_STOPS = 16;
@@ -32,6 +33,7 @@ enum class RecipeLayerType : uint8_t {
   Flash = 3,
   Sparkle = 4,
   Chase = 5,
+  Band = 6,
 };
 
 enum class RecipeSource : uint8_t {
@@ -40,6 +42,7 @@ enum class RecipeSource : uint8_t {
   StompStrength = 2,
   StompFade = 3,
   Wave = 4,
+  AudioLevel = 5,
 };
 
 enum class RecipeBlend : uint8_t {
@@ -116,6 +119,8 @@ namespace RecipeSlot {
   constexpr uint8_t ChaseSpeed = 1;
   constexpr uint8_t ChaseLength = 1;
   constexpr uint8_t ChaseBrightness = 2;
+  constexpr uint8_t BandPosition = 1;
+  constexpr uint8_t BandWidth = 2;
 }  // namespace RecipeSlot
 
 constexpr RecipeFieldInfo RECIPE_FILL_FIELDS[] = {
@@ -177,6 +182,13 @@ constexpr RecipeFieldInfo RECIPE_CHASE_FIELDS[] = {
   {RecipeFieldKind::Knob, 0, 0.0f, 1.0f},  // opacity
 };
 
+constexpr RecipeFieldInfo RECIPE_BAND_FIELDS[] = {
+  {RecipeFieldKind::Knob, 1, 0.0f, 1.0f},  // position
+  {RecipeFieldKind::Knob, 2, 0.0f, 1.0f},  // width
+  {RecipeFieldKind::Choice, 0, 0.0f, 3.0f},  // blend
+  {RecipeFieldKind::Knob, 0, 0.0f, 1.0f},  // opacity
+};
+
 struct RecipeLayerInfo {
   const RecipeFieldInfo* fields;
   uint8_t count;
@@ -190,6 +202,7 @@ constexpr RecipeLayerInfo RECIPE_LAYERS[] = {
   {RECIPE_FLASH_FIELDS, 6},
   {RECIPE_SPARKLE_FIELDS, 6},
   {RECIPE_CHASE_FIELDS, 8},
+  {RECIPE_BAND_FIELDS, 4},
 };
 
 }  // namespace Firewalker

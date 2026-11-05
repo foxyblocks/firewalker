@@ -12,14 +12,14 @@
 // tables that generateTables.ts writes out of spec.ts.
 
 import { fieldsFor, STOMP_FADE, WAVE_PERIOD, type Field, type KnobField } from "./spec.ts";
-import { isBinding, MAX_LAYERS, MAX_NAME_LENGTH, MAX_PALETTE_STOPS, RECIPE_FORMAT, RECIPE_VERSION, SOURCES, type Binding, type Layer, type LayerType, type Recipe } from "./types.ts";
+import { isBinding, isRecipeVersion, requiredRecipeVersion, MAX_LAYERS, MAX_NAME_LENGTH, MAX_PALETTE_STOPS, RECIPE_FORMAT, SOURCES, type Binding, type Layer, type LayerType, type Recipe, type RecipeVersion } from "./types.ts";
 import { nameProblem, validateRecipe } from "./validate.ts";
 
 // NVM3's largest entry, so one recipe saves all at once and a power cut can't leave half of it.
 export const MAX_COMPILED_BYTES = 254;
 
 // A layer type's number in the binary. This order is part of the format.
-export const LAYER_CODES: readonly LayerType[] = ["fill", "pool", "trail", "flash", "sparkle", "chase"];
+export const LAYER_CODES: readonly LayerType[] = ["fill", "pool", "trail", "flash", "sparkle", "chase", "band"];
 
 // Scaled numbers fill an int16 across the field's range. For a speed of 60 on a field that runs
 // from -400 to 400, that's round(60 / 400 * 32767) = 4915, which reads back as 59.9994.
@@ -103,6 +103,8 @@ function pushLayer(out: number[], layer: Layer): void {
 
 // Compiles a recipe for a boot, or says in plain language why it can't. This drops what a boot has
 // no use for: the description, layer labels, and disabled layers, since a boot can't turn one on.
+// The enabled layers choose the earliest readable version, so editing an old effect
+// still produces version 1 bytes until it actually uses Band or an audio binding.
 export function compileRecipe(recipe: Recipe): CompileResult {
   const validation = validateRecipe(recipe);
   if (!validation.ok) return { ok: false, errors: validation.errors, size: null };
@@ -110,7 +112,7 @@ export function compileRecipe(recipe: Recipe): CompileResult {
   const layers = recipe.layers.filter((layer) => layer.enabled);
   if (layers.length === 0) return { ok: false, errors: ["Turn on at least one layer. A boot can't run a recipe with none on."], size: null };
 
-  const out: number[] = [RECIPE_VERSION, recipe.name.length];
+  const out: number[] = [requiredRecipeVersion(layers), recipe.name.length];
   for (const char of recipe.name) out.push(char.charCodeAt(0));
   out.push(layers.length);
   for (const layer of layers) pushLayer(out, layer);
@@ -170,18 +172,18 @@ function readPalette(reader: Reader): string[] {
   });
 }
 
-function readBinding(reader: Reader, field: KnobField): Binding {
+function readBinding(reader: Reader, field: KnobField, version: RecipeVersion): Binding {
   const source = SOURCES[reader.uint8()];
-  if (!source) throw new Error(`${field.key} has an unknown source.`);
+  if (!source || (version === 1 && source === "audioLevel")) throw new Error(`${field.key} has an unknown source for version ${version}.`);
   const binding: Binding = { source, min: reader.scaled(field), max: reader.scaled(field) };
   if (source === "wave") binding.periodMs = Math.min(WAVE_PERIOD.max, Math.max(WAVE_PERIOD.min, reader.uint16()));
   if (source === "stompFade") binding.fadeMs = Math.min(STOMP_FADE.max, Math.max(STOMP_FADE.min, reader.uint16()));
   return binding;
 }
 
-function readLayer(reader: Reader): Layer {
+function readLayer(reader: Reader, version: RecipeVersion): Layer {
   const type = LAYER_CODES[reader.uint8()];
-  if (!type) throw new Error("A layer has an unknown type.");
+  if (!type || (version === 1 && type === "band")) throw new Error(`A layer has an unknown type for version ${version}.`);
   const boundMask = reader.uint8();
   const layer: Record<string, unknown> = { type, enabled: true };
   let knobIndex = 0;
@@ -197,7 +199,7 @@ function readLayer(reader: Reader): Layer {
         layer[field.key] = readPalette(reader);
         break;
       case "knob":
-        layer[field.key] = boundMask & (1 << knobIndex) ? readBinding(reader, field) : reader.scaled(field);
+        layer[field.key] = boundMask & (1 << knobIndex) ? readBinding(reader, field, version) : reader.scaled(field);
         knobIndex++;
         break;
     }
@@ -219,7 +221,7 @@ export function decodeRecipe(bytes: Uint8Array): DecodeResult {
 
     const reader = new Reader(bytes, end);
     const version = reader.uint8();
-    if (version !== RECIPE_VERSION) throw new Error(`Version ${version} isn't supported.`);
+    if (!isRecipeVersion(version)) throw new Error(`Version ${version} isn't supported.`);
 
     const nameLength = reader.uint8();
     if (nameLength === 0 || nameLength > MAX_NAME_LENGTH) throw new Error("The name is the wrong length.");
@@ -229,10 +231,10 @@ export function decodeRecipe(bytes: Uint8Array): DecodeResult {
 
     const layerCount = reader.uint8();
     if (layerCount === 0 || layerCount > MAX_LAYERS) throw new Error(`A recipe holds 1 to ${MAX_LAYERS} layers.`);
-    const layers = Array.from({ length: layerCount }, () => readLayer(reader));
+    const layers = Array.from({ length: layerCount }, () => readLayer(reader, version));
     if (reader.at !== end) throw new Error("There are extra bytes after the last layer.");
 
-    return { ok: true, recipe: { format: RECIPE_FORMAT, version: RECIPE_VERSION, name, description: "", layers } };
+    return { ok: true, recipe: { format: RECIPE_FORMAT, version, name, description: "", layers } };
   } catch (error) {
     return { ok: false, error: (error as Error).message };
   }

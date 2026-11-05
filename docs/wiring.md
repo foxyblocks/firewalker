@@ -59,3 +59,11 @@ it's powered.
    Open a USB console and check that the firmware reports `[firewalker] mode=bench`.
 5. If the strip shows the wrong pixels or random colors, suspect the signal rather than
    the power: try the resistor and level shifter above.
+
+## Onboard microphone
+
+The MG24 Sense already connects its analog microphone to internal PC9, with PC8 as its power
+enable. These are chip pin names, separate from the external D8/D9 pads used by SPI. No extra
+microphone wiring is needed. `firewalker_audio.cpp` owns IADC0 and one DMA channel while capture
+runs, so other code must leave that ADC available. It samples in short timer-driven blocks and
+processes each completed block in the main loop, alongside motion and the remote.

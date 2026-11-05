@@ -69,6 +69,7 @@ export const SOURCE_LABELS: Record<Source, string> = {
   stompStrength: "Stomp strength",
   stompFade: "Stomp fade",
   wave: "Wave",
+  audioLevel: "Audio level",
 };
 
 export const SOURCE_HELP: Record<Source, string> = {
@@ -77,6 +78,7 @@ export const SOURCE_HELP: Record<Source, string> = {
   stompStrength: "How hard the latest stomp hit. Holds until the next one.",
   stompFade: "Max at a stomp, falling back to min over the fade time.",
   wave: "A smooth loop between min and max.",
+  audioLevel: "Follows the audio meter above the boot. Min in silence or when stopped, max at full level. Choose a source and click Listen.",
 };
 
 // Limits for the extra numbers a binding carries.
@@ -283,6 +285,34 @@ export const LAYER_SPECS: Record<LayerType, LayerSpec> = {
       },
       { kind: "number", key: "length", label: "Length", min: 1, max: 60, step: 1, integer: true, unit: "px", default: 10 },
       brightness(1),
+    ],
+  },
+  band: {
+    type: "band",
+    title: "Band",
+    summary: "A bar on both sides of the boot, with adjustable width and position.",
+    defaultBlend: "multiply",
+    fields: [
+      {
+        kind: "knob",
+        key: "position",
+        label: "Position",
+        min: 0,
+        max: 1,
+        step: 0.01,
+        default: 0.5,
+        help: "0 rests against the heel, 0.5 centers the bar, and 1 rests against the toe. Moving it keeps the full width on the boot.",
+      },
+      {
+        kind: "knob",
+        key: "width",
+        label: "Width",
+        min: 0,
+        max: 1,
+        step: 0.01,
+        default: 0.5,
+        help: "The fraction of each side that lights up. 0 is off, 0.5 covers half of each side, and 1 fills the ring. Follow Audio level for a volume bar.",
+      },
     ],
   },
 };

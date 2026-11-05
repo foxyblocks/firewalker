@@ -4,6 +4,9 @@
 // This is the firmware's end of the designer's compile.ts, and both read the layout in
 // specs/recipe-engine-spec.md. The field order and ranges come from generated/recipe_tables.h, so
 // there's no second copy of them here.
+// Version 2 appends Band and AudioLevel. decodeRecipe passes the stored version
+// through the layer and binding readers, so version 1 bytes keep their meaning
+// and a mislabeled file cannot use version 2 fields.
 //
 // Pure and Arduino-free, so test/test_recipe_decode can run it off-hardware.
 //
@@ -58,6 +61,11 @@ enum class RecipeDecodeResult : uint8_t {
 
 static_assert(RECIPE_MAX_NAME_LENGTH == PATTERN_NAME_MAX_LENGTH, "A recipe's name has to fit a pattern name");
 
+// New firmware reads stored version 1 recipes as well as version 2 audio recipes.
+inline bool recipeVersionSupported(uint8_t version) {
+  return version >= RECIPE_MIN_VERSION && version <= RECIPE_VERSION;
+}
+
 // Names that off and the firmware's own patterns keep for themselves.
 inline bool recipeNameReserved(const char* name) {
   for (const char* reserved : RECIPE_RESERVED_NAMES) {
@@ -108,9 +116,9 @@ inline uint16_t recipeClampMs(uint16_t value, uint16_t low, uint16_t high) {
 }
 
 // Reads a bound knob: its source, its two ends, and for a wave or stomp fade, its time.
-inline bool readRecipeBinding(RecipeReader& reader, const RecipeFieldInfo& field, RecipeKnob& knob) {
+inline bool readRecipeBinding(RecipeReader& reader, const RecipeFieldInfo& field, RecipeKnob& knob, uint8_t version) {
   const uint8_t source = reader.u8();
-  if (source > (uint8_t)RecipeSource::Wave) return false;
+  if (source > (uint8_t)RecipeSource::AudioLevel || (version == 1 && source == (uint8_t)RecipeSource::AudioLevel)) return false;
   knob.bound = true;
   knob.source = (RecipeSource)source;
   knob.min = reader.scaled(field);
@@ -124,9 +132,9 @@ inline bool readRecipeBinding(RecipeReader& reader, const RecipeFieldInfo& field
   return true;
 }
 
-inline bool readRecipeLayer(RecipeReader& reader, RecipeLayer& layer) {
+inline bool readRecipeLayer(RecipeReader& reader, RecipeLayer& layer, uint8_t version) {
   const uint8_t type = reader.u8();
-  if (type > (uint8_t)RecipeLayerType::Chase) return false;
+  if (type > (uint8_t)RecipeLayerType::Band || (version == 1 && type == (uint8_t)RecipeLayerType::Band)) return false;
   layer.type = (RecipeLayerType)type;
   const uint8_t boundMask = reader.u8();
 
@@ -163,7 +171,7 @@ inline bool readRecipeLayer(RecipeReader& reader, RecipeLayer& layer) {
       case RecipeFieldKind::Knob: {
         RecipeKnob& knob = layer.knobs[field.slot];
         if (boundMask & (1u << knobIndex)) {
-          if (!readRecipeBinding(reader, field, knob)) return false;
+          if (!readRecipeBinding(reader, field, knob, version)) return false;
         } else {
           knob.bound = false;
           knob.source = RecipeSource::Tilt;
@@ -193,7 +201,8 @@ inline RecipeDecodeResult decodeRecipe(const uint8_t* bytes, size_t size, Recipe
   if (stored != settingsCrc(bytes, bodySize)) return RecipeDecodeResult::BadChecksum;
 
   RecipeReader reader(bytes, bodySize);
-  if (reader.u8() != RECIPE_VERSION) return RecipeDecodeResult::BadVersion;
+  const uint8_t version = reader.u8();
+  if (!recipeVersionSupported(version)) return RecipeDecodeResult::BadVersion;
 
   const uint8_t nameLength = reader.u8();
   if (nameLength == 0 || nameLength > RECIPE_MAX_NAME_LENGTH) return RecipeDecodeResult::BadRecipe;
@@ -204,7 +213,7 @@ inline RecipeDecodeResult decodeRecipe(const uint8_t* bytes, size_t size, Recipe
   out.layerCount = reader.u8();
   if (out.layerCount == 0 || out.layerCount > RECIPE_MAX_LAYERS) return RecipeDecodeResult::BadRecipe;
   for (uint8_t l = 0; l < out.layerCount; l++) {
-    if (!readRecipeLayer(reader, out.layers[l])) return RecipeDecodeResult::BadRecipe;
+    if (!readRecipeLayer(reader, out.layers[l], version)) return RecipeDecodeResult::BadRecipe;
   }
 
   if (reader.failed || !reader.atEnd()) return RecipeDecodeResult::BadRecipe;

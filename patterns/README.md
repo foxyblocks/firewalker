@@ -10,10 +10,12 @@ Pattern recipes worth keeping, one `<name>.json` each. The designer in
 | `fire-stomp` | Yes | The native fire-trail as a recipe: fire from whichever end is down to the other |
 | `comet` | Yes | Two neon comets circling faster the more you tilt |
 | `lava-pour` | No | Lava colors crawling around the ring, pooled hard toward the low end, with sparks |
+| `bass-ripple` | No | A rainbow volume bar on both sides, sliding downhill with tilt and flashing from 70% to 100% brightness on a stomp |
 | `starfield` | No | A dim sky with twinkling stars, and an ice-blue flash on a stomp |
 
 [`built-ins.txt`](built-ins.txt) lists the recipes compiled into the firmware, so every boot ships with
 them. The rest reach a boot by upload.
+
 
 Edit them in the designer rather than by hand. It checks every value and writes the file
 the same way each time, so diffs stay small. `bun run test` in `designer/` checks every file

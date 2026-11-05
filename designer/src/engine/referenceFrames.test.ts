@@ -85,6 +85,7 @@ describe("reference frames", () => {
     const bytes = buildReferenceFiles(RECIPES).get("inputs.bin")!;
     const view = new DataView(bytes.buffer);
     expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe("FWRI");
+    expect(view.getUint16(4, true)).toBe(2);
     expect(view.getUint16(6, true)).toBe(REFERENCE_FRAMES);
     inputs.forEach((input, i) => {
       const at = 8 + i * 12;
@@ -92,6 +93,7 @@ describe("reference frames", () => {
       expect(view.getFloat32(at + 4, true)).toBe(input.stompStrength);
       expect(view.getUint16(at + 8, true)).toBe(input.dt);
       expect(view.getUint8(at + 10)).toBe(input.stomp ? 1 : 0);
+      expect(Math.fround(view.getUint8(at + 11) / 255)).toBe(input.audioLevel);
     });
   });
 

@@ -21,7 +21,7 @@ const __FlashStringHelper* RecipePattern::name() const {
 void RecipePattern::enter() { engine_.start(&recipe_, stripLayout()); }
 
 void RecipePattern::update(const PatternInput& in) {
-  engine_.update(in.tiltFwd, in.stomp, in.stompStrength, in.dt);
+  engine_.update(in.tiltFwd, in.stomp, in.stompStrength, in.dt, in.audioLevel);
   const uint16_t count = engine_.pixelCount();
   for (uint16_t i = 0; i < count; i++) {
     strip.setPixelColor(i, engine_.frameByte(i, 0), engine_.frameByte(i, 1), engine_.frameByte(i, 2));

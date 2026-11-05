@@ -1,8 +1,27 @@
 {
   "format": 1,
+  "inputFormat": 2,
   "frames": 400,
   "checkEvery": 16,
   "cases": [
+    {
+      "file": "band--bench.bin",
+      "recipe": "recipes/band.json",
+      "compiled": "compiled/band.bin",
+      "layout": "bench",
+      "count": 160,
+      "toe": 52,
+      "heel": 132
+    },
+    {
+      "file": "band--heel-first.bin",
+      "recipe": "recipes/band.json",
+      "compiled": "compiled/band.bin",
+      "layout": "heel-first",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
     {
       "file": "blends--bench.bin",
       "recipe": "recipes/blends.json",

@@ -42,6 +42,13 @@ function withCrc(body: number[]): Uint8Array {
 const oneLayer = (...layer: number[]) => withCrc([RECIPE_VERSION, 2, 97, 98, 1, ...layer]);
 
 describe("compileRecipe", () => {
+  it("uses version 2 for Band or audio, and keeps older effects on version 1", () => {
+    const audioFill = { ...newLayer("fill"), brightness: { source: "audioLevel", min: 0, max: 1 } } as Layer;
+    expect(compiled(recipe("ab", newLayer("fill")))[0]).toBe(1);
+    expect(compiled(recipe("ab", newLayer("band")))[0]).toBe(2);
+    expect(compiled(recipe("ab", audioFill))[0]).toBe(2);
+    expect(compiled(recipe("ab", newLayer("fill"), { ...audioFill, enabled: false }))[0]).toBe(1);
+  });
   it("lays out a recipe's start as the spec says", () => {
     const comet = KEPT.find((r) => r.name === "comet")!;
     const hex = Buffer.from(compiled(comet)).toString("hex");
@@ -113,6 +120,14 @@ describe("compileRecipe", () => {
 });
 
 describe("decodeRecipe", () => {
+  it("refuses Band or audio bytes mislabeled as version 1", () => {
+    const audioFill = { ...newLayer("fill"), brightness: { source: "audioLevel", min: 0, max: 1 } } as Layer;
+    for (const layer of [newLayer("band"), audioFill]) {
+      const body = Array.from(compiled(recipe("ab", layer)).slice(0, -4));
+      body[0] = 1;
+      expect(decodeRecipe(withCrc(body))).toMatchObject({ ok: false, error: expect.stringContaining("version 1") });
+    }
+  });
   it.each([...KEPT, ...TEST_RECIPES].map((r) => [r.name, r] as const))("reads %s back to nearly the same recipe", (_, source) => {
     const result = decodeRecipe(compiled(source));
     expect(result.ok).toBe(true);
