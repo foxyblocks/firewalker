@@ -6,17 +6,17 @@ watch a simulated boot react as you tilt it and stomp. Recipes save to the repo'
 [`docs/recipe-format.md`](../docs/recipe-format.md), and why it works this way is in
 [ADR-0005](../docs/adr/0005-pattern-recipes.md).
 
-Boots can't run recipes yet. Sending one to a boot comes with the firmware's recipe engine.
+**Send to boot** tries a pattern on a real boot, with no firmware build.
 
 ## Run it
 
 ```bash
+cd app && bun install && cd ..   # Send to boot reuses the iPhone app's connection code
 cd designer
 bun install
 bun run dev          # http://localhost:5174
 bun run test         # engine, format, storage, and geometry tests, and every file in patterns/
 bun run typecheck
-bun run reference-frames   # rewrites the firmware engine's reference frames
 ```
 
 It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
@@ -40,7 +40,13 @@ It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
   move in jumps and very dim colors can shift or go black. It keeps full white at full on
   your screen, so it shows those lost steps rather than how dim the boot really is. Pattern
   list thumbnails don't use it.
+- **Send to boot** connects to boots over USB or Bluetooth, and sends the pattern as it is right
+  now, with no need to save first. It works in Chrome and Arc, and it lists and deletes what's on a
+  boot too. A boot takes one connection at a time, so disconnect the iPhone app or `pio device
+  monitor` first. Add `?boot=fake` to the URL to try it with pretend boots.
 - **Undo** and **Redo** with ⌘Z and ⇧⌘Z. **Save** with ⌘S.
+- **The size at the top**, such as `103 / 254 bytes`, is what a recipe takes on a boot. A draft
+  can go over while you work, but it turns red and can't be saved until it fits.
 
 ## Where recipes are kept
 
@@ -55,6 +61,11 @@ moved on, you choose whether to overwrite it with your draft or drop the draft a
 file. Drafts live in this browser rather than in a checkout, so a draft from one branch also
 shows up on another, and this check covers that too.
 
+Recipes on `patterns/built-ins.txt` are built into the firmware, and they show a "Built in" label.
+Saving one also updates `include/generated/recipe_builtins.h`, so commit the two together. Renaming
+one updates the list, and deleting one takes it off. To add or remove a built-in, edit that file and
+run `bun run build-recipes`.
+
 The dev server only listens on localhost. It only writes `.json` files with valid recipe
 names, inside the patterns folder, and checks each recipe before writing it. To try things
 without touching the repo, point it somewhere else:
@@ -66,20 +77,41 @@ PATTERNS_DIR=/tmp/scratch-patterns bun run dev
 A built copy (`bun run build`) has no dev server, so it works from drafts, download, and
 import only. Save and Delete stay off, and a banner says why.
 
+## If a boot won't connect
+
+A USB port can only be open in one program at a time. When Send to boot can't open one, it names what has it
+open. For `./cli`, `pio device monitor`, a PlatformIO upload, miniterm, or a pyserial script, **Free it** asks that
+program to close and connects again. If that leaves its terminal acting oddly, type `reset` there. A browser or
+anything else you close yourself, because it could be doing something you'd lose. The same list from a terminal:
+
+```bash
+lsof /dev/cu.usbmodem*
+```
+
+A boot also takes one Bluetooth connection at a time, and it disappears from the browser's picker while it has
+one. It's usually the iPhone app, so close the app, or connect over USB. To check, `status` over USB reports
+`"ble":true` while something's connected over Bluetooth, but a boot can't say what.
+
 ## How the simulation works
 
 - `src/recipe/`: the format. `spec.ts` has every layer's fields, ranges, and defaults, which
   the validator and the settings panel both read. `serialize.ts` writes files the same way
-  every time.
+  every time. `compile.ts` turns a recipe into the binary a boot runs. `generateTables.ts` gives
+  the firmware its copy of the format, and `bun run build-recipes` rewrites that after a format
+  change.
 - `src/engine/`: runs a recipe one 16 ms frame at a time, like the firmware's patterns.
   `strip.ts` is a port of `include/firewalker_strip_map.h`, and `output.ts` is a port of how
   the strip driver applies brightness. `referenceFrames.ts` saves what this engine draws for a
-  fixed script of motion to `test/fixtures/recipe-frames/`, so the firmware's engine can be
-  checked against it. Change what the engine draws, or a recipe in `patterns/`, and `bun run
-  reference-frames` rewrites those files.
+  fixed script of motion to `test/fixtures/recipe-frames/`, using only the test recipes in that
+  folder, so the firmware's engine can be checked against it. Nothing in `patterns/` affects these
+  files. They only change with the engine or those test recipes, and `bun run reference-frames`
+  rewrites them.
 - `src/sim/`: the boot drawings and the frame loop. The drawings assume the controller, and
   so pixel 0, is on the boot's outer side.
-- `server/`: the dev server's `/api/patterns` endpoints.
+- `src/boot/`: connecting to boots and sending recipes. It reuses the iPhone app's Bluetooth and USB
+  code from `app/`.
+- `server/`: the dev server's `/api/patterns` endpoints, and `builtins.ts`, which keeps the
+  firmware's built-in recipes in step with `patterns/built-ins.txt`.
 
 The screen shows LEDs brighter than the raw numbers, because LEDs are linear and screens
 aren't (a 1/2.2 gamma). Colors on a real strip will look a little different, especially

@@ -15,9 +15,9 @@ tuned before any boot sees it. Recipes live in three places:
 - **Keepers**: `patterns/<name>.json` in this repo, written by the designer's Save while its
   dev server runs.
 
-Phase 1, this decision's first change, is the format, the designer, and starter recipes.
-Next come a C++ recipe engine in the firmware, commands that upload a recipe and store it on
-the boot, and then editing in the iPhone app.
+The designer compiles a recipe into a small binary, and that's all a boot ever sees. The firmware
+has a C++ recipe engine and commands that upload a recipe and store it on the boot.
+`specs/recipe-engine-spec.md` is the plan for that part. Editing recipes in the iPhone app comes later.
 
 ## Considered options
 
@@ -39,10 +39,13 @@ the boot, and then editing in the iPhone app.
 
 ## Consequences
 
-- Built-in patterns stay in C++. `rainbow-pool` and `fire-stomp` are recipe versions of flow
-  and fire-trail, for comparing the two. Whether keepers in `patterns/` also get built into
-  the firmware is still open.
-- The format is versioned, and a reader refuses a version it doesn't know.
+- Flow and fire-trail stay in C++ for now. `rainbow-pool` and `fire-stomp` are recipe versions of
+  them, for comparing the two on a real boot before retiring either.
+- Being in `patterns/` means a recipe is kept in the repo. `patterns/built-ins.txt` chooses which ones
+  also get built into the firmware, so every boot ships with them: `rainbow-pool`, `fire-stomp`, and
+  `comet`. The others reach a boot by upload.
+- The format is versioned, and a reader refuses a version it doesn't know. Version 1 is frozen, so
+  changing a field, an option, or a limit means version 2.
 - Recipes see tilt from -1 to 1, not degrees, so a threshold like fire-trail's flat range
   (`FIRE_TRAIL_FLAT_DEG`) is a fraction of the calibrated range in a recipe.
 - The designer has to keep up with the firmware's strip map and patterns. Its strip math is

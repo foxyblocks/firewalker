@@ -5,11 +5,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { navigate, useLibrary } from "./App";
+import { BootPanel } from "./BootPanel";
 import { NameDialog } from "./dialogs";
 import { Inspector } from "./Inspector";
 import { LayerList } from "./LayerList";
 import { download } from "./PatternsScreen";
 import { SimulatorPanel } from "./SimulatorPanel";
+import { MAX_COMPILED_BYTES } from "../recipe/compile";
 import { recipeToJson } from "../recipe/serialize";
 import { newLayer } from "../recipe/spec";
 import { MAX_DESCRIPTION_LENGTH, type Layer, type LayerType, type Recipe } from "../recipe/types";
@@ -27,6 +29,7 @@ export function DesignScreen({ name }: { name: string }) {
   const [renaming, setRenaming] = useState(false);
   const [saveErrors, setSaveErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [bootPanelOpen, setBootPanelOpen] = useState(false);
   const history = useRef({ past: [] as Recipe[], future: [] as Recipe[], lastEdit: 0 });
   const [, setHistoryVersion] = useState(0);
 
@@ -140,6 +143,19 @@ export function DesignScreen({ name }: { name: string }) {
             Rename
           </button>
           <span className={`badge ${entry.status}`}>{statusText}</span>
+          {entry.builtIn && (
+            <span className="badge built-in" title="Listed in patterns/built-ins.txt, so every boot ships with it">
+              Built in
+            </span>
+          )}
+          {entry.compiledSize !== null && (
+            <span
+              className={entry.compiledSize > MAX_COMPILED_BYTES ? "size-meter over" : "size-meter"}
+              title="What this recipe takes on a boot, which stores each one in a single flash entry"
+            >
+              {entry.compiledSize} / {MAX_COMPILED_BYTES} bytes
+            </span>
+          )}
         </div>
         <div className="topbar-actions">
           <button type="button" className="button" onClick={undo} disabled={history.current.past.length === 0} title="Undo (⌘Z)">
@@ -150,6 +166,9 @@ export function DesignScreen({ name }: { name: string }) {
           </button>
           <button type="button" className="button" onClick={() => download(recipe)}>
             Download
+          </button>
+          <button type="button" className={bootPanelOpen ? "button on" : "button"} aria-expanded={bootPanelOpen} onClick={() => setBootPanelOpen(!bootPanelOpen)}>
+            Send to boot
           </button>
           {entry.status === "changed" && (
             <button
@@ -180,6 +199,8 @@ export function DesignScreen({ name }: { name: string }) {
           </button>
         </div>
       </header>
+
+      {bootPanelOpen && <BootPanel recipe={recipe} canSend={entry.problems.length === 0} onClose={() => setBootPanelOpen(false)} />}
 
       {problems.length > 0 && (
         <div className="banner bad">

@@ -84,25 +84,129 @@ static void test_every_command_fits_a_default_ble_write() {
   for (const char* command : longest) {
     TEST_ASSERT_TRUE(strlen(command) <= 20);
   }
-  for (PatternId pattern : SELECTABLE_PATTERNS) {
-    TEST_ASSERT_TRUE(strlen(patternName(pattern)) <= 12);
-  }
+  // `pattern <name>` with the longest legal name fits too.
+  TEST_ASSERT_TRUE(strlen("pattern ") + PATTERN_NAME_MAX_LENGTH <= 20);
 }
 
 static void test_patterns_line_lists_what_can_be_selected() {
   char line[REMOTE_LINE_MAX];
-  formatPatterns(line, sizeof(line));
-  TEST_ASSERT_EQUAL_STRING("{\"t\":\"patterns\",\"list\":[\"flow\",\"fire-trail\"]}", line);
+  const char* names[] = {"flow", "fire-trail", "comet"};
+  formatPatterns(line, sizeof(line), names, 3);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"patterns\",\"list\":[\"flow\",\"fire-trail\",\"comet\"]}", line);
 }
 
-static void test_pattern_accepts_each_stable_name() {
-  TEST_ASSERT_EQUAL(PatternId::Flow, parseCommand("pattern flow").pattern);
-  TEST_ASSERT_EQUAL(PatternId::FireTrail, parseCommand("pattern fire-trail").pattern);
-  TEST_ASSERT_EQUAL(PatternId::Off, parseCommand("pattern off").pattern);
+static void test_the_longest_patterns_line_fits_the_line_buffer() {
+  const char* names[32];
+  for (const char*& name : names) name = "abcdefghijkl";
+  char line[REMOTE_LINE_MAX];
+  formatPatterns(line, sizeof(line), names, 32);
+  TEST_ASSERT_TRUE(strlen(line) < sizeof(line) - 1);
+  TEST_ASSERT_EQUAL_STRING("]}", line + strlen(line) - 2);
+}
 
-  const Command unknown = parseCommand("pattern sparkle");
-  TEST_ASSERT_EQUAL(CommandType::Invalid, unknown.type);
-  TEST_ASSERT_EQUAL_STRING("unknown-pattern", unknown.error);
+static void test_pattern_takes_any_legally_spelled_name() {
+  const char* const names[] = {"flow", "fire-trail", "off", "sparkle", "abcdefghijkl"};
+  for (const char* name : names) {
+    char line[REMOTE_COMMAND_MAX];
+    snprintf(line, sizeof(line), "pattern %s", name);
+    const Command command = parseCommand(line);
+    TEST_ASSERT_EQUAL(CommandType::Pattern, command.type);
+    TEST_ASSERT_EQUAL_STRING(name, command.pattern);
+  }
+}
+
+static void test_pattern_refuses_a_name_no_pattern_could_have() {
+  const char* const lines[] = {"pattern Flow", "pattern 9lives", "pattern abcdefghijklm", "pattern ../etc"};
+  for (const char* line : lines) {
+    const Command command = parseCommand(line);
+    TEST_ASSERT_EQUAL(CommandType::Invalid, command.type);
+    TEST_ASSERT_EQUAL_STRING("unknown-pattern", command.error);
+  }
+}
+
+static void test_recipes_takes_no_arguments() {
+  TEST_ASSERT_EQUAL(CommandType::Recipes, parseCommand("recipes").type);
+  TEST_ASSERT_EQUAL_STRING("too-many-arguments", parseCommand("recipes now").error);
+}
+
+static void test_recipe_info_and_delete_take_a_name() {
+  const Command info = parseCommand("recipe info comet");
+  TEST_ASSERT_EQUAL(CommandType::RecipeInfo, info.type);
+  TEST_ASSERT_EQUAL_STRING("comet", info.pattern);
+  const Command remove = parseCommand("recipe delete comet");
+  TEST_ASSERT_EQUAL(CommandType::RecipeDelete, remove.type);
+  TEST_ASSERT_EQUAL_STRING("comet", remove.pattern);
+
+  TEST_ASSERT_EQUAL_STRING("expected-one-argument", parseCommand("recipe info").error);
+  TEST_ASSERT_EQUAL_STRING("expected-one-argument", parseCommand("recipe delete a b").error);
+  TEST_ASSERT_EQUAL_STRING("bad-name", parseCommand("recipe delete Comet").error);
+}
+
+static void test_recipe_begin_takes_a_name_and_a_size() {
+  const Command begin = parseCommand("recipe begin abcdefghijkl 254");
+  TEST_ASSERT_EQUAL(CommandType::RecipeBegin, begin.type);
+  TEST_ASSERT_EQUAL_STRING("abcdefghijkl", begin.pattern);
+  TEST_ASSERT_EQUAL_INT32(254, begin.value);
+
+  TEST_ASSERT_EQUAL_STRING("expected-name-and-size", parseCommand("recipe begin comet").error);
+  TEST_ASSERT_EQUAL_STRING("bad-name", parseCommand("recipe begin Comet 74").error);
+  TEST_ASSERT_EQUAL_STRING("expected-number", parseCommand("recipe begin comet many").error);
+  TEST_ASSERT_EQUAL_STRING("expected-number", parseCommand("recipe begin comet -4").error);
+}
+
+static void test_recipe_data_takes_an_offset_and_hex() {
+  const char* longest = "recipe data 240 0123456789abcdef0123456789abcd";
+  TEST_ASSERT_TRUE(strlen(longest) < REMOTE_COMMAND_MAX);
+  const Command data = parseCommand(longest);
+  TEST_ASSERT_EQUAL(CommandType::RecipeData, data.type);
+  TEST_ASSERT_EQUAL_INT32(240, data.value);
+  TEST_ASSERT_EQUAL_STRING("0123456789abcdef0123456789abcd", data.hex);
+
+  TEST_ASSERT_EQUAL_STRING("expected-offset-and-hex", parseCommand("recipe data 0").error);
+  TEST_ASSERT_EQUAL_STRING("expected-number", parseCommand("recipe data x 00").error);
+  TEST_ASSERT_EQUAL_STRING("bad-hex", parseCommand("recipe data 0 0123456789abcdef0123456789abcdef").error);
+}
+
+static void test_recipe_end_and_cancel_take_nothing() {
+  TEST_ASSERT_EQUAL(CommandType::RecipeEnd, parseCommand("recipe end").type);
+  TEST_ASSERT_EQUAL(CommandType::RecipeCancel, parseCommand("recipe cancel").type);
+  TEST_ASSERT_EQUAL_STRING("too-many-arguments", parseCommand("recipe end now").error);
+  TEST_ASSERT_EQUAL_STRING("expected-recipe-command", parseCommand("recipe").error);
+  TEST_ASSERT_EQUAL_STRING("unknown-recipe-command", parseCommand("recipe burn").error);
+  TEST_ASSERT_EQUAL_STRING("too-many-arguments", parseCommand("recipe data 0 00 extra").error);
+}
+
+static void test_recipe_replies_are_well_formed() {
+  char line[REMOTE_LINE_MAX];
+  formatRecipeAck(line, sizeof(line), true, nullptr, 15);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"ack\",\"cmd\":\"recipe\",\"ok\":true,\"next\":15}", line);
+  formatRecipeAck(line, sizeof(line), false, "wrong-offset", 30);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"ack\",\"cmd\":\"recipe\",\"ok\":false,\"error\":\"wrong-offset\",\"next\":30}", line);
+  formatRecipeAck(line, sizeof(line), true, nullptr, -1);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"ack\",\"cmd\":\"recipe\",\"ok\":true}", line);
+
+  UploadedRecipe slots[16] = {};
+  formatRecipes(line, sizeof(line), 1, slots, 16);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"recipes\",\"versions\":[1],\"slots\":16,\"free\":16,\"list\":[]}", line);
+  slots[3].used = true;
+  copyPatternName(slots[3].name, "comet");
+  slots[3].size = 74;
+  slots[3].crc = 0xCB75D224u;
+  formatRecipes(line, sizeof(line), 1, slots, 16);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"recipes\",\"versions\":[1],\"slots\":16,\"free\":15,\"list\":[\"comet\"]}", line);
+  formatRecipeInfo(line, sizeof(line), slots[3]);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"recipe\",\"name\":\"comet\",\"bytes\":74,\"crc\":\"cb75d224\"}", line);
+}
+
+static void test_the_longest_recipes_line_fits() {
+  UploadedRecipe slots[16] = {};
+  for (UploadedRecipe& slot : slots) {
+    slot.used = true;
+    copyPatternName(slot.name, "abcdefghijkl");
+  }
+  char line[REMOTE_LINE_MAX];
+  formatRecipes(line, sizeof(line), 1, slots, 16);
+  TEST_ASSERT_EQUAL_STRING("]}", line + strlen(line) - 2);
 }
 
 static void test_power_and_debug_take_on_or_off() {
@@ -192,8 +296,8 @@ static void test_capture_failures_have_reasons() {
 static StatusReport sampleStatus() {
   StatusReport report{};
   report.id = "A1B2";
-  report.pattern = PatternId::Off;
-  report.lit = PatternId::FireTrail;
+  report.pattern = "off";
+  report.lit = "fire-trail";
   report.brightness = 32;
   report.maxBrightness = 64;
   report.sensorReady = true;
@@ -218,7 +322,7 @@ static void test_status_reports_the_actual_state() {
   char line[REMOTE_LINE_MAX];
   formatStatus(line, sizeof(line), sampleStatus());
   TEST_ASSERT_EQUAL_STRING(
-      "{\"t\":\"status\",\"proto\":2,\"id\":\"A1B2\",\"pattern\":\"off\",\"lit\":\"fire-trail\","
+      "{\"t\":\"status\",\"proto\":3,\"id\":\"A1B2\",\"pattern\":\"off\",\"lit\":\"fire-trail\","
       "\"brightness\":32,\"maxBrightness\":64,\"sensor\":\"ok\",\"tilt\":-0.25,\"calibrated\":true,"
       "\"neutralDeg\":4.50,\"heelDeg\":null,\"toeDeg\":34.00,\"calibration\":\"ok\",\"saved\":true,"
       "\"saveFailed\":false,\"saves\":3,\"debug\":false,\"ble\":true,\"leds\":110,\"maxLeds\":160,"
@@ -229,7 +333,8 @@ static void test_status_reports_the_actual_state() {
 static void test_largest_status_fits_the_line_buffer() {
   StatusReport report = sampleStatus();
   report.id = "FFFFFFFF";
-  report.pattern = PatternId::FireTrail;
+  report.pattern = "abcdefghijkl";
+  report.lit = "abcdefghijkl";
   report.brightness = 255;
   report.maxBrightness = 255;
   report.sensorReady = false;
@@ -263,10 +368,10 @@ static void test_formatters_truncate_instead_of_overflowing() {
 
 static void test_motion_line() {
   char line[REMOTE_LINE_MAX];
-  formatMotion(line, sizeof(line), 0.5f, 15.0f, 9.81f, 25.5f, 0.25f, true, 0.75f);
+  formatMotion(line, sizeof(line), 0.5f, 15.0f, 9.81f, 25.5f, 0.25f, true, 0.75f, 7321);
   TEST_ASSERT_EQUAL_STRING(
       "{\"t\":\"motion\",\"tilt\":0.50,\"angleDeg\":15.00,\"accel\":9.81,\"accelPeak\":25.50,"
-      "\"gyro\":0.25,\"stomp\":true,\"strength\":0.75}",
+      "\"gyro\":0.25,\"stomp\":true,\"strength\":0.75,\"frameUs\":7321}",
       line);
 }
 
@@ -280,7 +385,16 @@ int main(int, char**) {
   RUN_TEST(test_strip_commands_ack_as_strip);
   RUN_TEST(test_every_command_fits_a_default_ble_write);
   RUN_TEST(test_patterns_line_lists_what_can_be_selected);
-  RUN_TEST(test_pattern_accepts_each_stable_name);
+  RUN_TEST(test_the_longest_patterns_line_fits_the_line_buffer);
+  RUN_TEST(test_pattern_takes_any_legally_spelled_name);
+  RUN_TEST(test_pattern_refuses_a_name_no_pattern_could_have);
+  RUN_TEST(test_recipes_takes_no_arguments);
+  RUN_TEST(test_recipe_info_and_delete_take_a_name);
+  RUN_TEST(test_recipe_begin_takes_a_name_and_a_size);
+  RUN_TEST(test_recipe_data_takes_an_offset_and_hex);
+  RUN_TEST(test_recipe_end_and_cancel_take_nothing);
+  RUN_TEST(test_recipe_replies_are_well_formed);
+  RUN_TEST(test_the_longest_recipes_line_fits);
   RUN_TEST(test_power_and_debug_take_on_or_off);
   RUN_TEST(test_brightness_parses_a_whole_byte_value);
   RUN_TEST(test_line_endings_and_extra_spaces_are_ignored);

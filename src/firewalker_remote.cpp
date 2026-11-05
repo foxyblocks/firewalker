@@ -33,7 +33,9 @@ static const char* loadDeviceId() {
 static char usbLine[REMOTE_COMMAND_MAX + 1];
 static size_t usbLength = 0;
 
-// Collects serial bytes until a line ends. Returns true when `usbLine` holds one.
+// Collects serial bytes until a line ends. Returns true when `usbLine` holds one. The core buffers only
+// 32 received bytes until something reads them, and the main loop can be busy for longer than those take to
+// arrive, so a longer line can lose characters. docs/remote-protocol.md tells clients to stay under that.
 static bool readUsbLine() {
   while (Serial.available()) {
     const int byte = Serial.read();
