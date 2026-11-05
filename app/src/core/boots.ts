@@ -60,6 +60,8 @@ export interface RemoteView {
    * caps them all. Undefined when no chosen boot's firmware has a cap, which hides the toggle.
    */
   capped?: boolean;
+  /** The lowest soft cap among the chosen boots that have one, for marking the slider past it. */
+  capBrightness?: number;
   /** A pattern just chosen that some boots can't run. */
   needsUpdate?: { pattern: string; sides: Side[] };
   offline: Side[];
@@ -386,6 +388,10 @@ export class BootsStore {
     }));
 
     const first = online[0]?.state;
+    const capLevels = online.flatMap(({ state }) => {
+      const level = state.status!.capBrightness;
+      return level === undefined ? [] : [level];
+    });
     const caps = online.flatMap(({ state }) => {
       const capped = state.pending.capped ?? state.status!.capped;
       return capped === undefined ? [] : [capped];
@@ -397,6 +403,7 @@ export class BootsStore {
       brightness: first?.pending.brightness ?? first?.status?.brightness ?? 0,
       maxBrightness: online.length > 0 ? Math.min(...online.map(({ state }) => state.status!.maxBrightness)) : 0,
       capped: caps.length > 0 ? caps.every((capped) => capped) : undefined,
+      capBrightness: capLevels.length > 0 ? Math.min(...capLevels) : undefined,
       needsUpdate: this.needsUpdate,
       offline: sidesWhere((state) => state.link !== "online" && state.link !== "needs-access"),
       accessLost: sidesWhere((state) => state.link === "needs-access"),

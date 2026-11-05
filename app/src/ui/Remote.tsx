@@ -7,14 +7,18 @@
  *
  * The brightness percent is a share of what the boots accept right now, so it reads 100%
  * at the soft cap while the cap is on, and the same level reads 38% with it off (96 of 255).
- * The cap's toggle sits beside the percent, and turning it off shows a warning, because a
- * full-white strip can then draw more than USB supplies. Calibrate lives on the Boots
+ * The cap's toggle sits beside the percent. With the cap off, the slider marks the levels past
+ * the cap, because a full-white strip can then draw more than USB supplies, and the mark's
+ * warning sign says so on a tap. Calibrate lives on the Boots
  * screen, so the Boots link carries a dot while a chosen boot isn't calibrated.
  */
 
 import { SIDE_NAMES, type BootsStore, type PatternTile, type RemoteView, type Side, type Target } from "../core/boots";
 import { patternDisplay } from "../core/patternNames";
-import { joinNames, LinkDot, PixelSlider, SideBadge, Toggle } from "./parts";
+import { joinNames, LinkDot, PixelSlider, SideBadge, Toggle, type SliderWarning } from "./parts";
+
+const CAP_OFF_MESSAGE =
+  "Past this line, full white can draw more than USB gives, about 1 A. Use a 5 V supply, or turn the cap back on.";
 
 export function Remote({
   store,
@@ -28,6 +32,12 @@ export function Remote({
   const view = store.view();
   const names = (sides: Side[]) => joinNames(sides.map((side) => store.displayName(side)));
   const percent = view.maxBrightness > 0 ? Math.round((view.brightness / view.maxBrightness) * 100) : 0;
+  // Shown while any chosen boot is uncapped. When another chosen boot still has its cap on, the
+  // slider stops at that cap, so there's nothing past it to mark.
+  const capWarning: SliderWarning | undefined =
+    view.capped === false && view.capBrightness !== undefined
+      ? { above: view.capBrightness, label: "About the brightness cap", message: CAP_OFF_MESSAGE }
+      : undefined;
 
   return (
     <>
@@ -97,12 +107,8 @@ export function Remote({
           onStart={() => store.setDragging(true)}
           onChange={(level) => store.setBrightness(level)}
           onEnd={() => store.setDragging(false)}
+          warning={capWarning}
         />
-        {view.capped === false && (
-          <p className="cap-warning" role="status">
-            Cap off. Full white can draw about 1 A, more than USB gives, so use a 5 V supply.
-          </p>
-        )}
         <div className="dock-row">
           <div className="dock-card">
             <span className="card-name">Lights {view.on ? "on" : "off"}</span>

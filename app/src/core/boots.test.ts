@@ -371,6 +371,7 @@ describe("the soft brightness cap", () => {
     const { left, right, store } = await pair(CAP, CAP);
     expect(store.view().capped).toBe(true);
     expect(store.view().maxBrightness).toBe(96);
+    expect(store.view().capBrightness).toBe(96);
 
     store.setCap(false);
     expect(store.view().capped).toBe(false);
@@ -395,6 +396,7 @@ describe("the soft brightness cap", () => {
     const { right, store } = await pair(CAP, {});
     store.setTarget("right");
     expect(store.view().capped).toBeUndefined();
+    expect(store.view().capBrightness).toBeUndefined();
 
     store.setTarget("both");
     expect(store.view().capped).toBe(true);

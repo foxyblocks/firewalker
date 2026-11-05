@@ -200,12 +200,6 @@ dd {
   text-transform: uppercase;
 }
 
-.cap-warning {
-  margin-top: 8px;
-  color: var(--wait);
-  font-size: 11.5px;
-}
-
 .link-dot {
   margin-left: 6px;
   vertical-align: middle;
@@ -447,6 +441,98 @@ dd {
 .led-purple {
   --pixel: #a64dff;
   --pixel-glow: rgb(166 77 255 / 75%);
+}
+
+/* ── Slider warnings ─────────────────────────────────────────────────────
+   A slider can mark the levels past a warning, such as brightness over the soft cap while
+   the cap is off (PixelSlider's `warning`). Everything here is the warning yellow. */
+
+.slider-wrap {
+  position: relative;
+}
+
+/* A fine cross-hatch over each pixel past the mark, in a softer mix of the same yellow so the
+   strip still reads as a strip. A lit pixel keeps its own fill under it. */
+.pixel-over {
+  --hatch: color-mix(in srgb, var(--wait) 70%, transparent);
+  background-image:
+    repeating-linear-gradient(45deg, var(--hatch) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(-45deg, var(--hatch) 0 1px, transparent 1px 4px);
+}
+
+/* The line, in the gap before the first pixel past the warning. */
+.strip-mark {
+  flex: none;
+  width: 2px;
+  height: 20px;
+  border-radius: 1px;
+  background: var(--wait);
+  box-shadow: 0 0 6px var(--wait);
+}
+
+/* The sign sits just above the line, at the bottom of a 44-pixel tap area that reaches up into
+   the space beside the slider's label rather than down over its pixels. It stacks over the tip,
+   whose bottom edge overlaps that area, so a second tap anywhere on it still closes the tip. */
+.slider-mark-button {
+  position: absolute;
+  top: -32px;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  transform: translateX(-50%);
+}
+
+.slider-mark-icon {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+.slider-mark-sign {
+  fill: var(--wait);
+}
+
+.slider-mark-glyph {
+  fill: none;
+  stroke: var(--night);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.slider-mark-dot {
+  fill: var(--night);
+}
+
+/* As wide as the slider, so it stays on screen wherever the mark is, with a caret at the mark. */
+.slider-tip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 2;
+  padding: 10px 12px;
+  border: 1px solid var(--wait);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 50%);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.slider-tip::after {
+  position: absolute;
+  top: 100%;
+  left: var(--mark-x);
+  border: 6px solid transparent;
+  border-top-color: var(--wait);
+  content: "";
+  transform: translateX(-50%);
 }
 
 .strip-tilt {
