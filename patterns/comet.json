@@ -1,0 +1,45 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "comet",
+  "description": "Two neon comets circle the boot. The more you tilt, the faster they go.",
+  "layers": [
+    {
+      "type": "fill",
+      "label": "Glow",
+      "enabled": true,
+      "palette": ["#7a00ff", "#ff00c8"],
+      "spread": "ring",
+      "repeat": 0.5,
+      "offset": 0,
+      "scroll": 0,
+      "brightness": 0.12,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "chase",
+      "label": "Comets",
+      "enabled": true,
+      "path": "ring",
+      "palette": ["#ffffff", "#00f0ff", "#7a00ff"],
+      "count": 2,
+      "speed": { "source": "tiltAmount", "min": 40, "max": 220 },
+      "length": 16,
+      "brightness": 1,
+      "blend": "max",
+      "opacity": 1
+    },
+    {
+      "type": "flash",
+      "label": "Stomp",
+      "enabled": true,
+      "trigger": "any",
+      "palette": ["#ff00c8"],
+      "fadeMs": 300,
+      "brightness": 0.8,
+      "blend": "add",
+      "opacity": 1
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "pool",
+  "description": "",
+  "layers": [
+    {
+      "type": "fill",
+      "enabled": true,
+      "palette": ["#00ff80"],
+      "spread": "solid",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "pool",
+      "enabled": true,
+      "baseline": { "source": "wave", "min": 0.2, "max": 0.9, "periodMs": 3000 },
+      "blend": "multiply",
+      "opacity": 1
+    }
+  ]
+}

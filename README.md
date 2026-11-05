@@ -232,3 +232,10 @@ To run it in a browser on this computer, use `./cli web`. It needs [Bun](https:/
 Ctrl-C stops the server. Real boots need Chrome or Arc, because Safari has no Web Bluetooth. It
 always uses port 5173, and stops if something else is using it, because a browser keeps boot
 labels and Bluetooth permissions per port.
+
+## Pattern designer
+
+`designer/` is a web app for designing new patterns as recipes on a computer. It simulates
+the boot from above and from the side, with a tilt slider and a stomp button, and saves
+recipes to [`patterns/`](patterns). Its [README](designer/README.md) covers running it, and
+[`docs/recipe-format.md`](docs/recipe-format.md) is the format. Boots can't run recipes yet.

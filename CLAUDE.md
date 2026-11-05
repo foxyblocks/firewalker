@@ -47,9 +47,14 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
   serves the phone remote.
 - `test/` — host-native Unity tests for the pure logic (`pio test -e native`).
 - `app/` — the Capacitor iPhone remote (React + TypeScript, Bun). See `app/README.md`.
+- `designer/` — the pattern designer: a web app that edits and simulates pattern recipes
+  (React + TypeScript, Bun, port 5174). Its `src/engine/strip.ts` ports
+  `firewalker_strip_map.h`, so a change to the strip map changes both. See `designer/README.md`.
+- `patterns/` — kept pattern recipes, one JSON file each. Format: `docs/recipe-format.md`.
 - `CONTEXT.md` — domain glossary; reuse these terms.
 - `docs/wiring.md`, `docs/power-budget.md` — wiring and current math.
 - `docs/remote-protocol.md` — what the iPhone app and USB console speak.
+- `docs/recipe-format.md` — the pattern recipe format the designer writes.
 - `docs/open-questions.md` — unresolved hardware facts + the mounted-shoe checklist.
 - `docs/adr/` — durable decisions.
 

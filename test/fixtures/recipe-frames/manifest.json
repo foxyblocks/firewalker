@@ -1,0 +1,175 @@
+{
+  "format": 1,
+  "frames": 400,
+  "checkEvery": 16,
+  "cases": [
+    {
+      "file": "comet--bench.bin",
+      "recipe": "patterns/comet.json",
+      "layout": "bench",
+      "count": 160,
+      "toe": 52,
+      "heel": 132
+    },
+    {
+      "file": "comet--3eb5.bin",
+      "recipe": "patterns/comet.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "fire-stomp--bench.bin",
+      "recipe": "patterns/fire-stomp.json",
+      "layout": "bench",
+      "count": 160,
+      "toe": 52,
+      "heel": 132
+    },
+    {
+      "file": "fire-stomp--3eb5.bin",
+      "recipe": "patterns/fire-stomp.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "lava-pour--bench.bin",
+      "recipe": "patterns/lava-pour.json",
+      "layout": "bench",
+      "count": 160,
+      "toe": 52,
+      "heel": 132
+    },
+    {
+      "file": "lava-pour--3eb5.bin",
+      "recipe": "patterns/lava-pour.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "rainbow-pool--bench.bin",
+      "recipe": "patterns/rainbow-pool.json",
+      "layout": "bench",
+      "count": 160,
+      "toe": 52,
+      "heel": 132
+    },
+    {
+      "file": "rainbow-pool--3eb5.bin",
+      "recipe": "patterns/rainbow-pool.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "starfield--bench.bin",
+      "recipe": "patterns/starfield.json",
+      "layout": "bench",
+      "count": 160,
+      "toe": 52,
+      "heel": 132
+    },
+    {
+      "file": "starfield--3eb5.bin",
+      "recipe": "patterns/starfield.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "fill-solid--3eb5.bin",
+      "recipe": "test/fixtures/recipe-frames/recipes/fill-solid.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "fill-ring--3eb5.bin",
+      "recipe": "test/fixtures/recipe-frames/recipes/fill-ring.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "fill-foot--3eb5.bin",
+      "recipe": "test/fixtures/recipe-frames/recipes/fill-foot.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "pool--3eb5.bin",
+      "recipe": "test/fixtures/recipe-frames/recipes/pool.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "trail-point--3eb5.bin",
+      "recipe": "test/fixtures/recipe-frames/recipes/trail-point.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "trail-end--3eb5.bin",
+      "recipe": "test/fixtures/recipe-frames/recipes/trail-end.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "flash--3eb5.bin",
+      "recipe": "test/fixtures/recipe-frames/recipes/flash.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "sparkle--3eb5.bin",
+      "recipe": "test/fixtures/recipe-frames/recipes/sparkle.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "chase-ring--3eb5.bin",
+      "recipe": "test/fixtures/recipe-frames/recipes/chase-ring.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "chase-foot--3eb5.bin",
+      "recipe": "test/fixtures/recipe-frames/recipes/chase-foot.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "blends--3eb5.bin",
+      "recipe": "test/fixtures/recipe-frames/recipes/blends.json",
+      "layout": "3eb5",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    }
+  ]
+}

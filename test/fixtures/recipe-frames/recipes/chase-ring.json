@@ -1,0 +1,32 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "chase-ring",
+  "description": "",
+  "layers": [
+    {
+      "type": "chase",
+      "enabled": true,
+      "path": "ring",
+      "palette": ["#ffffff", "#7fe8ff", "#0080ff"],
+      "count": 3,
+      "speed": { "source": "wave", "min": -100, "max": 100, "periodMs": 2000 },
+      "length": 12,
+      "brightness": 1,
+      "blend": "max",
+      "opacity": 1
+    },
+    {
+      "type": "chase",
+      "enabled": true,
+      "path": "ring",
+      "palette": ["#ff00ff"],
+      "count": 1,
+      "speed": 37.5,
+      "length": 1,
+      "brightness": 1,
+      "blend": "add",
+      "opacity": 1
+    }
+  ]
+}

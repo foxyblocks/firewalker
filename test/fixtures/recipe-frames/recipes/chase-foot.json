@@ -1,0 +1,32 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "chase-foot",
+  "description": "",
+  "layers": [
+    {
+      "type": "chase",
+      "enabled": true,
+      "path": "foot",
+      "palette": ["#ffffff", "#ffc800", "#ff3c00"],
+      "count": 2,
+      "speed": -60,
+      "length": 9,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "chase",
+      "enabled": true,
+      "path": "foot",
+      "palette": ["#ffffff", "#7fe8ff", "#0080ff"],
+      "count": 1,
+      "speed": { "source": "tilt", "min": -120, "max": 120 },
+      "length": 6,
+      "brightness": 1,
+      "blend": "add",
+      "opacity": 1
+    }
+  ]
+}

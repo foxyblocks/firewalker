@@ -1,0 +1,40 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "lava-pour",
+  "description": "Molten colors crawl around the ring and pour toward whichever end is down, with sparks on top.",
+  "layers": [
+    {
+      "type": "fill",
+      "label": "Lava",
+      "enabled": true,
+      "palette": ["#ff2000", "#ff8000", "#ffd000", "#ff8000"],
+      "spread": "ring",
+      "repeat": 2,
+      "offset": 0,
+      "scroll": 0.15,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "pool",
+      "label": "Pour",
+      "enabled": true,
+      "baseline": 0.25,
+      "blend": "multiply",
+      "opacity": 1
+    },
+    {
+      "type": "sparkle",
+      "label": "Sparks",
+      "enabled": true,
+      "palette": ["#ffffff", "#ffd000"],
+      "density": 18,
+      "fadeMs": 400,
+      "brightness": 1,
+      "blend": "add",
+      "opacity": 1
+    }
+  ]
+}

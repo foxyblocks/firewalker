@@ -1,0 +1,50 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "flash",
+  "description": "",
+  "layers": [
+    {
+      "type": "fill",
+      "enabled": true,
+      "palette": ["#101030"],
+      "spread": "solid",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "flash",
+      "enabled": true,
+      "trigger": "any",
+      "palette": ["#402000"],
+      "fadeMs": 300,
+      "brightness": 1,
+      "blend": "add",
+      "opacity": 1
+    },
+    {
+      "type": "flash",
+      "enabled": true,
+      "trigger": "flat",
+      "palette": ["#ffffff", "#ff0000", "#000000"],
+      "fadeMs": 700,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "flash",
+      "enabled": true,
+      "trigger": "tilted",
+      "palette": ["#ffffff", "#7fe8ff", "#0080ff"],
+      "fadeMs": 500,
+      "brightness": { "source": "stompStrength", "min": 0.2, "max": 0.8 },
+      "blend": "max",
+      "opacity": 1
+    }
+  ]
+}

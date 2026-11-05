@@ -1,0 +1,43 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "starfield",
+  "description": "A dim night sky with twinkling stars. A stomp lights the whole ring in ice blue.",
+  "layers": [
+    {
+      "type": "fill",
+      "label": "Sky",
+      "enabled": true,
+      "palette": ["#001030", "#000820", "#100030"],
+      "spread": "ring",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0.02,
+      "brightness": 0.35,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "sparkle",
+      "label": "Stars",
+      "enabled": true,
+      "palette": ["#ffffff", "#7fe8ff"],
+      "density": 30,
+      "fadeMs": 1200,
+      "brightness": { "source": "wave", "min": 0.5, "max": 1, "periodMs": 4000 },
+      "blend": "add",
+      "opacity": 1
+    },
+    {
+      "type": "flash",
+      "label": "Stomp",
+      "enabled": true,
+      "trigger": "any",
+      "palette": ["#7fe8ff", "#0080ff"],
+      "fadeMs": 500,
+      "brightness": { "source": "stompStrength", "min": 0.4, "max": 1 },
+      "blend": "add",
+      "opacity": 1
+    }
+  ]
+}
