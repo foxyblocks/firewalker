@@ -1,9 +1,10 @@
 /**
  * Where the brightness slider marks the levels past the soft cap, while a boot's cap is off.
  * The slider (PixelSlider in ui/parts.tsx) draws far fewer pixels than levels, and a fill
- * pixel stands for the level at its middle, so the mark goes before the first pixel that
- * stands for a level over the cap. That puts the line in the gap between two pixels, where
- * the slider's lit pixels cross the cap, rather than through a pixel.
+ * pixel stands for the level at its middle, so the outline around the levels past the cap
+ * starts before the first pixel that stands for a level over it. That puts its left edge in
+ * the gap between two pixels, where the slider's lit pixels cross the cap, rather than through
+ * a pixel.
  */
 
 /**

@@ -7,9 +7,9 @@
  *
  * The brightness percent is a share of what the boots accept right now, so it reads 100%
  * at the soft cap while the cap is on, and the same level reads 38% with it off (96 of 255).
- * The cap's toggle sits beside the percent. With the cap off, the slider marks the levels past
- * the cap, because a full-white strip can then draw more than USB supplies, and the mark's
- * warning sign says so on a tap. Calibrate lives on the Boots
+ * The cap's toggle sits beside the percent. With the cap off, the slider outlines the levels
+ * past the cap, because a full-white strip can then draw more than USB supplies, and the
+ * outline's warning sign says so on a tap. Calibrate lives on the Boots
  * screen, so the Boots link carries a dot while a chosen boot isn't calibrated.
  */
 

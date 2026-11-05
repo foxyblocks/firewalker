@@ -81,9 +81,10 @@ export interface SliderWarning {
  * There are far fewer drawn pixels than values, so this shows roughly where the value sits.
  * A reading beside it should carry the exact number.
  *
- * With a `warning`, the levels past it are marked: a yellow line in the gap before the first
- * pixel over it (firstPixelOver in core/capMark.ts), a warning sign above the line that explains
- * them on a tap, and a fine yellow cross-hatch on every pixel past the line, lit or not.
+ * With a `warning`, the pixels past it sit inside a yellow outline. Its left edge is the warning
+ * line, in the gap before the first pixel over the warning (firstPixelOver in core/capMark.ts),
+ * and it runs around every pixel to the end of the strip. A warning sign at the top of that edge
+ * explains it on a tap.
  */
 export function PixelSlider({
   label,
@@ -112,7 +113,11 @@ export function PixelSlider({
 }) {
   const track = useRef<HTMLDivElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
-  const mark = useRef<HTMLSpanElement>(null);
+  // Spacers the width of the outline's line, before the first pixel past the warning and after
+  // the last pixel. The strip spaces every item evenly, so the outline drawn over them clears
+  // the pixels inside it by the same space the pixels keep from each other.
+  const edgeStart = useRef<HTMLSpanElement>(null);
+  const edgeEnd = useRef<HTMLSpanElement>(null);
   const dragging = useRef(false);
   // Pixels from here on stand for levels past the warning. It's the pixel count when nothing is.
   const overFrom = warning && shape === "fill" ? firstPixelOver(warning.above, max, STRIP_PIXELS) : STRIP_PIXELS;
@@ -160,7 +165,7 @@ export function PixelSlider({
   // remounts the slider under a finger.
   return (
     <div ref={wrap} className="slider-wrap">
-      {marked && <WarningMark wrap={wrap} mark={mark} warning={warning} overFrom={overFrom} />}
+      {marked && <WarningZone wrap={wrap} edgeStart={edgeStart} edgeEnd={edgeEnd} warning={warning} overFrom={overFrom} />}
       <div
         ref={track}
         className={`strip strip-slider${disabled ? " strip-disabled" : ""}`}
@@ -179,35 +184,44 @@ export function PixelSlider({
       >
         {Array.from({ length: STRIP_PIXELS }, (_, index) => (
           <Fragment key={index}>
-            {marked && index === overFrom && <span ref={mark} className="strip-mark" aria-hidden="true" />}
-            <span className={`pixel${pixelLit(index) ? " pixel-lit" : ""}${index >= overFrom ? " pixel-over" : ""}`} />
+            {marked && index === overFrom && <span ref={edgeStart} className="strip-edge" aria-hidden="true" />}
+            <span className={`pixel${pixelLit(index) ? " pixel-lit" : ""}`} />
           </Fragment>
         ))}
+        {marked && <span ref={edgeEnd} className="strip-edge" aria-hidden="true" />}
       </div>
     </div>
   );
 }
 
 /**
- * The warning sign above a slider's mark: a button whose tap shows why the levels past the mark
- * need care, in a tip that a second tap, a tap anywhere else, or Escape closes. It sits outside
- * the slider, because a slider's children are hidden from screen readers and a tap on the slider
- * sets its value. Its 44-pixel tap area reaches up from the sign, so it doesn't cover the pixels
- * around the mark. The strip spaces its pixels to fit the screen, so the sign finds the mark's
- * position after layout, and again whenever the strip resizes.
+ * The outline around a slider's pixels past its warning, with the warning sign at the top of its
+ * left edge. The sign is a button whose tap shows why those levels need care, in a tip that a
+ * second tap, a tap anywhere else, or Escape closes. Both sit outside the slider, because a
+ * slider's children are hidden from screen readers and a tap on the slider sets its value. The
+ * outline lets taps through to the slider, and the sign's 44-pixel tap area reaches up from the
+ * sign, so neither covers the pixels.
+ *
+ * The strip spaces its pixels to fit the screen, so this places the outline after layout, and
+ * again whenever the strip resizes: from the left spacer's outer edge to the right spacer's, and
+ * as far above and below the pixels as the left spacer is from the first pixel inside.
  */
-function WarningMark({
+function WarningZone({
   wrap,
-  mark,
+  edgeStart,
+  edgeEnd,
   warning,
   overFrom,
 }: {
   wrap: RefObject<HTMLDivElement | null>;
-  mark: RefObject<HTMLSpanElement | null>;
+  edgeStart: RefObject<HTMLSpanElement | null>;
+  edgeEnd: RefObject<HTMLSpanElement | null>;
   warning: SliderWarning;
   overFrom: number;
 }) {
-  const [x, setX] = useState<number | null>(null);
+  const [zone, setZone] = useState<{ left: number; top: number; width: number; height: number; gap: number } | null>(
+    null,
+  );
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const tip = useRef<HTMLDivElement>(null);
@@ -216,15 +230,27 @@ function WarningMark({
   useLayoutEffect(() => {
     const place = () => {
       const box = wrap.current?.getBoundingClientRect();
-      const line = mark.current?.getBoundingClientRect();
-      setX(box && line ? line.left + line.width / 2 - box.left : null);
+      const start = edgeStart.current?.getBoundingClientRect();
+      const end = edgeEnd.current?.getBoundingClientRect();
+      const first = edgeStart.current?.nextElementSibling?.getBoundingClientRect();
+      if (!box || !start || !end || !first) return setZone(null);
+      // The space between the left spacer and the first pixel inside is the space between pixels.
+      const gap = first.left - start.right;
+      const reach = gap + start.width;
+      setZone({
+        left: start.left - box.left,
+        top: first.top - box.top - reach,
+        width: end.right - start.left,
+        height: first.height + 2 * reach,
+        gap,
+      });
     };
     place();
     if (!wrap.current) return;
     const observer = new ResizeObserver(place);
     observer.observe(wrap.current);
     return () => observer.disconnect();
-  }, [wrap, mark, overFrom]);
+  }, [wrap, edgeStart, edgeEnd, overFrom]);
 
   useEffect(() => {
     if (!open) return;
@@ -243,14 +269,21 @@ function WarningMark({
     };
   }, [open]);
 
-  if (x === null) return null;
+  if (zone === null) return null;
+  // The sign and the tip's caret point at the middle of the outline's left edge.
+  const edgeX = zone.left + (edgeStart.current?.offsetWidth ?? 0) / 2;
   return (
     <>
+      <span
+        className="slider-zone"
+        aria-hidden="true"
+        style={{ left: zone.left, top: zone.top, width: zone.width, height: zone.height, "--zone-gap": `${zone.gap}px` } as CSSProperties}
+      />
       <button
         ref={button}
         type="button"
         className="slider-mark-button"
-        style={{ left: x }}
+        style={{ left: edgeX }}
         aria-label={warning.label}
         aria-expanded={open}
         aria-controls={open ? tipId : undefined}
@@ -260,7 +293,7 @@ function WarningMark({
         <WarningIcon />
       </button>
       {open && (
-        <div ref={tip} id={tipId} role="tooltip" className="slider-tip" style={{ "--mark-x": `${x}px` } as CSSProperties}>
+        <div ref={tip} id={tipId} role="tooltip" className="slider-tip" style={{ "--mark-x": `${edgeX}px` } as CSSProperties}>
           {warning.message}
         </div>
       )}

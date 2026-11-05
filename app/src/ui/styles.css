@@ -447,28 +447,33 @@ dd {
    A slider can mark the levels past a warning, such as brightness over the soft cap while
    the cap is off (PixelSlider's `warning`). Everything here is the warning yellow. */
 
+/* The outline's line is a whole pixel, because browsers round a fractional border to the
+   screen's pixels and the spacers that make room for it wouldn't match. */
 .slider-wrap {
+  --zone-line: 1px;
   position: relative;
 }
 
-/* Fine diagonal stripes over each pixel past the mark, rising left to right, two or three to a
-   pixel. A gradient's stripes run across its angle, so 135deg draws them rising. A lit pixel keeps
-   its own fill under them. */
-.pixel-over {
-  background-image: repeating-linear-gradient(135deg, var(--wait) 0 0.75px, transparent 0.75px 4.5px);
-}
-
-/* The line, in the gap before the first pixel past the warning. */
-.strip-mark {
+/* Room in the strip for the outline's left and right edges. Each is as wide as the line, and
+   the strip spaces it from its neighbors like any pixel. */
+.strip-edge {
   flex: none;
-  width: 2px;
-  height: 20px;
-  border-radius: 1px;
-  background: var(--wait);
-  box-shadow: 0 0 6px var(--wait);
+  width: var(--zone-line);
+  height: 1px;
 }
 
-/* The sign sits just above the line, at the bottom of a 44-pixel tap area that reaches up into
+/* The outline around the pixels past the warning. Its corners curve with the pixels' own
+   3-pixel corners, offset by the space it keeps from them, so the two run parallel. Taps pass
+   through it to the slider. */
+.slider-zone {
+  position: absolute;
+  border: var(--zone-line) solid var(--wait);
+  border-radius: calc(3px + var(--zone-gap) + var(--zone-line));
+  box-shadow: 0 0 5px color-mix(in srgb, var(--wait) 45%, transparent);
+  pointer-events: none;
+}
+
+/* The sign sits just above the outline's left edge, at the bottom of a 44-pixel tap area that reaches up into
    the space beside the slider's label rather than down over its pixels. It stacks over the tip,
    whose bottom edge overlaps that area, so a second tap anywhere on it still closes the tip. */
 .slider-mark-button {
@@ -490,6 +495,17 @@ dd {
   display: block;
   width: 12px;
   height: 12px;
+}
+
+/* The tap area is mostly empty space, so the keyboard focus ring goes around the sign itself. */
+.slider-mark-button:focus-visible {
+  outline: none;
+}
+
+.slider-mark-button:focus-visible .slider-mark-icon {
+  border-radius: 2px;
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
 }
 
 .slider-mark-sign {
