@@ -50,7 +50,7 @@ the board's own 3.3 V regulator shares. Its block diagram, and the pin map on Se
 put the pad straight on VBUS. Neither shows a fuse. If D1 is in the path, it limits the pad
 to 1 A, and the strip gets up to about half a volt less than the USB supply. The USB source
 sets its own limit too: 500 mA from a USB 2.0 computer port, and more from a USB-C charger
-or power bank. Seeed doesn't publish a current rating for the pad.
+or power bank. Neither Seeed's MG24 wiki nor the schematic gives a current rating for the pad.
 
 `LED_BRIGHTNESS_MAX` in [`config.h`](../include/config.h) caps the remote at 96. On the
 longest boot strip, 107 pixels, that keeps a full-white frame near 400 mA by its rating,
