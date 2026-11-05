@@ -6,6 +6,12 @@
       "runtimeExecutable": "bun",
       "runtimeArgs": ["run", "--cwd", "app", "dev"],
       "port": 5173
+    },
+    {
+      "name": "pattern-designer",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "--cwd", "designer", "dev"],
+      "port": 5174
     }
   ]
 }

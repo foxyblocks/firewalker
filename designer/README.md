@@ -1,0 +1,66 @@
+# Firewalker pattern designer
+
+A web app for designing pattern **recipes** on a computer: stack layers, set their knobs, and
+watch a simulated boot react as you tilt it and stomp. Recipes save to the repo's
+[`patterns/`](../patterns) folder. The format is in
+[`docs/recipe-format.md`](../docs/recipe-format.md), and why it works this way is in
+[ADR-0005](../docs/adr/0005-pattern-recipes.md).
+
+Boots can't run recipes yet. Sending one to a boot comes with the firmware's recipe engine.
+
+## Run it
+
+```bash
+cd designer
+bun install
+bun run dev          # http://localhost:5174
+bun run test         # engine, format, storage, and geometry tests
+bun run typecheck
+```
+
+It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
+
+## Using it
+
+- **Patterns** lists every recipe in `patterns/` plus this browser's drafts. Create one
+  blank or as a copy of another, then open, duplicate, rename, download, import, or delete.
+- **Design** has the layer stack on the left, the boot in the middle, and the selected
+  layer's settings on the right. Any number can be **Fixed**, or **Follows** tilt, a stomp,
+  or a wave. The JSON tab shows the file as it will be saved.
+- **The boot** shows from above and from its outer side, with the strip in index order
+  below. Drag **Tilt**, press **Stomp** or the space bar, or press **Walk** for a steady gait.
+  The strip menu switches between each boot's saved layout and the uncut bench strip.
+- **Undo** and **Redo** with ⌘Z and ⇧⌘Z. **Save** with ⌘S.
+
+## Where recipes are kept
+
+Every edit keeps as a draft in this browser's local storage, so nothing is lost when you
+close the tab. **Save** writes `patterns/<name>.json` through the dev server and clears the
+draft. A rename moves the file on the next save, and **Discard changes** goes back to the
+saved file.
+
+The dev server only listens on localhost. It only writes `.json` files with valid recipe
+names, inside the patterns folder, and checks each recipe before writing it. To try things
+without touching the repo, point it somewhere else:
+
+```bash
+PATTERNS_DIR=/tmp/scratch-patterns bun run dev
+```
+
+A built copy (`bun run build`) has no dev server, so it works from drafts, download, and
+import only. Save and Delete stay off, and a banner says why.
+
+## How the simulation works
+
+- `src/recipe/`: the format. `spec.ts` has every layer's fields, ranges, and defaults, which
+  the validator and the settings panel both read. `serialize.ts` writes files the same way
+  every time.
+- `src/engine/`: runs a recipe one 16 ms frame at a time, like the firmware's patterns.
+  `strip.ts` is a port of `include/firewalker_strip_map.h`.
+- `src/sim/`: the boot drawings and the frame loop. The drawings assume the controller, and
+  so pixel 0, is on the boot's outer side.
+- `server/`: the dev server's `/api/patterns` endpoints.
+
+The screen shows LEDs brighter than the raw numbers, because LEDs are linear and screens
+aren't (a 1/2.2 gamma). Colors on a real strip will look a little different, especially
+dim ones. Check a recipe on a boot before calling it done.

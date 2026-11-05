@@ -81,6 +81,15 @@ code, issues, and docs rather than drifting to synonyms.
 - **Settings** — what each controller remembers across power cycles: its pattern,
   brightness, and poses. They live in the controller's own flash, never in the build,
   so both shoes run the same firmware binary.
+- **Recipe** — a pattern described as data rather than code: a JSON file of **layers**
+  (`docs/recipe-format.md`). The **designer** makes them, and `patterns/` keeps them. The
+  firmware doesn't run recipes yet (ADR-0005). The built-in patterns stay C++.
+- **Layer** — one part of a recipe that paints the strip (fill, pool, trail, flash,
+  sparkle, chase), combined with the layers below it by its blend.
+- **Knob** — a recipe number that is either fixed or a **binding**: it follows tilt, tilt
+  amount, stomp strength, a fading stomp, or a wave, between a min and a max.
+- **Designer** — the web app in `designer/` that edits recipes and simulates them on a
+  drawn boot with a tilt slider and a stomp button. Not the iPhone **remote**.
 - **Remote** — anything controlling running firmware through the line protocol in
   `docs/remote-protocol.md`: the iPhone app over BLE, or a USB serial console. Distinct
   from the **`cli` bench tool**, which builds and flashes one-off test firmware.
@@ -94,7 +103,8 @@ code, issues, and docs rather than drifting to synonyms.
 
 In scope now: one strip per shoe; the **IMU** as the sole stomp sensor; runtime
 **patterns** (`flow` + `fire-trail`) on the app; the BLE and USB **remote**;
-per-controller **settings**; the `imu_debug` build and the `cli` bench tool. Still
+per-controller **settings**; the `imu_debug` build and the `cli` bench tool; the
+**designer** and the **recipe** format, ahead of a firmware recipe engine. Still
 explicitly **out** of scope: the 2-D "perimeter bubble" flow (roll as well as pitch),
 multiple strips per shoe, synchronization between shoes, battery management and the
 wearable power plan, and premature performance work.

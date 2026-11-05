@@ -1,0 +1,51 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "rainbow-pool",
+  "description": "A recipe take on the built-in flow: the spectrum cycles, tilt pools it toward the low end, a flat stomp flashes white, a tilted stomp sends trails.",
+  "layers": [
+    {
+      "type": "fill",
+      "enabled": true,
+      "palette": ["#ff0000", "#ffff00", "#00ff00", "#00ffff", "#0000ff", "#ff00ff"],
+      "spread": "solid",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0.0667,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "pool",
+      "enabled": true,
+      "baseline": 0.8,
+      "blend": "multiply",
+      "opacity": 1
+    },
+    {
+      "type": "trail",
+      "enabled": true,
+      "trigger": "tilted",
+      "from": "down-point",
+      "flatZone": 0.3,
+      "palette": ["#ffffff", "#ffc800", "#ff3c00"],
+      "speed": 45,
+      "length": 12,
+      "brightness": { "source": "stompStrength", "min": 0.3, "max": 1 },
+      "maxFronts": 16,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "flash",
+      "enabled": true,
+      "trigger": "flat",
+      "palette": ["#ffffff"],
+      "fadeMs": 800,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    }
+  ]
+}
