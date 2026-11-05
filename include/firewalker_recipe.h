@@ -56,18 +56,7 @@ enum class RecipeDecodeResult : uint8_t {
   BadRecipe,    // the checksum is right, but the contents don't make sense
 };
 
-// Whether a pattern's name is spelled legally: 1 to 12 characters, a lowercase letter and then
-// lowercase letters, digits, or hyphens. It doesn't say whether the name is free to use.
-inline bool recipeNameValid(const char* name) {
-  const size_t length = strlen(name);
-  if (length == 0 || length > RECIPE_MAX_NAME_LENGTH) return false;
-  if (name[0] < 'a' || name[0] > 'z') return false;
-  for (size_t i = 1; i < length; i++) {
-    const char c = name[i];
-    if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-')) return false;
-  }
-  return true;
-}
+static_assert(RECIPE_MAX_NAME_LENGTH == PATTERN_NAME_MAX_LENGTH, "A recipe's name has to fit a pattern name");
 
 // Names that off and the firmware's own patterns keep for themselves.
 inline bool recipeNameReserved(const char* name) {
@@ -210,7 +199,7 @@ inline RecipeDecodeResult decodeRecipe(const uint8_t* bytes, size_t size, Recipe
   if (nameLength == 0 || nameLength > RECIPE_MAX_NAME_LENGTH) return RecipeDecodeResult::BadRecipe;
   for (uint8_t i = 0; i < nameLength; i++) out.name[i] = (char)reader.u8();
   out.name[nameLength] = '\0';
-  if (!recipeNameValid(out.name) || recipeNameReserved(out.name)) return RecipeDecodeResult::BadRecipe;
+  if (!patternNameValid(out.name) || recipeNameReserved(out.name)) return RecipeDecodeResult::BadRecipe;
 
   out.layerCount = reader.u8();
   if (out.layerCount == 0 || out.layerCount > RECIPE_MAX_LAYERS) return RecipeDecodeResult::BadRecipe;

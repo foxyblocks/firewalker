@@ -484,12 +484,15 @@ pixels, and it blocks the main loop. That leaves about 11 ms, and motion and the
 Also pass: at least 50 frames a second, no missed stomps, and no BLE drops, including while saving a
 recipe.
 
-Add `frameUs`, the slowest engine time since the last line, to the debug `motion` line. It stays after
-this phase. Test with three heavy recipes, built in for a test build only:
+The `recipe_budget` build measures this, logging over USB. Run `bun run budget-recipes` in `designer/` first.
+`frameUs` in the debug `motion` line stays after this phase, and shows the slowest pattern update since the
+last line, including sending the frame. Test with five heavy recipes:
 
 - 8 fills spread around the ring, with mixed blends.
 - 8 trails, each with 16 fronts of 60 pixels.
 - 8 sparkles at full density.
+- 8 chases around the ring, each with 8 comets of 60 pixels.
+- 8 chases along the foot, each with 8 comets of 60 pixels, painted on both sides.
 
 **The trail recipe is the likely failure.** It's only 187 bytes, so it's legal, and it can paint up to
 7,680 pixels a frame. My rough estimate is about 20 ms at 39 MHz. Being over budget doesn't crash

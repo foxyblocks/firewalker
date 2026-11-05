@@ -26,17 +26,14 @@ namespace Firewalker {
 
 // Long enough for any valid command, so a longer line is rejected rather than cut.
 constexpr size_t REMOTE_COMMAND_MAX = 48;
-// Long enough for the largest status line.
-constexpr size_t REMOTE_LINE_MAX = 440;
+// Long enough for the largest status line, and for the longest `patterns` list: 32 names of 12
+// characters, plus quotes and commas.
+constexpr size_t REMOTE_LINE_MAX = 520;
 // Reported in status, so an app can tell when a boot's firmware needs updating. Raise it
 // when a change would break a client written against the current protocol, or when clients
-// start relying on something earlier firmware doesn't have. 2 added the strip layout.
-constexpr uint8_t REMOTE_PROTOCOL_VERSION = 2;
-
-// The patterns a client can select, as the `patterns` command lists them. Off isn't one:
-// it's the absence of a pattern. Keep each name to 12 characters, so `pattern <name>` fits
-// in a default 20-byte BLE write.
-constexpr PatternId SELECTABLE_PATTERNS[] = {PatternId::Flow, PatternId::FireTrail};
+// start relying on something earlier firmware doesn't have. 2 added the strip layout, and 3 added
+// recipes.
+constexpr uint8_t REMOTE_PROTOCOL_VERSION = 3;
 
 enum class CommandType : uint8_t {
   Invalid,
@@ -54,22 +51,13 @@ enum class CommandType : uint8_t {
 
 struct Command {
   CommandType type = CommandType::Invalid;
-  PatternId pattern = PatternId::Flow;  // for Pattern
+  char pattern[PATTERN_NAME_SIZE] = "";  // for Pattern. Spelled legally, but it may not exist
   CalibrationPose pose = CalibrationPose::Neutral;  // for Calibrate
   bool on = false;                      // for Power, Debug, and StripPreview
   int32_t value = 0;                    // for Brightness and StripSet
   StripField stripField = StripField::Count;   // for StripSet
   const char* error = nullptr;          // for Invalid: why it was rejected
 };
-
-inline const char* patternName(PatternId pattern) {
-  switch (pattern) {
-    case PatternId::Flow: return "flow";
-    case PatternId::FireTrail: return "fire-trail";
-    case PatternId::Off: return "off";
-  }
-  return "unknown";
-}
 
 inline const char* poseName(CalibrationPose pose) {
   switch (pose) {
@@ -237,16 +225,13 @@ inline Command parseCommand(const char* line) {
   }
 
   if (isPattern) {
-    if (strcmp(arg, "flow") == 0) {
-      command.pattern = PatternId::Flow;
-    } else if (strcmp(arg, "fire-trail") == 0) {
-      command.pattern = PatternId::FireTrail;
-    } else if (strcmp(arg, "off") == 0) {
-      command.pattern = PatternId::Off;
-    } else {
+    // The list of patterns changes as recipes come and go, so whether one exists is the caller's
+    // check. A name that isn't even spelled legally can't be one.
+    if (!patternNameValid(arg)) {
       command.error = "unknown-pattern";
       return command;
     }
+    copyPatternName(command.pattern, arg);
     command.type = CommandType::Pattern;
     return command;
   }
@@ -315,13 +300,12 @@ inline void formatCalibrationFailed(char* out, size_t size, CalibrationPose pose
            poseName(pose), reason);
 }
 
-inline void formatPatterns(char* out, size_t size) {
+inline void formatPatterns(char* out, size_t size, const char* const* names, size_t count) {
   int written = snprintf(out, size, "{\"t\":\"patterns\",\"list\":[");
   bool first = true;
-  for (PatternId pattern : SELECTABLE_PATTERNS) {
+  for (size_t i = 0; i < count; i++) {
     if (written < 0 || (size_t)written >= size) return;
-    written += snprintf(out + written, size - written, "%s\"%s\"", first ? "" : ",",
-                        patternName(pattern));
+    written += snprintf(out + written, size - written, "%s\"%s\"", first ? "" : ",", names[i]);
     first = false;
   }
   if (written >= 0 && (size_t)written < size) {
@@ -333,8 +317,8 @@ inline void formatPatterns(char* out, size_t size) {
 // reconnecting client sees the current state rather than what it last asked for.
 struct StatusReport {
   const char* id;
-  PatternId pattern;
-  PatternId lit;  // the pattern turning on returns to, even while the strip is off
+  const char* pattern;
+  const char* lit;  // the pattern turning on returns to, even while the strip is off
   uint8_t brightness;
   uint8_t maxBrightness;
   bool sensorReady;
@@ -377,8 +361,8 @@ inline void formatStatus(char* out, size_t size, const StatusReport& report) {
            "\"calibration\":\"%s\",\"saved\":%s,\"saveFailed\":%s,\"saves\":%lu,"
            "\"debug\":%s,\"ble\":%s,\"leds\":%u,\"maxLeds\":%u,\"toe\":%u,\"heel\":%u,"
            "\"preview\":%s}",
-           (unsigned)REMOTE_PROTOCOL_VERSION, report.id, patternName(report.pattern),
-           patternName(report.lit), (unsigned)report.brightness, (unsigned)report.maxBrightness,
+           (unsigned)REMOTE_PROTOCOL_VERSION, report.id, report.pattern,
+           report.lit, (unsigned)report.brightness, (unsigned)report.maxBrightness,
            report.sensorReady ? "ok" : "unavailable", tiltText,
            report.calibration.neutralSet ? "true" : "false", neutralText, heelText, toeText,
            report.calibrationState, report.saved ? "true" : "false",
@@ -392,7 +376,7 @@ inline void formatStatus(char* out, size_t size, const StatusReport& report) {
 // acceleration since the previous line, which catches a step's spike that a line's own
 // instant would miss. `stomp` means a stomp fired since the previous line.
 inline void formatMotion(char* out, size_t size, float tilt, float angleDeg, float accel,
-                         float accelPeak, float gyro, bool stomp, float strength) {
+                         float accelPeak, float gyro, bool stomp, float strength, uint32_t frameUs) {
   char tiltText[16];
   char angleText[16];
   char accelText[16];
@@ -407,8 +391,9 @@ inline void formatMotion(char* out, size_t size, float tilt, float angleDeg, flo
   formatFixed2(strengthText, sizeof(strengthText), strength);
   snprintf(out, size,
            "{\"t\":\"motion\",\"tilt\":%s,\"angleDeg\":%s,\"accel\":%s,\"accelPeak\":%s,"
-           "\"gyro\":%s,\"stomp\":%s,\"strength\":%s}",
-           tiltText, angleText, accelText, peakText, gyroText, stomp ? "true" : "false", strengthText);
+           "\"gyro\":%s,\"stomp\":%s,\"strength\":%s,\"frameUs\":%lu}",
+           tiltText, angleText, accelText, peakText, gyroText, stomp ? "true" : "false", strengthText,
+           (unsigned long)frameUs);
 }
 
 }  // namespace Firewalker

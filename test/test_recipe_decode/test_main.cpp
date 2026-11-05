@@ -255,16 +255,16 @@ static void test_survives_any_change_to_any_byte() {
 }
 
 static void test_checks_a_name_is_spelled_legally() {
-  TEST_ASSERT_TRUE(recipeNameValid("fire-stomp"));
-  TEST_ASSERT_TRUE(recipeNameValid("abcdefghijkl"));
-  TEST_ASSERT_TRUE(recipeNameValid("a"));
-  TEST_ASSERT_FALSE(recipeNameValid(""));
-  TEST_ASSERT_FALSE(recipeNameValid("abcdefghijklm"));
-  TEST_ASSERT_FALSE(recipeNameValid("Lava"));
-  TEST_ASSERT_FALSE(recipeNameValid("9lives"));
-  TEST_ASSERT_FALSE(recipeNameValid("-dash"));
-  TEST_ASSERT_FALSE(recipeNameValid("../etc"));
-  TEST_ASSERT_FALSE(recipeNameValid("two words"));
+  TEST_ASSERT_TRUE(patternNameValid("fire-stomp"));
+  TEST_ASSERT_TRUE(patternNameValid("abcdefghijkl"));
+  TEST_ASSERT_TRUE(patternNameValid("a"));
+  TEST_ASSERT_FALSE(patternNameValid(""));
+  TEST_ASSERT_FALSE(patternNameValid("abcdefghijklm"));
+  TEST_ASSERT_FALSE(patternNameValid("Lava"));
+  TEST_ASSERT_FALSE(patternNameValid("9lives"));
+  TEST_ASSERT_FALSE(patternNameValid("-dash"));
+  TEST_ASSERT_FALSE(patternNameValid("../etc"));
+  TEST_ASSERT_FALSE(patternNameValid("two words"));
 }
 
 static void test_knows_the_reserved_names() {

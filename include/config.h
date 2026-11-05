@@ -154,6 +154,7 @@ constexpr unsigned long REMOTE_MOTION_REPORT_MS = 200;  // motion lines while de
 constexpr unsigned long REMOTE_STATUS_MIN_MS    = 250;  // fastest repeat of change-driven status lines
 constexpr uint16_t      REMOTE_ADVERTISE_INTERVAL = 160;   // BLE advertising interval, in 0.625 ms units (100 ms)
 constexpr uint8_t       REMOTE_RX_QUEUE_DEPTH     = 8;     // BLE commands waiting for the main loop
+constexpr uint8_t       RECIPE_SLOTS              = 16;    // uploaded recipes each boot can keep in flash
 constexpr size_t        REMOTE_TX_BUFFER_BYTES    = 1024;  // reply bytes waiting to go out over BLE
 constexpr size_t        REMOTE_ATT_VALUE_MAX      = 244;   // largest notification payload the firmware will send
 constexpr uint8_t       REMOTE_NOTIFICATIONS_PER_LOOP = 4; // cap per main-loop pass, so sending can't stall it
