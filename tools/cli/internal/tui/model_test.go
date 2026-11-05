@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -159,6 +160,10 @@ func (h *harness) key(keys ...string) {
 			msg = tea.KeyMsg{Type: tea.KeyRight}
 		case "ctrl+c":
 			msg = tea.KeyMsg{Type: tea.KeyCtrlC}
+		case "ctrl+j":
+			msg = tea.KeyMsg{Type: tea.KeyCtrlJ}
+		case "ctrl+k":
+			msg = tea.KeyMsg{Type: tea.KeyCtrlK}
 		case " ":
 			msg = tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}}
 		default:
@@ -268,15 +273,174 @@ func TestALoneBootIsPickedAndAskedForStatus(t *testing.T) {
 	}
 }
 
-func TestTabWithOneBootKeepsItsConnection(t *testing.T) {
+func TestPickingTheSameBootKeepsItsConnection(t *testing.T) {
 	h := appRunning(t)
 	before := h.current(right.Serial)
-	h.key("tab", "shift+tab")
+	h.key("p", "enter")
 	if h.current(right.Serial) != before || before.Closed() {
-		t.Fatal("tab with one boot shouldn't reconnect")
+		t.Fatal("picking the boot already picked shouldn't reconnect")
 	}
 	if h.m.status == nil {
-		t.Fatal("tab with one boot shouldn't forget its status")
+		t.Fatal("picking the boot already picked shouldn't forget its status")
+	}
+}
+
+// The picker shows enough to tell boots apart, and only offers ones it can actually reach.
+func TestPickerListsEachBootAndSkipsOnesNotOnUSB(t *testing.T) {
+	h := newHarness(t)
+	for serial, id := range map[string]string{right.Serial: "3ED8", left.Serial: "3EB5"} {
+		if err := h.m.deps.Cache.Update(serial, func(r *boards.Record) { r.ID = id }); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gone := "12345678"
+	if err := h.m.deps.Cache.Update(gone, func(r *boards.Record) { r.ID = "3ED1" }); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.m.deps.Cache.Update(left.Serial, func(r *boards.Record) { r.LastFlashed = "bench flow" }); err != nil {
+		t.Fatal(err)
+	}
+	h.plugIn(right, left)
+
+	h.key("p")
+	h.wantView("Pick a boot", "3ED8", right.Serial, "unknown", "3EB5", left.Serial, "bench flow", "3ED1", gone, "not on USB", "enter pick")
+
+	// The rows sort by serial, with the one that's gone first, and the cursor skips it.
+	h.key("enter")
+	if h.m.selected != right.Serial {
+		t.Fatalf("picked %q, want the first boot on USB", h.m.selected)
+	}
+	h.key("p", "up", "up", "enter")
+	if h.m.selected == gone {
+		t.Fatal("picked a boot that isn't on USB")
+	}
+}
+
+func TestPickerWithNoBootsExplainsInstead(t *testing.T) {
+	h := newHarness(t)
+	h.plugIn()
+	h.key("p")
+	if h.m.picking {
+		t.Fatal("nothing to pick from")
+	}
+	h.wantView("No MG24 on USB")
+}
+
+// A letter pressed while the picker is open belongs to the picker, so it can't start a
+// flash behind it.
+func TestPickerHoldsTheKeyboardWhileOpen(t *testing.T) {
+	h := appRunning(t)
+	h.key("p", "a", "q", "3")
+	if h.m.confirm != nil || h.quit || h.m.screen != screenBench {
+		t.Fatalf("a key got past the picker: confirm=%v quit=%v screen=%v", h.m.confirm, h.quit, h.m.screen)
+	}
+	h.key("p")
+	if h.m.picking {
+		t.Fatal("p should close the picker again")
+	}
+}
+
+// keysFromTerminal feeds raw bytes through Bubble Tea's real input parser, the way a
+// terminal delivers them, and returns the key names the app would see.
+func keysFromTerminal(t *testing.T, data string, count int) []string {
+	t.Helper()
+	recorder := &keyRecorder{want: count}
+	program := tea.NewProgram(recorder, tea.WithInput(strings.NewReader(data)), tea.WithOutput(io.Discard), tea.WithoutSignalHandler())
+	done := make(chan error, 1)
+	go func() {
+		_, err := program.Run()
+		done <- err
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		program.Kill()
+		t.Fatalf("got only %v", recorder.keys)
+	}
+	return recorder.keys
+}
+
+type keyRecorder struct {
+	want int
+	keys []string
+}
+
+func (r *keyRecorder) Init() tea.Cmd { return nil }
+func (r *keyRecorder) View() string  { return "" }
+func (r *keyRecorder) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if key, ok := msg.(tea.KeyMsg); ok {
+		r.keys = append(r.keys, key.String())
+		if len(r.keys) == r.want {
+			return r, tea.Quit
+		}
+	}
+	return r, nil
+}
+
+// This one matters: Enter on the bench form leads to a flash, so a scroll key must never
+// look like Enter. Terminals send Enter as a carriage return and ctrl+j as a line feed.
+func TestCtrlJStaysDistinctFromEnter(t *testing.T) {
+	got := keysFromTerminal(t, "\r\n\x0b", 3)
+	if want := []string{"enter", "ctrl+j", "ctrl+k"}; !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestScrollKeysDontReachTheFlashConfirm(t *testing.T) {
+	h := appRunning(t)
+	h.key("ctrl+j", "ctrl+k")
+	if h.m.confirm != nil {
+		t.Fatal("a scroll key opened the flash confirm")
+	}
+	h.noJob()
+}
+
+// Tab is how to get around, so it moves between screens, and it never touches the boots.
+func TestTabMovesBetweenScreensAndLeavesTheBootAlone(t *testing.T) {
+	h := newHarness(t)
+	h.reply[right.Serial], h.reply[left.Serial] = rightStatus, leftStatus
+	h.plugIn(right, left)
+	if h.m.selected != "" {
+		t.Fatalf("selected = %q", h.m.selected)
+	}
+	for _, want := range []screen{screenBuilds, screenBoot, screenLog, screenBench} {
+		h.key("tab")
+		if h.m.screen != want {
+			t.Fatalf("screen = %v, want %v", h.m.screen, want)
+		}
+	}
+	h.key("shift+tab")
+	if h.m.screen != screenLog {
+		t.Fatalf("shift+tab went to %v", h.m.screen)
+	}
+	if h.m.selected != "" || h.opened(right.Serial)+h.opened(left.Serial) != 0 {
+		t.Fatalf("tab picked a boot: selected = %q", h.m.selected)
+	}
+	h.wantView("Press p to pick a boot.")
+}
+
+// The tabs read the same way all along the row: a number, then a plain name.
+func TestScreenNamesAreNumberThenPlainText(t *testing.T) {
+	h := appRunning(t)
+	for _, key := range []string{"1", "2", "3", "5"} {
+		h.key(key)
+		h.wantView("1 Bench test", "2 Builds", "3 Boot", "5 Log")
+		h.wantNotInView("DEBUG", "FLASH", "LOG")
+	}
+}
+
+// Every key hint has to be readable on an ordinary 80-column terminal.
+func TestKeyHintsFitAnOrdinaryTerminal(t *testing.T) {
+	h := appRunning(t)
+	_, cmd := h.m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	h.run(cmd)
+	for _, key := range []string{"1", "2", "3", "5"} {
+		h.key(key)
+		lines := strings.Split(h.view(), "\n")
+		hints := lines[len(lines)-1]
+		if !strings.Contains(hints, "tab screen") || !strings.Contains(hints, "p boot") || !strings.HasSuffix(strings.TrimRight(hints, " "), "q quit") {
+			t.Errorf("screen %s hints: %q", key, hints)
+		}
 	}
 }
 
@@ -307,11 +471,29 @@ func TestPageKeysScrollTheFullLogScreen(t *testing.T) {
 	h.settle()
 	h.key("5")
 	h.wantView("line-29")
+	h.key("ctrl+k")
+	h.wantNotInView("line-29")
+	h.key("ctrl+j")
+	h.wantView("line-29")
+	// Page keys do the same, for keyboards that have them.
 	h.apply(tea.KeyMsg{Type: tea.KeyPgUp})
 	h.settle()
 	h.wantNotInView("line-29")
 	h.apply(tea.KeyMsg{Type: tea.KeyPgDown})
 	h.settle()
+	h.wantView("line-29")
+}
+
+func TestScrollKeysWorkOnTheSmallPaneToo(t *testing.T) {
+	h := appRunning(t)
+	for i := range 30 {
+		h.current(right.Serial).Push(fmt.Sprintf("line-%02d", i))
+	}
+	h.settle()
+	h.wantView("line-29")
+	h.key("ctrl+k")
+	h.wantNotInView("line-29")
+	h.key("ctrl+j")
 	h.wantView("line-29")
 }
 
@@ -330,7 +512,7 @@ func TestTwoBootsWaitForAChoice(t *testing.T) {
 	h := newHarness(t)
 	h.reply[right.Serial], h.reply[left.Serial] = rightStatus, leftStatus
 	h.plugIn(right, left)
-	h.wantView("Press tab to pick a boot.")
+	h.wantView("Press p to pick a boot.")
 	if h.opened(right.Serial)+h.opened(left.Serial) != 0 {
 		t.Fatal("no port should open before a boot is picked")
 	}
@@ -339,7 +521,7 @@ func TestTwoBootsWaitForAChoice(t *testing.T) {
 	if h.m.confirm != nil {
 		t.Fatal("a shouldn't offer to flash with no boot picked")
 	}
-	h.wantView("Pick a boot first: press tab.")
+	h.wantView("Pick a boot first: press p.")
 	h.key("enter")
 	if h.m.confirm != nil {
 		t.Fatal("enter shouldn't offer to flash with no boot picked")
@@ -347,25 +529,31 @@ func TestTwoBootsWaitForAChoice(t *testing.T) {
 	h.key(":")
 	h.typed("identify")
 	h.key("enter")
-	h.wantView("Pick a boot first: press tab.")
+	h.wantView("Pick a boot first: press p.")
 	h.noJob()
 
-	// Tab picks one, and then the other, and only the picked one's port is ever open.
-	h.key("tab")
+	// Opening the picker and backing out still picks nothing.
+	h.key("p", "esc")
+	if h.m.selected != "" || h.opened(right.Serial)+h.opened(left.Serial) != 0 {
+		t.Fatalf("cancelling the picker picked %q", h.m.selected)
+	}
+
+	// Enter picks one, and then the other, and only the picked one's port is ever open.
+	h.key("p", "enter")
 	first := h.m.selected
 	h.until("the first boot to answer", func() bool { return h.m.status != nil })
-	h.key("tab")
+	h.key("p", "down", "enter")
 	second := h.m.selected
 	if first == second {
-		t.Fatalf("tab stayed on %s", first)
+		t.Fatalf("the picker stayed on %s", first)
 	}
 	if !h.current(first).Closed() {
 		t.Fatal("switching boots should close the previous port")
 	}
 	h.until("the second boot to answer", func() bool { return h.m.status != nil })
-	h.key("shift+tab")
+	h.key("p", "up", "enter")
 	if h.m.selected != first {
-		t.Fatalf("shift+tab went to %s", h.m.selected)
+		t.Fatalf("up went to %s", h.m.selected)
 	}
 	h.until("the boot to answer again", func() bool { return h.m.status != nil })
 	if h.m.form.values[fieldLEDs] != "94" && h.m.form.values[fieldLEDs] != "107" {
@@ -377,12 +565,12 @@ func TestSwitchingBootsRefillsTheLayout(t *testing.T) {
 	h := newHarness(t)
 	h.reply[right.Serial], h.reply[left.Serial] = rightStatus, leftStatus
 	h.plugIn(right, left)
-	h.key("tab")
+	h.key("p", "enter")
 	h.until("3ED8", func() bool { return h.m.status != nil && h.m.status.ID == "3ED8" })
 	if h.m.form.values[fieldLEDs] != "94" {
 		t.Fatalf("leds = %q", h.m.form.values[fieldLEDs])
 	}
-	h.key("tab")
+	h.key("p", "down", "enter")
 	h.until("3EB5", func() bool { return h.m.status != nil && h.m.status.ID == "3EB5" })
 	if h.m.form.values[fieldLEDs] != "107" || h.m.form.values[fieldToe] != "72" || h.m.form.values[fieldHeel] != "19" {
 		t.Fatalf("form = %+v", h.m.form.values)
@@ -718,7 +906,7 @@ func TestLogSizeCyclesAndTheFullScreenFilters(t *testing.T) {
 	h.wantView("─ log")
 
 	h.key("5")
-	h.wantView("LOG", "▣ m motion", "stomp -> trail", "tilt +0.05")
+	h.wantView("Log", "▣ m motion", "stomp -> trail", "tilt +0.05")
 	h.key("m")
 	h.wantView("□ m motion", "stomp -> trail")
 	h.wantNotInView("tilt +0.05")

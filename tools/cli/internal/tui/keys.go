@@ -3,6 +3,7 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"firewalker/cli/internal/boards"
 	"firewalker/cli/internal/flash"
 )
 
@@ -18,6 +19,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	switch {
 	case m.confirm != nil:
 		return m.handleConfirmKey(key)
+	case m.picking:
+		return m.handlePickerKey(key)
 	case m.console.open:
 		return m.handleConsoleKey(msg)
 	case m.showHelp:
@@ -40,9 +43,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.showHelp = true
 		return nil
 	case "tab":
-		return m.switchBoard(1)
+		m.screen = (m.screen + 1) % screenCount
+		return nil
 	case "shift+tab":
-		return m.switchBoard(-1)
+		m.screen = (m.screen + screenCount - 1) % screenCount
+		return nil
+	case "p":
+		m.openPicker()
+		return nil
 	case "1":
 		m.screen = screenBench
 		return nil
@@ -69,10 +77,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	case "l":
 		m.logSize = (m.logSize + 1) % logSizeCount
 		return nil
-	case "pgup":
+	case "ctrl+k", "pgup":
 		m.log.scroll(m.logViewHeight(), m.logViewHeight())
 		return nil
-	case "pgdown":
+	case "ctrl+j", "pgdown":
 		m.log.scroll(-m.logViewHeight(), m.logViewHeight())
 		return nil
 	}
@@ -90,14 +98,37 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-// switchBoard is `tab`. With one boot there's nowhere to go, and reconnecting would only
-// make the bar blink, so staying put does nothing.
-func (m *Model) switchBoard(step int) tea.Cmd {
-	next := cycleBoard(m.selected, m.rows, step)
-	if next == m.selected {
-		return nil
+// openPicker is `p`. The cursor starts on the picked boot, or else the first on USB, and
+// nothing changes until Enter.
+func (m *Model) openPicker() {
+	if len(m.connected) == 0 {
+		m.notice = boards.ErrNoBoards.Error()
+		return
 	}
-	return m.selectBoard(next)
+	m.picking = true
+	m.pickCursor = m.selected
+	if row, ok := m.selectedRow(); !ok || !row.OnUSB {
+		m.pickCursor = cycleBoard("", m.rows, 1)
+	}
+}
+
+// handlePickerKey moves through the boots on USB. Picking the boot that's already picked
+// changes nothing, so its connection stays up.
+func (m *Model) handlePickerKey(key string) tea.Cmd {
+	switch key {
+	case "up", "k":
+		m.pickCursor = cycleBoard(m.pickCursor, m.rows, -1)
+	case "down", "j":
+		m.pickCursor = cycleBoard(m.pickCursor, m.rows, 1)
+	case "enter":
+		m.picking = false
+		if m.pickCursor != m.selected {
+			return m.selectBoard(m.pickCursor)
+		}
+	case "esc", "p":
+		m.picking = false
+	}
+	return nil
 }
 
 // quit leaves the board running: closing the port doesn't change anything on it. A flash

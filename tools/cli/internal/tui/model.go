@@ -92,6 +92,7 @@ const (
 	screenBuilds
 	screenBoot
 	screenLog
+	screenCount
 )
 
 type logSize int
@@ -138,6 +139,8 @@ type Model struct {
 	connected       []boards.Board
 	rows            []boardRow
 	selected        string // USB serial of the picked boot, or "" for none
+	picking         bool   // the boot picker is open
+	pickCursor      string // USB serial the picker\'s cursor is on
 	lastDiscoverErr string
 
 	gen          int
@@ -510,7 +513,7 @@ func (m *Model) requireBoard() (boardRow, bool) {
 		if len(m.connected) == 0 {
 			m.notice = boards.ErrNoBoards.Error()
 		} else {
-			m.notice = "Pick a boot first: press tab."
+			m.notice = "Pick a boot first: press p."
 		}
 		return boardRow{}, false
 	case !row.OnUSB:

@@ -57,8 +57,8 @@ func autoSelect(current string, connected []boards.Board) string {
 	return current
 }
 
-// cycleBoard moves the selection to the next boot on USB, which is what `tab` does. A
-// boot that isn't on USB can't be talked to, so it's skipped.
+// cycleBoard finds the next boot on USB, for moving the picker's cursor. A boot that isn't
+// on USB can't be talked to, so it's skipped.
 func cycleBoard(current string, rows []boardRow, step int) string {
 	var online []string
 	for _, row := range rows {

@@ -54,6 +54,32 @@ func (m *Model) viewBar() string {
 	return strings.Join(parts, "   ")
 }
 
+// viewPicker lists every boot with what tells them apart. A boot that isn't on USB shows
+// so its absence is explained, but the cursor can't land on it.
+func (m *Model) viewPicker() []string {
+	lines := []string{" " + m.th.Bold.Render("Pick a boot"), ""}
+	for _, row := range m.rows {
+		id := row.Record.ID
+		if id == "" {
+			id = "—"
+		}
+		tag := "not on USB"
+		if row.OnUSB {
+			tag = tagFor(row.Serial == m.selected && m.answered(), row.Record)
+		}
+		text := fmt.Sprintf("%-6s %-10s %s", id, row.Serial, tag)
+		switch {
+		case row.Serial == m.pickCursor:
+			lines = append(lines, " "+m.th.Accent.Render("▸ "+text))
+		case !row.OnUSB:
+			lines = append(lines, "   "+m.th.Dim.Render(text))
+		default:
+			lines = append(lines, "   "+text)
+		}
+	}
+	return lines
+}
+
 func (m *Model) viewBarRow(row boardRow) string {
 	mark := "○"
 	picked := row.Serial == m.selected
@@ -84,13 +110,20 @@ func (m *Model) viewNav() string {
 		}
 		return " " + label + " "
 	}
-	return " " + m.th.Dim.Render("FLASH") + " " + tab(screenBench, "1 Bench test") + tab(screenBuilds, "2 Builds") +
-		"    " + m.th.Dim.Render("DEBUG") + " " + tab(screenBoot, "3 Boot") + tab(screenLog, "5 Log")
+	return " " + strings.Join([]string{
+		tab(screenBench, "1 Bench test"),
+		tab(screenBuilds, "2 Builds"),
+		tab(screenBoot, "3 Boot"),
+		tab(screenLog, "5 Log"),
+	}, " ")
 }
 
 func (m *Model) viewBody(height int) []string {
 	if m.showHelp {
 		return m.viewHelp()
+	}
+	if m.picking {
+		return m.viewPicker()
 	}
 	switch m.screen {
 	case screenBuilds:
@@ -104,7 +137,7 @@ func (m *Model) viewBody(height int) []string {
 }
 
 func (m *Model) heading(path string) string {
-	target := "pick a boot with tab"
+	target := "press p to pick a boot"
 	if row, ok := m.selectedRow(); ok {
 		target = "target: " + row.name()
 	}
@@ -113,7 +146,7 @@ func (m *Model) heading(path string) string {
 
 // viewBench draws the form, its live command preview, and its keys.
 func (m *Model) viewBench() []string {
-	lines := []string{m.heading("FLASH › Bench test"), ""}
+	lines := []string{m.heading("Bench test"), ""}
 	for _, field := range m.form.fields() {
 		lines = append(lines, m.viewField(field))
 	}
@@ -218,7 +251,7 @@ func (m *Model) viewTilt(text string) string {
 }
 
 func (m *Model) viewBuilds() []string {
-	lines := []string{m.heading("FLASH › Builds"), ""}
+	lines := []string{m.heading("Builds"), ""}
 	for i, build := range flash.Builds {
 		cursor := "   "
 		name := fmt.Sprintf("%-18s", build.Name)
@@ -244,11 +277,11 @@ func (m *Model) viewBuilds() []string {
 func (m *Model) viewBoot() []string {
 	row, ok := m.selectedRow()
 	if !ok {
-		return []string{m.heading("DEBUG › Boot"), "", "   Pick a boot with tab."}
+		return []string{m.heading("Boot"), "", "   Press p to pick a boot."}
 	}
 	if m.status == nil {
 		lines := []string{
-			m.heading("DEBUG › Boot"), "",
+			m.heading("Boot"), "",
 			"   " + row.name() + " isn't answering status. It's tagged " + m.th.Bold.Render(tagFor(false, row.Record)) + ".",
 		}
 		if saved := row.Record.Layout; saved != nil {
@@ -259,7 +292,7 @@ func (m *Model) viewBoot() []string {
 
 	s := m.status
 	field := func(label, value string) string { return fmt.Sprintf("   %-12s %s", label, value) }
-	heading := fmt.Sprintf(" %s   %s", m.th.Bold.Render("DEBUG › Boot"), m.th.Dim.Render(fmt.Sprintf("%s · proto %d · app", s.ID, s.Proto)))
+	heading := fmt.Sprintf(" %s   %s", m.th.Bold.Render("Boot"), m.th.Dim.Render(fmt.Sprintf("%s · proto %d · app", s.ID, s.Proto)))
 	lines := []string{heading, ""}
 
 	power := "power on"
@@ -387,7 +420,7 @@ func (m *Model) viewLogScreen(height int) []string {
 		}
 		return box + " " + key + " " + groupNames[group]
 	}
-	header := fmt.Sprintf(" %s   %s  %s  %s  %s", m.th.Bold.Render("LOG"),
+	header := fmt.Sprintf(" %s   %s  %s  %s  %s", m.th.Bold.Render("Log"),
 		check(groupReplies, "r"), check(groupLogs, "f"), check(groupMotion, "m"), check(groupBuild, "b"))
 	switch {
 	case m.searching:
@@ -420,7 +453,7 @@ func (m *Model) viewPrompt() string {
 	case len(m.connected) == 0:
 		return " " + m.th.Warn.Render(boards.ErrNoBoards.Error())
 	case m.selected == "":
-		return " " + m.th.Warn.Render("Press tab to pick a boot.")
+		return " " + m.th.Warn.Render("Press p to pick a boot.")
 	case m.status != nil && m.status.Proto < protocol.ExpectedProto:
 		return " " + m.th.Warn.Render(fmt.Sprintf("%s is on old firmware (proto %d). Press a to update it.", m.status.ID, m.status.Proto))
 	}
@@ -432,26 +465,30 @@ func (m *Model) viewKeys() string {
 	if m.confirm != nil {
 		return m.th.Dim.Render(" enter flash · esc cancel")
 	}
+	if m.picking {
+		return m.th.Dim.Render(" ↑↓ move · enter pick · esc cancel")
+	}
 	if m.console.open {
 		return m.th.Dim.Render(" enter send · tab complete · ↑↓ history · esc close")
 	}
 	if m.screen == screenLog {
-		return m.th.Dim.Render(" tab boot   1-5 screen   space pause   ↑↓ scroll   g/G ends   a app   : console   ? help   q quit")
+		return m.th.Dim.Render(" tab screen  p boot  space pause  ↑↓ scroll  a app  : console  ? help  q quit")
 	}
-	return m.th.Dim.Render(" tab boot   1-5 screen   a app   : console   l log size   ? help   q quit")
+	return m.th.Dim.Render(" tab screen  p boot  a app  : console  l log  ctrl+j/k scroll  ? help  q quit")
 }
 
 func (m *Model) viewHelp() []string {
 	line := func(keys, what string) string { return fmt.Sprintf("   %-14s %s", keys, what) }
 	return []string{
 		" " + m.th.Bold.Render("Help") + "   " + m.th.Dim.Render("any key closes this"), "",
-		line("tab", "switch boots; nothing flashes or sends until one is picked"),
-		line("1 2 3 5", "Bench test, Builds, Boot, Log"),
+		line("tab", "next screen; shift+tab goes back"),
+		line("1 2 3 5", "jump to Bench test, Builds, Boot, Log"),
+		line("p", "pick a boot; nothing flashes or sends until one is picked"),
 		line("a", "flash the app to the picked boot; saved settings stay"),
 		line("A", "flash the app to both boots, one after the other"),
 		line(":", "send any protocol line to the boot"),
 		line("l", "cycle the log: small, half, hidden"),
-		line("pgup pgdn", "scroll the log"),
+		line("ctrl+j ctrl+k", "scroll the log down and up (page keys work too)"),
 		line("q", "quit and leave the board running"),
 		"",
 		"   Pattern, brightness, power, calibration, and the strip layout live on the phone.",

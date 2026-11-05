@@ -91,7 +91,7 @@ Run `./cli` with no arguments to open it. Piped or scripted, it prints help inst
 The board bar across the top lists every boot on USB and each one it has seen before, with a
 tag for what's running: `app` if it answered `status`, otherwise what this tool last flashed
 (such as `bench flow`), or `unknown`. A lone boot is picked for you. With two, nothing flashes
-or sends until you press `tab`.
+or sends until you press `p` and pick one.
 
 | Key | Screen | What it's for |
 |---|---|---|
@@ -104,11 +104,13 @@ These work from any screen:
 
 | Key | Does |
 |---|---|
-| `tab` | Switch boots |
+| `tab`, `shift+tab` | Next or previous screen. The number keys jump straight to one |
+| `p` | Pick a boot from a list of each one's id, USB serial, and tag |
 | `a` | Flash the app to the picked boot. Its saved settings stay |
 | `A` | Flash the app to both boots, one after the other, after one confirm |
 | `:` | Send any protocol line to the boot, with tab completion and history |
 | `l` | Cycle the log pane: small, half, hidden |
+| `ctrl+j`, `ctrl+k` | Scroll the log down or up. Page keys work too, on keyboards that have them |
 | `?` | Show help |
 | `q` | Quit and leave the board running |
 
@@ -117,7 +119,7 @@ and running or failed, with build output in the log and the reason for a failure
 it. Afterward the TUI stays attached, so the firmware's output keeps streaming.
 
 The TUI holds the boot's USB port while it's open, so `pio device monitor` can't attach until
-you quit or switch boots.
+you quit or pick another boot.
 
 ### Subcommands
 
