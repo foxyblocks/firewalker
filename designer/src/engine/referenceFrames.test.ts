@@ -33,11 +33,14 @@ function filesOnDisk(dir: string, prefix = ""): string[] {
 }
 
 function writeFiles(files: Map<string, Uint8Array>): void {
-  mkdirSync(FIXTURE_DIR, { recursive: true });
   for (const file of filesOnDisk(FIXTURE_DIR)) {
     if (!files.has(file) && !isHandWritten(file)) rmSync(path.join(FIXTURE_DIR, file));
   }
-  for (const [file, bytes] of files) writeFileSync(path.join(FIXTURE_DIR, file), bytes);
+  for (const [file, bytes] of files) {
+    const target = path.join(FIXTURE_DIR, file);
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, bytes);
+  }
 }
 
 describe("reference frames", () => {

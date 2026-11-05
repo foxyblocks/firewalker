@@ -4,7 +4,10 @@
 //
 // They only use the small test recipes in test/fixtures/recipe-frames/recipes/, which exist to
 // exercise every layer type, blend, choice, and knob source. Recipes in patterns/ aren't
-// involved, so designing a pattern never changes these files.
+// involved, so designing a pattern never changes these files. Each test recipe is compiled and
+// decoded before it runs, so the frames show what a boot would really be given, and rounding from
+// the binary format can't cause a false failure. Its compiled bytes are saved too, for the C++ test
+// to load. They also pin the binary layout: reordering a field changes them, and a test notices.
 //
 // This module builds the files and has no Node imports. referenceFrames.test.ts reads the test
 // recipes, writes the files to test/fixtures/recipe-frames/, and fails when they're out of date.
@@ -13,6 +16,7 @@
 import { RecipeEngine, type EngineInput } from "./engine";
 import { toChannelByte } from "./output";
 import { BENCH_STRIP, BOOT_3EB5, type StripLayout } from "./strip";
+import { compileRecipe, decodeRecipe } from "../recipe/compile";
 import type { Recipe } from "../recipe/types";
 
 const FILE_FORMAT = 1;
@@ -84,9 +88,23 @@ const LAYOUTS: { name: string; layout: StripLayout }[] = [
 ];
 
 export function referenceCases(recipes: Recipe[]): ReferenceCase[] {
-  return recipes.flatMap((recipe) =>
-    LAYOUTS.map(({ name, layout }) => ({ file: `${recipe.name}--${name}.bin`, recipe, layoutName: name, layout })),
-  );
+  return recipes.flatMap((recipe) => {
+    const onBoot = decodeCompiled(recipe);
+    return LAYOUTS.map(({ name, layout }) => ({ file: `${recipe.name}--${name}.bin`, recipe: onBoot, layoutName: name, layout }));
+  });
+}
+
+function compiledBytes(recipe: Recipe): Uint8Array {
+  const compiled = compileRecipe(recipe);
+  if (!compiled.ok) throw new Error(`${recipe.name}: ${compiled.errors.join(" ")}`);
+  return compiled.bytes;
+}
+
+// The recipe as a boot would have it after compiling.
+function decodeCompiled(recipe: Recipe): Recipe {
+  const decoded = decodeRecipe(compiledBytes(recipe));
+  if (!decoded.ok) throw new Error(`${recipe.name}: ${decoded.error}`);
+  return decoded.recipe;
 }
 
 // Runs one case and returns the saved frames, each one R, G, B bytes per pixel, in the 0..255
@@ -150,6 +168,7 @@ export function buildReferenceFiles(recipes: Recipe[]): Map<string, Uint8Array> 
   const files = new Map<string, Uint8Array>();
   files.set("inputs.bin", encodeInputs(inputs));
   for (const testCase of cases) files.set(testCase.file, encodeCase(testCase, inputs));
+  for (const recipe of recipes) files.set(`compiled/${recipe.name}.bin`, compiledBytes(recipe));
   const manifest = {
     format: FILE_FORMAT,
     frames: REFERENCE_FRAMES,
@@ -157,6 +176,7 @@ export function buildReferenceFiles(recipes: Recipe[]): Map<string, Uint8Array> 
     cases: cases.map(({ file, recipe, layoutName, layout }) => ({
       file,
       recipe: `recipes/${recipe.name}.json`,
+      compiled: `compiled/${recipe.name}.bin`,
       layout: layoutName,
       ...layout,
     })),

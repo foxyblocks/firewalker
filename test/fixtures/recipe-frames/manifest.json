@@ -6,6 +6,7 @@
     {
       "file": "blends--bench.bin",
       "recipe": "recipes/blends.json",
+      "compiled": "compiled/blends.bin",
       "layout": "bench",
       "count": 160,
       "toe": 52,
@@ -14,6 +15,7 @@
     {
       "file": "blends--3eb5.bin",
       "recipe": "recipes/blends.json",
+      "compiled": "compiled/blends.bin",
       "layout": "3eb5",
       "count": 107,
       "toe": 72,
@@ -22,6 +24,7 @@
     {
       "file": "chase-foot--bench.bin",
       "recipe": "recipes/chase-foot.json",
+      "compiled": "compiled/chase-foot.bin",
       "layout": "bench",
       "count": 160,
       "toe": 52,
@@ -30,6 +33,7 @@
     {
       "file": "chase-foot--3eb5.bin",
       "recipe": "recipes/chase-foot.json",
+      "compiled": "compiled/chase-foot.bin",
       "layout": "3eb5",
       "count": 107,
       "toe": 72,
@@ -38,6 +42,7 @@
     {
       "file": "chase-ring--bench.bin",
       "recipe": "recipes/chase-ring.json",
+      "compiled": "compiled/chase-ring.bin",
       "layout": "bench",
       "count": 160,
       "toe": 52,
@@ -46,6 +51,7 @@
     {
       "file": "chase-ring--3eb5.bin",
       "recipe": "recipes/chase-ring.json",
+      "compiled": "compiled/chase-ring.bin",
       "layout": "3eb5",
       "count": 107,
       "toe": 72,
@@ -54,6 +60,7 @@
     {
       "file": "fill-foot--bench.bin",
       "recipe": "recipes/fill-foot.json",
+      "compiled": "compiled/fill-foot.bin",
       "layout": "bench",
       "count": 160,
       "toe": 52,
@@ -62,6 +69,7 @@
     {
       "file": "fill-foot--3eb5.bin",
       "recipe": "recipes/fill-foot.json",
+      "compiled": "compiled/fill-foot.bin",
       "layout": "3eb5",
       "count": 107,
       "toe": 72,
@@ -70,6 +78,7 @@
     {
       "file": "fill-ring--bench.bin",
       "recipe": "recipes/fill-ring.json",
+      "compiled": "compiled/fill-ring.bin",
       "layout": "bench",
       "count": 160,
       "toe": 52,
@@ -78,6 +87,7 @@
     {
       "file": "fill-ring--3eb5.bin",
       "recipe": "recipes/fill-ring.json",
+      "compiled": "compiled/fill-ring.bin",
       "layout": "3eb5",
       "count": 107,
       "toe": 72,
@@ -86,6 +96,7 @@
     {
       "file": "fill-solid--bench.bin",
       "recipe": "recipes/fill-solid.json",
+      "compiled": "compiled/fill-solid.bin",
       "layout": "bench",
       "count": 160,
       "toe": 52,
@@ -94,6 +105,7 @@
     {
       "file": "fill-solid--3eb5.bin",
       "recipe": "recipes/fill-solid.json",
+      "compiled": "compiled/fill-solid.bin",
       "layout": "3eb5",
       "count": 107,
       "toe": 72,
@@ -102,6 +114,7 @@
     {
       "file": "flash--bench.bin",
       "recipe": "recipes/flash.json",
+      "compiled": "compiled/flash.bin",
       "layout": "bench",
       "count": 160,
       "toe": 52,
@@ -110,6 +123,7 @@
     {
       "file": "flash--3eb5.bin",
       "recipe": "recipes/flash.json",
+      "compiled": "compiled/flash.bin",
       "layout": "3eb5",
       "count": 107,
       "toe": 72,
@@ -118,6 +132,7 @@
     {
       "file": "pool--bench.bin",
       "recipe": "recipes/pool.json",
+      "compiled": "compiled/pool.bin",
       "layout": "bench",
       "count": 160,
       "toe": 52,
@@ -126,6 +141,7 @@
     {
       "file": "pool--3eb5.bin",
       "recipe": "recipes/pool.json",
+      "compiled": "compiled/pool.bin",
       "layout": "3eb5",
       "count": 107,
       "toe": 72,
@@ -134,6 +150,7 @@
     {
       "file": "sparkle--bench.bin",
       "recipe": "recipes/sparkle.json",
+      "compiled": "compiled/sparkle.bin",
       "layout": "bench",
       "count": 160,
       "toe": 52,
@@ -142,6 +159,7 @@
     {
       "file": "sparkle--3eb5.bin",
       "recipe": "recipes/sparkle.json",
+      "compiled": "compiled/sparkle.bin",
       "layout": "3eb5",
       "count": 107,
       "toe": 72,
@@ -150,6 +168,7 @@
     {
       "file": "trail-end--bench.bin",
       "recipe": "recipes/trail-end.json",
+      "compiled": "compiled/trail-end.bin",
       "layout": "bench",
       "count": 160,
       "toe": 52,
@@ -158,6 +177,7 @@
     {
       "file": "trail-end--3eb5.bin",
       "recipe": "recipes/trail-end.json",
+      "compiled": "compiled/trail-end.bin",
       "layout": "3eb5",
       "count": 107,
       "toe": 72,
@@ -166,6 +186,7 @@
     {
       "file": "trail-point--bench.bin",
       "recipe": "recipes/trail-point.json",
+      "compiled": "compiled/trail-point.bin",
       "layout": "bench",
       "count": 160,
       "toe": 52,
@@ -174,6 +195,7 @@
     {
       "file": "trail-point--3eb5.bin",
       "recipe": "recipes/trail-point.json",
+      "compiled": "compiled/trail-point.bin",
       "layout": "3eb5",
       "count": 107,
       "toe": 72,

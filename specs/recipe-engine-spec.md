@@ -277,6 +277,8 @@ C++ floats don't round the same way, so:
   hours, and `wave` would start to jitter.
 - Rounding is `floor(x + 0.5)`, because that's JavaScript's `Math.round`. C's `round` differs on
   negative halves.
+- Scaled numbers decode in single precision on both sides, so a fixed knob is the exact same value.
+  Knob values are then worked out in `double`, since they feed the state that builds up.
 - Random numbers use the same xorshift32, the same seed, and the same order of draws.
 - "No stomp yet" is an explicit state, where TypeScript uses `Infinity`.
 - Both engines clamp `dt` to 250 ms, so a long stall can't make one frame do unbounded work.
@@ -295,15 +297,14 @@ change when the engine or their test recipes do, so saving a pattern never touch
   strengths, and stomps at exactly level so `flat` triggers fire.
 - **Recipes:** only the small test recipes in that folder's `recipes/`, which together cover every layer
   type, blend, knob source, trail origin, and chase path. A test fails if a new one has no coverage.
-  Each case stores its own compiled bytes, so the C++ test doesn't depend on which recipes are built in.
+  Their compiled bytes sit beside the frames, so the C++ test doesn't depend on which recipes are built in.
 - **Not the recipes in `patterns/`.** They're combinations of the same layers, and they change every time
   someone tunes a pattern. If the built-ins ever need parity checks, the compiler's round-trip tests can
   cover them.
 - **Layouts:** the uncut bench strip (160 px, toe 52, heel 132) and boot `3EB5` (107 px, toe 72,
   heel 19). One runs toe first and the other heel first.
 - **Path:** JSON, then compile, then decode, then the TypeScript engine. So rounding from the
-  binary format can't cause a false failure. They come straight from JSON today, and rollout step 1
-  adds compile and decode, then regenerates them.
+  binary format can't cause a false failure.
 - **Stored:** 8-bit frames every 16th frame, as binary files, about 220 KB in all. A native test reads
   them. The C++ engine still runs every frame in between.
 - **Pass:** every checked channel within ±1. A failure names the recipe, frame, pixel, and channel.
