@@ -17,8 +17,7 @@ import { SIDE_NAMES, type BootsStore, type PatternTile, type RemoteView, type Si
 import { patternDisplay } from "../core/patternNames";
 import { joinNames, LinkDot, PixelSlider, SideBadge, Toggle, type SliderWarning } from "./parts";
 
-const CAP_OFF_MESSAGE =
-  "Past this line, full white can draw more than USB gives, about 1 A. Use a 5 V supply, or turn the cap back on.";
+const CAP_OFF_MESSAGE = "Past this line, full white can draw more than USB gives, about 1 A.";
 
 export function Remote({
   store,

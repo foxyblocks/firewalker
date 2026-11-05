@@ -105,8 +105,8 @@ home.
 - **Remote:** Both, Left, or Right chooses what a tap controls. A single-boot tab never
   touches the other boot.
 - **Brightness cap:** the Cap toggle beside the brightness percent. With it on, 100% is the
-  soft cap of 96, which keeps a USB-fed strip inside what USB gives. Turn it off only with the
-  strip on a 5 V supply: full white can then draw about 1 A. Each boot remembers it.
+  soft cap of 96, which keeps a USB-fed strip inside what USB gives. With it off, full white
+  can draw about 1 A, and the slider marks the levels past the cap. Each boot remembers it.
 - **Calibrate:** do this wearing the boots. Neutral with your weight even, heel down with
   toes up, toe down with heel up, each as far as you want the full effect. Stay in the pose
   for the two seconds after the countdown. A little wobble is fine. Heel and toe are optional.
