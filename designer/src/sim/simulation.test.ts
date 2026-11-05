@@ -10,6 +10,7 @@ interface Internals {
   step(): void;
   stomps: number;
   lift: number;
+  tilt: number;
 }
 
 function simulation(): { sim: Simulation; inside: Internals } {
@@ -83,6 +84,16 @@ describe("the beat", () => {
 });
 
 describe("walking", () => {
+  it("goes back to the slider's tilt when it stops", () => {
+    const { sim, inside } = simulation();
+    sim.setTilt(0.5);
+    sim.setWalking(true);
+    run(inside, 400);
+    sim.setTilt(-0.25);
+    sim.setWalking(false);
+    expect(inside.tilt).toBe(-0.25);
+  });
+
   it("keeps the foot down through the stance and lifts it in the swing", () => {
     expect(gaitLift(0.3)).toBe(0);
     expect(gaitLift(0.86)).toBeCloseTo(1);

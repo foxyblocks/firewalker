@@ -75,6 +75,7 @@ export class Simulation {
   private canvases: Canvases | null = null;
 
   private tilt = 0;
+  private manualTilt = 0;
   private walking = false;
   private paused = false;
   private speed = 1;
@@ -142,15 +143,17 @@ export class Simulation {
     this.bootBrightness = brightness;
   }
 
+  // The slider's tilt. Walking drives the tilt itself, and stopping goes back to this.
   setTilt(tilt: number): void {
-    this.tilt = Math.max(-1, Math.min(1, tilt));
+    this.manualTilt = Math.max(-1, Math.min(1, tilt));
+    if (!this.walking) this.tilt = this.manualTilt;
   }
 
   setWalking(walking: boolean): void {
     this.walking = walking;
     this.gaitMs = 0;
     this.lift = 0;
-    if (!walking) this.tilt = 0;
+    if (!walking) this.tilt = this.manualTilt;
   }
 
   // Stomps on every beat at this tempo, landing on the beat, or stops with null.
