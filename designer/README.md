@@ -36,9 +36,9 @@ It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
   **Beat** stomps on every beat at the BPM beside it, and **Walk** plays a steady gait. The
   strip menu switches between each boot's saved layout and the uncut bench strip.
 - **Boot brightness** shows what a boot's brightness setting does to a pattern, using the
-  firmware's own math. It starts at a new boot's default of 45, which the phone app shows
-  as 70%, and the readout gives the same percent. Each color channel has only 46 steps
-  there, and 17 at 16, so fades move in jumps and very dim colors can shift or go black. It keeps full white at full on
+  firmware's own math. It runs from 1 to the remote's cap of 96, and starts at a new boot's
+  default of 67, which the phone app shows as 70%. The readout gives the same percent. Each
+  color channel has 68 steps there, and only 17 at 16, so fades move in jumps and very dim colors can shift or go black. It keeps full white at full on
   your screen, so it shows those lost steps rather than how dim the boot really is. Pattern
   list thumbnails don't use it.
 - **Undo** and **Redo** with ⌘Z and ⇧⌘Z. **Save** with ⌘S.

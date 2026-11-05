@@ -35,7 +35,7 @@ describe("boot brightness", () => {
   it("shows a brightness as the phone app's percent", () => {
     expect(brightnessPercent(BOOT_BRIGHTNESS.default)).toBe(70);
     expect(brightnessPercent(BOOT_BRIGHTNESS.max)).toBe(100);
-    expect(brightnessPercent(16)).toBe(25);
+    expect(brightnessPercent(48)).toBe(50);
   });
 
   it("rounds and limits a color to a whole channel value", () => {

@@ -15,7 +15,7 @@ const STRIPS = Object.fromEntries(STRIP_PRESETS.map((preset) => [preset.key, pre
 const TILT_SNAP = 0.04;
 const BPM_MIN = 30;
 const BPM_MAX = 240;
-// v2 since the default moved from 16 to 45, so a level kept from before starts over at 45.
+// v2 since the default moved from 16 to 67, so a level kept from before starts over at 67.
 const BRIGHTNESS_KEY = "firewalker-designer:boot-brightness-v2";
 
 // The brightness last used in this browser, so it carries from one pattern to the next.

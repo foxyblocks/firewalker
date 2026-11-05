@@ -53,21 +53,22 @@ static_assert(Firewalker::stripLayoutValid(STRIP_DEFAULT_LAYOUT, STRIP_MAX_PIXEL
 constexpr uint32_t STRIP_SPI_HZ   = 3250000;
 constexpr uint32_t STRIP_LATCH_US = 300;
 
-// Default brightness (0-255) on first boot: 45 is 70% of LED_BRIGHTNESS_MAX, which the
+// Default brightness (0-255) on first boot: 67 is 70% of LED_BRIGHTNESS_MAX, which the
 // app shows as 70%. After that each controller restores its own saved value. Brightness
 // scales requested color and is not a current limit. Build flags set it for test builds.
 // The designer's simulator starts at this value too (designer/src/engine/output.ts).
 #ifndef FIREWALKER_LED_BRIGHTNESS
-#define FIREWALKER_LED_BRIGHTNESS 45
+#define FIREWALKER_LED_BRIGHTNESS 67
 #endif
 constexpr uint8_t LED_BRIGHTNESS = FIREWALKER_LED_BRIGHTNESS;
 
-// Highest brightness the remote may set. The uncut 160-pixel strip is rated about 1.6 A
-// at full white, so 64/255 keeps a full-white frame near 400 mA, inside the 500 mA the
-// XIAO's USB-fed 5V pad should supply. docs/power-budget.md has the numbers for a cut
-// strip and for a dedicated 5V supply.
+// Highest brightness the remote may set. A boot's strip is cut to at most 107 pixels, rated
+// about 10 mA each at full white, so 96/255 keeps a full-white frame near 400 mA. That fits
+// a USB 2.0 port's 500 mA, and the 1 A diode Seeed's schematic may put in front of the
+// XIAO's 5V pad. The uncut 160-pixel strip would reach about 600 mA here.
+// docs/power-budget.md has the numbers and the dedicated 5V supply setup.
 #ifndef FIREWALKER_LED_BRIGHTNESS_MAX
-#define FIREWALKER_LED_BRIGHTNESS_MAX 64
+#define FIREWALKER_LED_BRIGHTNESS_MAX 96
 #endif
 constexpr uint8_t LED_BRIGHTNESS_MIN = 1;
 constexpr uint8_t LED_BRIGHTNESS_MAX = FIREWALKER_LED_BRIGHTNESS_MAX;
