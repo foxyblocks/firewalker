@@ -2,7 +2,14 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { applyBootBrightness, BOOT_BRIGHTNESS, channelSteps, scaleChannel, toChannelByte } from "./output";
+import {
+  applyBootBrightness,
+  BOOT_BRIGHTNESS,
+  brightnessPercent,
+  channelSteps,
+  scaleChannel,
+  toChannelByte,
+} from "./output";
 
 function shown(colors: number[], brightness: number): number[] {
   const out = new Float32Array(colors.length);
@@ -25,6 +32,12 @@ describe("boot brightness", () => {
     expect(channelSteps(64)).toBe(65);
   });
 
+  it("shows a brightness as the phone app's percent", () => {
+    expect(brightnessPercent(BOOT_BRIGHTNESS.default)).toBe(70);
+    expect(brightnessPercent(BOOT_BRIGHTNESS.max)).toBe(100);
+    expect(brightnessPercent(16)).toBe(25);
+  });
+
   it("rounds and limits a color to a whole channel value", () => {
     expect(toChannelByte(0)).toBe(0);
     expect(toChannelByte(1)).toBe(255);
@@ -37,7 +50,7 @@ describe("boot brightness", () => {
     for (const brightness of [1, 16, 64]) expect(shown([1, 1, 1], brightness)).toEqual([1, 1, 1]);
   });
 
-  it("turns a dim purple blue at the default brightness, and keeps it purple higher up", () => {
+  it("turns a dim purple blue at brightness 16, and keeps it purple higher up", () => {
     const purple = [(0x7a / 255) * 0.12, 0, 0.12];
     expect(shown(purple, 16)).toEqual([0, 0, 2 / 16]);
     const [red, , blue] = shown(purple, 64);

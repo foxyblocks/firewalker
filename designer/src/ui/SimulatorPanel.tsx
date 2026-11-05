@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Segmented, Slider } from "./controls";
-import { BOOT_BRIGHTNESS, channelSteps } from "../engine/output";
+import { BOOT_BRIGHTNESS, brightnessPercent, channelSteps } from "../engine/output";
 import { STRIP_PRESETS } from "../engine/strip";
 import { Simulation, type Readout } from "../sim/simulation";
 import type { Recipe } from "../recipe/types";
@@ -15,7 +15,8 @@ const STRIPS = Object.fromEntries(STRIP_PRESETS.map((preset) => [preset.key, pre
 const TILT_SNAP = 0.04;
 const BPM_MIN = 30;
 const BPM_MAX = 240;
-const BRIGHTNESS_KEY = "firewalker-designer:boot-brightness";
+// v2 since the default moved from 16 to 45, so a level kept from before starts over at 45.
+const BRIGHTNESS_KEY = "firewalker-designer:boot-brightness-v2";
 
 // The brightness last used in this browser, so it carries from one pattern to the next.
 function readStoredBrightness(): number {
@@ -155,10 +156,15 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
           </span>
         </div>
 
-        <div className="control brightness" title="What a boot's brightness setting does to this pattern. A new boot starts at 16.">
+        <div
+          className="control brightness"
+          title={`What a boot's brightness setting does to this pattern. A new boot starts at ${BOOT_BRIGHTNESS.default} (${brightnessPercent(BOOT_BRIGHTNESS.default)}%).`}
+        >
           <div className="field-head">
             <span className="field-label">Boot brightness</span>
-            <span className="readout">{channelSteps(brightness)} steps per color</span>
+            <span className="readout">
+              {brightnessPercent(brightness)}% · {channelSteps(brightness)} steps per color
+            </span>
           </div>
           <Slider
             label="Boot brightness"

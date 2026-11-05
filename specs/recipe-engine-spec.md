@@ -518,8 +518,8 @@ If a case fails, fix it in this order, before version 1 freezes:
   400 characters, under the limit. A native test builds the longest possible `patterns` line.
 - **Web Serial's buffer.** PR #8 found a status line already passes Web Serial's default 255 bytes. Check
   that its buffer also fits a 520-byte `patterns` line.
-- **Recipes that look different on a boot.** Expected at low brightness, where the default of 16 gives
-  only 17 steps per channel. The simulator's Boot brightness setting shows that.
+- **Recipes that look different on a boot.** Expected at low brightness, where steps run out: 16 gives
+  only 17 per channel, and even the default of 45 gives just 46. The simulator's Boot brightness setting shows that.
 - **Flashing boots other people are using.** Check the board is free and ask foxy first. A boot's settings
   can be lost by a flash during a check.
 

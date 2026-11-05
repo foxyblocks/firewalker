@@ -53,11 +53,12 @@ static_assert(Firewalker::stripLayoutValid(STRIP_DEFAULT_LAYOUT, STRIP_MAX_PIXEL
 constexpr uint32_t STRIP_SPI_HZ   = 3250000;
 constexpr uint32_t STRIP_LATCH_US = 300;
 
-// Default brightness (0-255) on first boot. After that each controller restores
-// its own saved value. Brightness scales requested color and is not a current
-// limit. Build flags set it for test builds.
+// Default brightness (0-255) on first boot: 45 is 70% of LED_BRIGHTNESS_MAX, which the
+// app shows as 70%. After that each controller restores its own saved value. Brightness
+// scales requested color and is not a current limit. Build flags set it for test builds.
+// The designer's simulator starts at this value too (designer/src/engine/output.ts).
 #ifndef FIREWALKER_LED_BRIGHTNESS
-#define FIREWALKER_LED_BRIGHTNESS 16
+#define FIREWALKER_LED_BRIGHTNESS 45
 #endif
 constexpr uint8_t LED_BRIGHTNESS = FIREWALKER_LED_BRIGHTNESS;
 

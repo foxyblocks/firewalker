@@ -2,16 +2,23 @@
 //
 // The engine draws in smooth 0..1 colors. A boot turns each channel into a whole number from 0
 // to 255, then scales that by its brightness setting and drops the fraction. At the default
-// brightness of 16 that leaves only 17 steps per channel, so a fade moves in visible jumps, a
-// dim channel can land on 0, and a dim color can change hue. For example, #7a00ff at 12% stored
-// as (15, 0, 31) reaches the strip as (0, 0, 2): a dim purple comes out blue.
+// brightness of 45 that leaves 46 steps per channel, and at 16 only 17, so a fade moves in
+// visible jumps, a dim channel can land on 0, and a dim color can change hue. For example,
+// #7a00ff at 12% stored as (15, 0, 31) reaches the strip at 16 as (0, 0, 2): a dim purple
+// comes out blue.
 //
 // Simulation runs this after the engine, on the way to the canvases. The engine itself never
 // sees brightness, the same as on the firmware, where patterns leave it to the caller.
 
 // The firmware's LED_BRIGHTNESS (a new boot's setting), LED_BRIGHTNESS_MIN, and
-// LED_BRIGHTNESS_MAX (the highest a remote can set), from include/config.h.
-export const BOOT_BRIGHTNESS = { default: 16, min: 1, max: 64 } as const;
+// LED_BRIGHTNESS_MAX (the highest a remote can set), from include/config.h. A test fails if
+// they drift apart.
+export const BOOT_BRIGHTNESS = { default: 45, min: 1, max: 64 } as const;
+
+// A brightness as the percent the phone app shows: a share of the highest a remote can set.
+export function brightnessPercent(brightness: number): number {
+  return Math.round((brightness / BOOT_BRIGHTNESS.max) * 100);
+}
 
 // A 0..1 color channel as the 0..255 value a boot stores.
 export function toChannelByte(value: number): number {

@@ -25,8 +25,9 @@ The firmware applies brightness to every channel, so requested current scales ro
 
 | Brightness | ~110 pixels, white | ~110 pixels, 2-channel color | ~110 pixels, 1-channel color | Uncut strip, white |
 |---|---|---|---|---|
-| `16` (default) | ~69 mA | ~46 mA | ~23 mA | ~100 mA |
+| `16` | ~69 mA | ~46 mA | ~23 mA | ~100 mA |
 | `32` | ~138 mA | ~92 mA | ~46 mA | ~200 mA |
+| `45` (default, 70% in the app) | ~194 mA | ~129 mA | ~65 mA | ~282 mA |
 | `64` (remote cap) | ~276 mA | ~184 mA | ~92 mA | ~400 mA |
 | `96` | ~414 mA | ~276 mA | ~138 mA | ~602 mA |
 | `128` | ~552 mA | ~368 mA | ~184 mA | ~803 mA |
