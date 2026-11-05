@@ -202,12 +202,13 @@ export function DesignScreen({ name }: { name: string }) {
               setTab("layer");
             }}
             onToggle={(i) => setLayers(layers.map((l, k) => (k === i ? { ...l, enabled: !l.enabled } : l)))}
-            onMove={(i, by) => {
+            onMove={(from, to) => {
               const next = [...layers];
-              const [moved] = next.splice(i, 1);
-              next.splice(i + by, 0, moved!);
+              const [moved] = next.splice(from, 1);
+              next.splice(to, 0, moved!);
               setLayers(next);
-              if (i === current) setSelected(i + by);
+              // The selection stays on the same layer wherever it ends up.
+              setSelected(next.indexOf(layers[current]!));
             }}
             onRemove={(i) => {
               setLayers(layers.filter((_, k) => k !== i));

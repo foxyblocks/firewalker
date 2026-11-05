@@ -307,6 +307,12 @@ input[type="range"] {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 14px;
+  cursor: pointer;
+  transition: border-color 120ms;
+}
+
+.card:hover {
+  border-color: var(--ink-faint);
 }
 
 .card-open {
@@ -460,11 +466,50 @@ input[type="range"] {
 }
 
 .layer {
+  position: relative;
   display: flex;
   align-items: stretch;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
+  cursor: grab;
+}
+
+.layer.dragging {
+  opacity: 0.4;
+}
+
+/* Where a dragged layer will land, in the gap above or below a row. */
+.layer.drop-above::before,
+.layer.drop-below::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--ember);
+}
+
+.layer.drop-above::before {
+  top: -5px;
+}
+
+.layer.drop-below::after {
+  bottom: -5px;
+}
+
+.layer-grip {
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  color: var(--ink-faint);
+  font-size: 14px;
+  user-select: none;
+}
+
+.layer:hover .layer-grip {
+  color: var(--ink-quiet);
 }
 
 .layer.selected {
@@ -478,8 +523,9 @@ input[type="range"] {
   background: none;
   border: none;
   text-align: left;
-  padding: 8px 10px;
+  padding: 8px 10px 8px 6px;
   display: grid;
+  cursor: inherit;
 }
 
 .layer-name {

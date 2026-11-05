@@ -22,11 +22,13 @@ It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
 
 ## Using it
 
-- **Patterns** lists every recipe in `patterns/` plus this browser's drafts. Create one
-  blank or as a copy of another, then open, duplicate, rename, download, import, or delete.
+- **Patterns** lists every recipe in `patterns/` plus this browser's drafts. Click a card to
+  open it. Create one blank or as a copy of another, then duplicate, rename, download,
+  import, or delete.
 - **Design** has the layer stack on the left, the boot in the middle, and the selected
-  layer's settings on the right. Any number can be **Fixed**, or **Follows** tilt, a stomp,
-  or a wave. The JSON tab shows the file as it will be saved.
+  layer's settings on the right. Drag a layer by its grip, or use its arrows, to restack it.
+  Any number can be **Fixed**, or **Follows** tilt, a stomp, or a wave. The JSON tab shows
+  the file as it will be saved.
 - **The boot** shows from above and from its outer side, with the strip in index order
   below. Drag **Tilt**, or press **Stomp** or the space bar. A stomp lifts the boot and drops
   it, and the pattern gets the stomp the moment it lands, at the **Strength** you set.

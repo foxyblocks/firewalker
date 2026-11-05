@@ -129,7 +129,17 @@ export function PatternsScreen() {
       ) : (
         <ul className="cards">
           {state.entries.map((entry) => (
-            <li key={entry.name} className="card">
+            <li
+              key={entry.name}
+              className="card"
+              // The whole card opens the pattern, except its own buttons. The thumbnail is the
+              // keyboard's way in.
+              onClick={(event) => {
+                if (!(event.target as HTMLElement).closest("button, a, input, select")) {
+                  navigate({ screen: "design", name: entry.name });
+                }
+              }}
+            >
               <button
                 type="button"
                 className="card-open"
@@ -156,9 +166,6 @@ export function PatternsScreen() {
                 </p>
                 {entry.problems.length > 0 && <p className="small bad">{entry.problems[0]}</p>}
                 <div className="card-actions">
-                  <button type="button" className="button small primary" onClick={() => navigate({ screen: "design", name: entry.name })}>
-                    Open
-                  </button>
                   <button type="button" className="button small" onClick={() => navigate({ screen: "design", name: library.duplicate(entry.name) ?? entry.name })}>
                     Duplicate
                   </button>
