@@ -232,7 +232,16 @@ An upload goes one line at a time, and a client waits for each `ack`:
 < {"t":"patterns","list":["flow","fire-trail","comet","fire-stomp","rainbow-pool"]}
 ```
 
-- Lines can run to 47 characters, past a default 20-byte write, so send them as writes with response.
+- Over BLE, lines can run to 47 characters, past a default 20-byte write, so send them as writes with
+  response.
+- Over USB, keep each line to 31 characters, which means 7 bytes of data per line. USB arrives a byte at a
+  time into a 32-byte buffer that the firmware only empties between jobs, so a longer line can lose
+  characters while it's busy, such as while it's sending a frame. On a real boot, 2 to 7% of 46-character
+  lines arrived damaged, and about 0.3% of 30-character ones still do.
+- So be ready to send a line again. A damaged line gets `bad-hex`, `wrong-offset`, or `"cmd":"unknown"`, and
+  one that lost its newline gets no reply at all. The offset stops a repeat being stored twice, and if `begin`
+  arrived wrong, `too-big` or `short` means start over. The recipe's checksum catches anything else, so a
+  damaged recipe is never saved.
 - `next` says which offset to send next. A lost or repeated line gets `wrong-offset` with the right `next`.
 - Nothing reaches flash until `recipe end`, which checks the size, the recipe's own CRC-32, its contents,
   and that its name matches `begin`. Saving is one write, so a power cut leaves the old recipe or the new

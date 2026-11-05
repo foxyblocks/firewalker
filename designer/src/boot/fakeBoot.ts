@@ -14,6 +14,11 @@ export interface FakeBootOptions {
   slots?: number;
   // Never answers, like a boot whose link has gone quiet.
   silent?: boolean;
+  // Loses the end of any line longer than this, like a boot's 32-byte USB buffer overflowing.
+  receiveBytes?: number;
+  // Changes what arrives, as USB can. It gets each line and how many came before it, and returns what the
+  // boot receives, or null if the line lost its newline, so it joins onto the next one with no reply.
+  damage?: (line: string, index: number) => string | null;
 }
 
 export class FakeBoot {
@@ -22,6 +27,10 @@ export class FakeBoot {
   readonly versions: number[];
   readonly slots: number;
   silent: boolean;
+  readonly receiveBytes: number;
+  private readonly damage: (line: string, index: number) => string | null;
+  private lineCount = 0;
+  private unfinished = "";
   // Each uploaded recipe's bytes, by name.
   readonly stored = new Map<string, Uint8Array>();
   pattern = "flow";
@@ -38,13 +47,23 @@ export class FakeBoot {
     this.versions = options.versions ?? [RECIPE_VERSION];
     this.slots = options.slots ?? 16;
     this.silent = options.silent ?? false;
+    this.receiveBytes = options.receiveBytes ?? Number.POSITIVE_INFINITY;
+    this.damage = options.damage ?? ((line) => line);
   }
 
   // Handles one command, returning the lines it answers with.
-  handle(line: string): string[] {
-    this.linesSeen.push(line);
+  handle(sent: string): string[] {
+    this.linesSeen.push(sent);
     if (this.silent) return [];
+    const arrived = this.damage(sent, this.lineCount++);
+    if (arrived === null) {
+      this.unfinished += sent;
+      return [];
+    }
+    const line = (this.unfinished + arrived).slice(0, this.receiveBytes);
+    this.unfinished = "";
     const words = line.trim().split(/\s+/);
+    if (line.length >= 48 || words.length > 4) return [JSON.stringify({ t: "ack", cmd: "unknown", ok: false, error: "too-long" })];
     const reply = (value: unknown) => JSON.stringify(value);
     const recipeAck = (ok: boolean, error?: string, next?: number) =>
       reply({ t: "ack", cmd: "recipe", ok, ...(error ? { error } : {}), ...(next !== undefined ? { next } : {}) });
@@ -89,6 +108,7 @@ export class FakeBoot {
         if (!this.upload) return [recipeAck(false, "no-upload")];
         const offset = Number(words[2]);
         if (offset !== this.upload.bytes.length) return [recipeAck(false, "wrong-offset", this.upload.bytes.length)];
+        if (words[3]!.length % 2 !== 0) return [recipeAck(false, "bad-hex", this.upload.bytes.length)];
         const incoming = (words[3]!.match(/../g) ?? []).map((pair) => parseInt(pair, 16));
         if (this.loseNextData) {
           this.loseNextData = false;

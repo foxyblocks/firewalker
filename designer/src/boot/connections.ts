@@ -2,7 +2,7 @@
 // pattern library, so connections stay up when you move between patterns. A boot takes one connection
 // and keeps its own flash, so each one here is connected and sent to on its own.
 
-import { BootSession, type SendProgress } from "./bootSession";
+import { BootSession, BYTES_PER_BLUETOOTH_LINE, BYTES_PER_USB_LINE, type SendProgress } from "./bootSession";
 import { compileRecipe } from "../recipe/compile";
 import type { Recipe } from "../recipe/types";
 
@@ -104,7 +104,8 @@ export class BootConnections {
         onData: (text) => session?.receive(text),
         onClosed: () => this.forget(found.deviceId),
       });
-      session = new BootSession((line) => link.write(line));
+      const bytesPerLine = found.deviceId.startsWith("usb:") ? BYTES_PER_USB_LINE : BYTES_PER_BLUETOOTH_LINE;
+      session = new BootSession((line) => link.write(line), bytesPerLine);
       const status = await session.status();
       const name = typeof status.id === "string" ? `Firewalker-${status.id}` : found.name;
       this.live.set(found.deviceId, {

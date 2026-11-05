@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BootSession, NEEDS_FIRMWARE, type SendProgress } from "./bootSession";
+import { BootSession, BYTES_PER_USB_LINE, NEEDS_FIRMWARE, type SendProgress } from "./bootSession";
 import { BootConnections } from "./connections";
 import { FakeBoot, FakeBootTransport } from "./fakeBoot";
 import { compileRecipe } from "../recipe/compile";
@@ -22,13 +22,28 @@ function compiled(recipe: Recipe = RECIPE): Uint8Array {
 }
 
 // A session wired straight to a fake boot.
-function connect(boot: FakeBoot): BootSession {
+// A session that doesn't wait long for a reply, for tests where one never comes.
+function connectQuick(boot: FakeBoot, bytesPerLine?: number): BootSession {
+  const session: BootSession = new BootSession(
+    async (line) => {
+      const replies = boot.handle(line);
+      queueMicrotask(() => {
+        for (const reply of replies) session.receive(`${reply}\n`);
+      });
+    },
+    bytesPerLine,
+    5,
+  );
+  return session;
+}
+
+function connect(boot: FakeBoot, bytesPerLine?: number): BootSession {
   const session: BootSession = new BootSession(async (line) => {
     const replies = boot.handle(line);
     queueMicrotask(() => {
       for (const reply of replies) session.receive(`${reply}\n`);
     });
-  });
+  }, bytesPerLine);
   return session;
 }
 
@@ -50,6 +65,105 @@ describe("sending a recipe", () => {
     await connect(boot).sendRecipe("abcdefghijkl", compiled({ ...RECIPE, name: "abcdefghijkl" }));
     expect(boot.linesSeen.length).toBeGreaterThan(5);
     for (const line of boot.linesSeen) expect(line.length).toBeLessThan(48);
+  });
+
+  it("keeps every line over USB inside the board's 32-byte buffer, even at the longest", async () => {
+    const usb = new FakeBoot({ receiveBytes: 31 });
+    const name = "abcdefghijkl";
+    const palette = Array.from({ length: 6 }, () => "#102030");
+    const big: Recipe = { ...RECIPE, name, layers: Array.from({ length: 6 }, () => ({ ...newLayer("fill"), palette }) as Layer) };
+    const bytes = compiled(big);
+    expect(bytes.length).toBeGreaterThan(100);
+    expect(await connect(usb, BYTES_PER_USB_LINE).sendRecipe(name, bytes)).toMatchObject({ ok: true });
+    expect(usb.stored.get(name)).toEqual(bytes);
+    for (const line of usb.linesSeen) expect(line.length).toBeLessThanOrEqual(31);
+    expect(`recipe data 240 ${"ab".repeat(BYTES_PER_USB_LINE)}`.length).toBeLessThanOrEqual(31);
+  });
+
+  it("gives up clearly when a line can never arrive whole", async () => {
+    const usb = new FakeBoot({ receiveBytes: 43 });
+    const session = connectQuick(usb);
+    // A full 15-byte line loses its last character every time here, so resending can't help.
+    const result = await session.sendRecipe("spark", compiled());
+    expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/bad-hex/) });
+    expect(usb.stored.has("spark")).toBe(false);
+  });
+
+  describe("when USB damages a line", () => {
+    const isData = (line: string) => line.startsWith("recipe data");
+
+    it("sends again a line that lost a character", async () => {
+      let done = false;
+      const usb = new FakeBoot({
+        damage: (line) => {
+          if (done || !isData(line)) return line;
+          done = true;
+          return line.slice(0, -1);
+        },
+      });
+      const bytes = compiled();
+      expect(await connectQuick(usb, BYTES_PER_USB_LINE).sendRecipe("spark", bytes)).toMatchObject({ ok: true });
+      expect(usb.stored.get("spark")).toEqual(bytes);
+    });
+
+    it("recovers when a line loses its newline and gets no reply", async () => {
+      let done = false;
+      const usb = new FakeBoot({
+        damage: (line) => {
+          if (done || !isData(line)) return line;
+          done = true;
+          return null;
+        },
+      });
+      const bytes = compiled();
+      expect(await connectQuick(usb, BYTES_PER_USB_LINE).sendRecipe("spark", bytes)).toMatchObject({ ok: true });
+      expect(usb.stored.get("spark")).toEqual(bytes);
+    });
+
+    it("starts over when the size in `begin` arrives wrong", async () => {
+      let done = false;
+      const usb = new FakeBoot({
+        damage: (line) => {
+          if (done || !line.startsWith("recipe begin")) return line;
+          done = true;
+          return line.slice(0, -1);
+        },
+      });
+      const bytes = compiled();
+      expect(await connectQuick(usb, BYTES_PER_USB_LINE).sendRecipe("spark", bytes)).toMatchObject({ ok: true });
+      expect(usb.stored.get("spark")).toEqual(bytes);
+    });
+
+    it("gets every upload through when lines are damaged at random, and never stores a bad one", async () => {
+      // A small repeatable generator, so a failure here can be reproduced.
+      let seed = 12345;
+      const random = () => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return seed / 2147483648;
+      };
+      const usb = new FakeBoot({
+        damage: (line) => {
+          const roll = random();
+          if (roll < 0.03) return line.slice(0, -1);
+          if (roll < 0.05) return null;
+          return line;
+        },
+      });
+      const session = connectQuick(usb, BYTES_PER_USB_LINE);
+      const bytes = compiled();
+      for (let i = 0; i < 40; i++) {
+        usb.stored.clear();
+        expect(await session.sendRecipe("spark", bytes)).toMatchObject({ ok: true });
+        expect(usb.stored.get("spark")).toEqual(bytes);
+      }
+    });
+
+    it("gives up on a boot that never answers a line, and says so", async () => {
+      const usb = new FakeBoot({ damage: (line) => (isData(line) ? null : line) });
+      const result = await connectQuick(usb, BYTES_PER_USB_LINE).sendRecipe("spark", compiled());
+      expect(result.ok).toBe(false);
+      expect(usb.stored.has("spark")).toBe(false);
+    });
   });
 
   it("reports progress up to the whole recipe", async () => {
@@ -121,6 +235,7 @@ describe("sending a recipe", () => {
     const session = connect(boot);
     session.receive("[firewalker] a log line\n");
     const asked = session.status();
+    await Promise.resolve();
     session.receive('{"t":"motion","tilt":0.1}\n[firewalker] another\n');
     expect(await asked).toMatchObject({ t: "status", id: "FA4E" });
   });

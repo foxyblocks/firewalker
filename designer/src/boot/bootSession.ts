@@ -9,14 +9,29 @@ import { recipeCrc } from "../recipe/compile";
 
 export type Reply = Record<string, unknown>;
 
-// How long a boot gets to answer one line. It normally takes well under 100 ms.
+// How long a boot gets to answer one line, unless a caller says otherwise. It normally takes well under
+// 100 ms.
 const REPLY_TIMEOUT_MS = 3000;
-// The most bytes one `recipe data` line can carry, which is what fits in the boot's 48-byte commands.
-const BYTES_PER_LINE = 15;
+// How many recipe bytes go on one `recipe data` line. Bluetooth delivers a line whole, so it can carry
+// the 15 bytes that fit a boot's 48-byte commands. USB arrives a byte at a time into a 32-byte buffer that
+// the boot only empties between jobs, such as while it isn't sending a frame to the strip. A longer line
+// can overflow that and lose characters, so USB uses 7 bytes, which keeps the longest line to 30
+// characters plus its newline. A client waits for each reply, so the buffer is empty when a line starts.
+export const BYTES_PER_BLUETOOTH_LINE = 15;
+export const BYTES_PER_USB_LINE = 7;
 // The first firmware protocol with the recipe commands.
 export const RECIPE_PROTOCOL = 3;
-// How many times one upload can be sent back to an earlier offset before giving up.
-const MAX_RESENDS = 5;
+// A line over USB can still lose characters now and then, about 0.3% of them on a real boot, and it can
+// lose its newline, which leaves no reply at all. So everything here retries. That's safe because the
+// offset on each line stops a repeat from being stored twice, and the recipe's checksum catches the rest.
+const LINE_TIMEOUT_MS = 500;
+const ASK_ATTEMPTS = 3;
+const MAX_LINE_FAILURES = 8;
+// Saving a recipe can take the boot a moment, so it gets this many times as long to answer.
+const SAVE_TIMEOUT_FACTOR = 6;
+const UPLOAD_ATTEMPTS = 3;
+// Errors that retrying can't fix, because they're about the recipe or the boot, not one damaged line.
+const LASTING_ERRORS = new Set(["no-room", "name-reserved", "bad-name", "bad-recipe", "unsupported-version", "save-failed"]);
 
 export const NEEDS_FIRMWARE = "This boot needs a firmware update over USB before it can take recipes.";
 
@@ -32,6 +47,10 @@ const ERROR_TEXT: Record<string, string> = {
 const errorText = (code: unknown) => ERROR_TEXT[String(code)] ?? `The boot refused the recipe (${String(code)}).`;
 
 const isRecipeAck = (reply: Reply) => reply.t === "ack" && reply.cmd === "recipe";
+// A line too damaged to parse comes back as an ack with no command name.
+const isUnparsed = (reply: Reply) => reply.t === "ack" && reply.cmd === "unknown";
+const isLineReply = (reply: Reply) => isRecipeAck(reply) || isUnparsed(reply);
+const isPatternAck = (reply: Reply) => reply.t === "ack" && reply.cmd === "pattern";
 
 export type SendProgress = { stage: "checking" } | { stage: "sending"; sent: number; total: number } | { stage: "selecting" };
 export type SendResult = { ok: true; alreadyThere: boolean } | { ok: false; error: string };
@@ -47,7 +66,11 @@ export class BootSession {
   private partial = "";
   private waiter: Waiter | null = null;
 
-  constructor(private readonly write: (line: string) => Promise<void>) {}
+  constructor(
+    private readonly write: (line: string) => Promise<void>,
+    private readonly bytesPerLine: number = BYTES_PER_BLUETOOTH_LINE,
+    private readonly lineTimeoutMs: number = LINE_TIMEOUT_MS,
+  ) {}
 
   // Hands over text from the link. It can hold part of a line, or several.
   receive(text: string): void {
@@ -84,12 +107,12 @@ export class BootSession {
 
   // Sends one line and waits for the reply it calls for. Only one runs at a time, because a boot
   // handles one command at a time, and its replies carry nothing to tell them apart.
-  request(line: string, matches: (reply: Reply) => boolean): Promise<Reply> {
+  request(line: string, matches: (reply: Reply) => boolean, timeoutMs: number = REPLY_TIMEOUT_MS): Promise<Reply> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.waiter = null;
         reject(new Error("The boot stopped answering."));
-      }, REPLY_TIMEOUT_MS);
+      }, timeoutMs);
       this.waiter = { matches, resolve, reject, timer };
       this.write(line).catch((error: unknown) => {
         clearTimeout(timer);
@@ -99,17 +122,32 @@ export class BootSession {
     });
   }
 
+  // Sends a line until the reply it calls for arrives, in case the line gets damaged on the way. Rejects
+  // if it never does. `settled` can also ask to go again after a reply, for a refusal that a damaged name
+  // could explain.
+  private async ask(line: string, matches: (reply: Reply) => boolean, settled: (reply: Reply) => boolean = () => true): Promise<Reply> {
+    let last: Reply | null = null;
+    for (let attempt = 0; attempt < ASK_ATTEMPTS; attempt++) {
+      const reply = await this.request(line, (candidate) => matches(candidate) || isUnparsed(candidate), this.lineTimeoutMs).catch(() => null);
+      if (!reply || isUnparsed(reply)) continue;
+      last = reply;
+      if (settled(reply)) return reply;
+    }
+    if (last) return last;
+    throw new Error("The boot stopped answering.");
+  }
+
   status(): Promise<Reply> {
-    return this.request("status", (reply) => reply.t === "status");
+    return this.ask("status", (reply) => reply.t === "status");
   }
 
   recipes(): Promise<Reply> {
-    return this.request("recipes", (reply) => reply.t === "recipes");
+    return this.ask("recipes", (reply) => reply.t === "recipes");
   }
 
   // Deletes an upload, returning why not if it couldn't.
   async deleteRecipe(name: string): Promise<string | null> {
-    const reply = await this.request(`recipe delete ${name}`, isRecipeAck);
+    const reply = await this.ask(`recipe delete ${name}`, isRecipeAck, (answer) => answer.ok === true);
     return reply.ok === true ? null : errorText(reply.error);
   }
 
@@ -128,13 +166,13 @@ export class BootSession {
       if (!alreadyThere) {
         const failure = await this.upload(name, bytes, onProgress);
         if (failure) {
-          await this.request("recipe cancel", isRecipeAck).catch(() => undefined);
+          await this.ask("recipe cancel", isRecipeAck).catch(() => undefined);
           return { ok: false, error: failure };
         }
       }
 
       onProgress({ stage: "selecting" });
-      const selected = await this.request(`pattern ${name}`, (reply) => reply.t === "ack" && reply.cmd === "pattern");
+      const selected = await this.ask(`pattern ${name}`, isPatternAck, (reply) => reply.ok === true);
       if (selected.ok !== true) return { ok: false, error: errorText(selected.error) };
       return { ok: true, alreadyThere };
     } catch (error) {
@@ -145,34 +183,71 @@ export class BootSession {
   private async hasRecipe(name: string, bytes: Uint8Array): Promise<boolean> {
     const body = bytes.subarray(0, bytes.length - 4);
     const crc = recipeCrc(body).toString(16).padStart(8, "0");
-    const info = await this.request(`recipe info ${name}`, (reply) => isRecipeAck(reply) || (reply.t === "recipe" && reply.name === name));
+    const info = await this.ask(`recipe info ${name}`, (reply) => isRecipeAck(reply) || (reply.t === "recipe" && reply.name === name));
     return info.t === "recipe" && info.crc === crc && info.bytes === bytes.length;
   }
 
-  // Sends the recipe a line at a time, waiting for each reply. Returns what went wrong, if anything. A
-  // lost line gets `wrong-offset` and the place to carry on from.
+  // One line of an upload. Null means no reply came, as when the line lost its newline.
+  private uploadLine(line: string): Promise<Reply | null> {
+    return this.request(line, isLineReply, this.lineTimeoutMs).catch(() => null);
+  }
+
+  // Sends the recipe, starting over if an attempt fails in a way that retrying can fix. Returns what went
+  // wrong, if anything.
   private async upload(name: string, bytes: Uint8Array, onProgress: (progress: SendProgress) => void): Promise<string | null> {
-    const begun = await this.request(`recipe begin ${name} ${bytes.length}`, isRecipeAck);
-    if (begun.ok !== true) return errorText(begun.error);
+    let failure = "";
+    for (let attempt = 0; attempt < UPLOAD_ATTEMPTS; attempt++) {
+      const code = await this.uploadOnce(name, bytes, onProgress);
+      if (code === null) return null;
+      if (LASTING_ERRORS.has(code)) return errorText(code);
+      failure = code;
+    }
+    return failure === "no-reply" ? "The boot stopped answering." : errorText(failure);
+  }
+
+  // One attempt: `begin`, the data a line at a time with each waiting on its reply, then `end`. A line that
+  // fails is sent again, from wherever the boot says it's up to. Returns an error code, or null if it worked.
+  private async uploadOnce(name: string, bytes: Uint8Array, onProgress: (progress: SendProgress) => void): Promise<string | null> {
+    let failures = 0;
+    let last = "no-reply";
+    // Retries one line until it gets a reply saying it worked, and returns that reply.
+    const untilAccepted = async (line: () => string, onRefused: (reply: Reply) => void = () => undefined): Promise<Reply | null> => {
+      while (failures <= MAX_LINE_FAILURES) {
+        const reply = await this.uploadLine(line());
+        if (reply?.ok === true && reply.cmd === "recipe") return reply;
+        if (reply) {
+          last = String(reply.error);
+          if (LASTING_ERRORS.has(last) || last === "too-big" || last === "no-upload") return null;
+          onRefused(reply);
+        } else {
+          last = "no-reply";
+        }
+        failures++;
+      }
+      return null;
+    };
+
+    if (!(await untilAccepted(() => `recipe begin ${name} ${bytes.length}`))) return last;
 
     let at = 0;
-    let resends = 0;
     while (at < bytes.length) {
       onProgress({ stage: "sending", sent: at, total: bytes.length });
-      const hex = Array.from(bytes.subarray(at, at + BYTES_PER_LINE), (byte) => byte.toString(16).padStart(2, "0")).join("");
-      const reply = await this.request(`recipe data ${at} ${hex}`, isRecipeAck);
-      if (reply.ok === true) {
-        at = reply.next as number;
-      } else if (reply.error === "wrong-offset" && resends < MAX_RESENDS) {
-        at = reply.next as number;
-        resends++;
-      } else {
-        return errorText(reply.error);
-      }
+      const reply = await untilAccepted(
+        () => {
+          const hex = Array.from(bytes.subarray(at, at + this.bytesPerLine), (byte) => byte.toString(16).padStart(2, "0")).join("");
+          return `recipe data ${at} ${hex}`;
+        },
+        (refused) => {
+          if (typeof refused.next === "number") at = refused.next;
+        },
+      );
+      if (!reply) return last;
+      at = reply.next as number;
     }
     onProgress({ stage: "sending", sent: bytes.length, total: bytes.length });
 
-    const ended = await this.request("recipe end", isRecipeAck);
-    return ended.ok === true ? null : errorText(ended.error);
+    const ended = await this.request("recipe end", isLineReply, this.lineTimeoutMs * SAVE_TIMEOUT_FACTOR).catch(() => null);
+    if (!ended) return "no-reply";
+    return ended.ok === true ? null : String(ended.error);
   }
 }
