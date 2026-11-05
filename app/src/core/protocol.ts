@@ -3,9 +3,9 @@
  * read what comes back. The firmware's side of this contract is
  * docs/remote-protocol.md.
  *
- * A boot takes one short text command per Bluetooth write and answers with one JSON
- * object per line. A reply can span several notifications, so `LineSplitter` joins
- * them back into lines before `parseLine` reads them.
+ * A boot takes one short text command per Bluetooth write or USB line, and answers with one
+ * JSON object per line. A reply can arrive in several pieces, so `LineSplitter` joins them
+ * back into lines before `parseLine` reads them.
  *
  * This file is pure: no Bluetooth, no timers, no React. `boot.ts` builds the
  * connection behavior on top of it, and `fakeBoot.ts` speaks the same text.
@@ -145,8 +145,8 @@ export function parseLine(line: string): BootReply | null {
 }
 
 /**
- * Joins Bluetooth notifications back into whole lines. One notification can hold part
- * of a line or several lines, depending on how much the radio could carry.
+ * Joins received text back into whole lines. One Bluetooth notification or USB read can hold
+ * part of a line or several lines, depending on how much arrived at once.
  */
 export class LineSplitter {
   private partial = "";

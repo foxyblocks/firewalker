@@ -12,7 +12,7 @@
  */
 
 import { BootClient, type BootState } from "./boot";
-import { PROTOCOL_VERSION } from "./protocol";
+import { BOOT_NAME_PREFIX, PROTOCOL_VERSION } from "./protocol";
 import type { FoundBoot, Transport } from "../transport/transport";
 
 export type Side = "left" | "right";
@@ -167,8 +167,18 @@ export class BootsStore {
   /**
    * Labels a boot and connects to it. Giving it the other boot's side swaps the two,
    * and a new boot on a taken side replaces the old one, so a side never has two boots.
+   * A boot you've labeled, found again another way, such as on USB after Bluetooth, moves to
+   * the new connection. It keeps your name for it, and it can't end up on both sides.
    */
   assign(found: FoundBoot, side: Side): void {
+    // Only a full name can tell boots apart, because iOS can report a boot with a bare
+    // "Firewalker" before its real name arrives.
+    const foundAnotherWay = this.knownBoots.find(
+      (boot) => found.name.startsWith(BOOT_NAME_PREFIX) && boot.name === found.name && boot.deviceId !== found.deviceId,
+    );
+    if (foundAnotherWay) this.reconnectAs(foundAnotherWay, found.deviceId);
+
+    // From here on, a boot found another way counts as `existing`.
     const existing = this.knownBoots.find((boot) => boot.deviceId === found.deviceId);
     const occupant = this.known(side);
     if (existing && existing.side === side) return;
@@ -210,8 +220,13 @@ export class BootsStore {
     const found = await this.transport.pick();
     const boot = found && this.knownBoots.find((candidate) => candidate.name === found.name);
     if (!found || !boot) return;
+    this.reconnectAs(boot, found.deviceId);
+  }
+
+  /** Moves a saved boot to a new device id, keeping its side and your name for it. */
+  private reconnectAs(boot: KnownBoot, deviceId: string): void {
     this.stopClient(boot.side);
-    boot.deviceId = found.deviceId;
+    boot.deviceId = deviceId;
     this.persist();
     this.startClient(boot);
     this.notify();

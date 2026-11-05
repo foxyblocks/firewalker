@@ -45,6 +45,7 @@ function waitForAdvertisement(device: BluetoothDevice, timeoutMs: number): Promi
 export class BleTransport implements Transport {
   readonly simulated = false;
   readonly finding = Capacitor.isNativePlatform() ? ("scan" as const) : ("picker" as const);
+  readonly pickers = ["bluetooth"] as const;
 
   private started: Promise<void> | null = null;
   /** Boots picked since this page loaded, which a browser can reach whatever it remembers. */

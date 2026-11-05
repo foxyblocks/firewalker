@@ -1,10 +1,12 @@
 /**
- * The seam between the app and the radio. Everything above this interface works in
+ * The seam between the app and the boots. Everything above this interface works in
  * lines of text and doesn't know whether a real boot is on the other end, which is
  * what lets `fakeBoot.ts` exercise all of the real client code.
  *
  * `ble.ts` implements it with the Capacitor Bluetooth plugin, for both iOS Bluetooth
- * on the iPhone and Web Bluetooth in Chrome. `fakeBoot.ts` implements it in memory.
+ * on the iPhone and Web Bluetooth in Chrome. `usb.ts` implements it with Web Serial, for a
+ * boot plugged into a computer, and `browser.ts` offers both in a desktop browser.
+ * `fakeBoot.ts` implements it in memory.
  */
 
 /**
@@ -18,6 +20,15 @@ export class AccessLostError extends Error {
     this.name = "AccessLostError";
   }
 }
+
+/** A way of picking a boot, which is a button on Find boots when a browser offers several. */
+export type PickMethod = "bluetooth" | "usb";
+
+/** The device id of a boot on USB, from the `id` in its status line, such as `usb:3EB5`. */
+export const usbDeviceId = (bootId: string) => `usb:${bootId}`;
+
+/** True for a device id from `usbDeviceId`. */
+export const isUsbBoot = (deviceId: string) => deviceId.startsWith("usb:");
 
 export interface FoundBoot {
   /** This device's handle for the boot. On iOS it only means something on this phone. */
@@ -49,6 +60,8 @@ export interface Transport {
    * "picker" asks the system for one boot per tap, as Chrome's Web Bluetooth does.
    */
   readonly finding: "scan" | "picker";
+  /** The ways `pick` can find a boot here. The first is what a plain `pick()` uses. */
+  readonly pickers: readonly PickMethod[];
   /** True when these are pretend boots, so the UI can say so. */
   readonly simulated: boolean;
 
@@ -57,8 +70,11 @@ export interface Transport {
   openSettings(): Promise<void>;
   startScan(onFound: (boot: FoundBoot) => void): Promise<void>;
   stopScan(): Promise<void>;
-  /** Shows the system's picker. Resolves null if the person cancels. */
-  pick(): Promise<FoundBoot | null>;
+  /**
+   * Shows the system's picker. Resolves null if the person cancels. Rejects, with a message
+   * to show them, if they picked a boot that can't be reached.
+   */
+  pick(method?: PickMethod): Promise<FoundBoot | null>;
   /**
    * Connects to a boot and subscribes to its replies. Rejects if it can't reach it, with
    * AccessLostError when trying again won't help.

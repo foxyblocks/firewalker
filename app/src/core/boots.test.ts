@@ -33,6 +33,48 @@ const pair = async (
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
+describe("moving a boot between Bluetooth and USB", () => {
+  it("keeps its side and your name for it, and connects the new way", async () => {
+    const { left, store, storage } = await pair();
+    store.rename("left", "Stompy");
+
+    left.deviceId = "usb:3ED1";
+    store.assign({ deviceId: "usb:3ED1", name: left.name }, "left");
+    await settle();
+
+    expect(store.known("left")).toMatchObject({ deviceId: "usb:3ED1", nickname: "Stompy" });
+    expect(store.client("left")?.getState().link).toBe("online");
+    // Saved, so a reload connects over USB rather than going back to Bluetooth.
+    expect(JSON.parse(storage.data.boots!)[0]).toMatchObject({ side: "left", deviceId: "usb:3ED1" });
+  });
+
+  it("can't leave the same boot on both sides", async () => {
+    const { left, right, store } = await pair();
+
+    left.deviceId = "usb:3ED1";
+    store.assign({ deviceId: "usb:3ED1", name: left.name }, "right");
+    await settle();
+
+    expect(store.known("right")?.name).toBe(left.name);
+    expect(store.known("left")?.name).toBe(right.name);
+    expect(store.client("right")?.getState().status?.id).toBe("3ED1");
+    expect(store.client("left")?.getState().status?.id).toBe("7B20");
+  });
+
+  it("doesn't mistake a boot with no name yet for one you've labeled", async () => {
+    const storage = memoryStorage();
+    const first = new FakeBoot({ id: "3ED1" });
+    const second = new FakeBoot({ id: "7B20" });
+    const store = new BootsStore(new FakeTransport([first, second]), storage);
+    await store.load();
+    store.assign({ deviceId: first.deviceId, name: "Firewalker" }, "left");
+    store.assign({ deviceId: second.deviceId, name: "Firewalker" }, "right");
+    await settle();
+    expect(store.known("left")?.deviceId).toBe(first.deviceId);
+    expect(store.known("right")?.deviceId).toBe(second.deviceId);
+  });
+});
+
 describe("knowing the boots", () => {
   it("starts empty on first launch", async () => {
     const store = new BootsStore(new FakeTransport([]), memoryStorage());
