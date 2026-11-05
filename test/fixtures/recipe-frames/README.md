@@ -3,28 +3,31 @@
 What the designer's TypeScript engine draws for a fixed script of motion. A test of the firmware's
 C++ engine can run the same inputs and compare pixels, with no boot needed.
 
-Everything here except this file is generated from `patterns/` and
-`designer/src/engine/referenceFrames.ts`. Don't edit it by hand. After changing what the engine
-draws, or a recipe in `patterns/`, regenerate it and commit the result:
+The frames come only from the test recipes in `recipes/`. Recipes in `patterns/` aren't involved,
+so saving or editing a pattern never changes anything here.
+
+Regenerate them only after changing what the engine draws, or one of the test recipes:
 
 ```bash
 cd designer
 bun run reference-frames
 ```
 
-`bun run test` fails if these files are out of date.
+`bun run test` fails if the frames don't match the engine, or if a layer type, blend, choice, or
+knob source has no test recipe.
 
 ## What's here
 
 | File | Holds |
 |---|---|
-| `manifest.json` | Every case: its frames file, recipe, and strip layout |
-| `inputs.bin` | The motion script, shared by every case |
-| `<recipe>--<layout>.bin` | One recipe's expected frames on one strip layout |
-| `recipes/*.json` | Small recipes that exercise every layer type, blend, choice, and knob source |
+| `recipes/*.json` | Small test recipes that exercise every layer type, blend, choice, and knob source. Edited by hand |
+| `manifest.json` | Generated. Every case: its frames file, recipe, and strip layout |
+| `inputs.bin` | Generated. The motion script, shared by every case |
+| `<recipe>--<layout>.bin` | Generated. One recipe's expected frames on one strip layout |
 
-The kept recipes in `patterns/` run on two layouts: `bench` (160 pixels, toe 52, heel 132) and
-`3eb5` (107 pixels, toe 72, heel 19). The small recipes run on `3eb5`.
+Every test recipe runs on two layouts: `bench` (160 pixels, toe 52, heel 132) and `3eb5` (107 pixels,
+toe 72, heel 19). The first runs toe first with even arcs, and the second runs heel first with uneven
+ones, so they catch different bugs.
 
 ## File formats
 

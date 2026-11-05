@@ -206,7 +206,8 @@ at most about 0.002% of the range, which can't show up in 8-bit color. The range
 generated table, so nothing needs a second copy of them.
 
 Reordering a field or an option changes what saved recipes mean. A test pins the exact bytes
-of each keeper, so that can't happen quietly.
+of the test recipes that sit with the reference frames, so that can't happen quietly. It doesn't use
+the recipes in `patterns/`, so tuning a pattern can't trip it.
 
 ## Size limits
 
@@ -287,20 +288,24 @@ A change to engine behavior goes into both engines in one commit, with new refer
 ## Reference frames
 
 These are the acceptance test for the port. They already exist, in `test/fixtures/recipe-frames/`,
-written by `bun run reference-frames`. That folder's README describes the file formats.
+written by `bun run reference-frames`. That folder's README describes the file formats. They only
+change when the engine or their test recipes do, so saving a pattern never touches them.
 
 - **Inputs:** a fixed script of about 7 seconds, with uneven `dt`, a tilt sweep, stomps at several
   strengths, and stomps at exactly level so `flat` triggers fire.
-- **Recipes:** all five keepers, built in or not, because the engine has to draw uploads correctly too.
-  Small fixtures then cover every layer type, blend, and knob source. Each case stores its own compiled
-  bytes, so the C++ test doesn't depend on which recipes are built in.
+- **Recipes:** only the small test recipes in that folder's `recipes/`, which together cover every layer
+  type, blend, knob source, trail origin, and chase path. A test fails if a new one has no coverage.
+  Each case stores its own compiled bytes, so the C++ test doesn't depend on which recipes are built in.
+- **Not the recipes in `patterns/`.** They're combinations of the same layers, and they change every time
+  someone tunes a pattern. If the built-ins ever need parity checks, the compiler's round-trip tests can
+  cover them.
 - **Layouts:** the uncut bench strip (160 px, toe 52, heel 132) and boot `3EB5` (107 px, toe 72,
-  heel 19).
+  heel 19). One runs toe first and the other heel first.
 - **Path:** JSON, then compile, then decode, then the TypeScript engine. So rounding from the
   binary format can't cause a false failure. They come straight from JSON today, and rollout step 1
   adds compile and decode, then regenerates them.
-- **Stored:** 8-bit frames every 16th frame, as binary files. That's about 100 KB for the keepers,
-  and a native test reads them. The C++ engine still runs every frame in between.
+- **Stored:** 8-bit frames every 16th frame, as binary files, about 220 KB in all. A native test reads
+  them. The C++ engine still runs every frame in between.
 - **Pass:** every checked channel within ±1. A failure names the recipe, frame, pixel, and channel.
 
 ## Dynamic pattern list
@@ -549,7 +554,7 @@ Each step lands on its own, building and passing its tests.
 
 **Designer (`bun run test`)**
 
-- Every keeper compiles, and its bytes match a pinned copy.
+- Every keeper compiles. Every test recipe's bytes match a pinned copy.
 - Compile then decode returns the same recipe, within rounding.
 - Too big, no enabled layers, and reserved names all give clear errors.
 - Generated files are current. Saving a recipe that isn't built in leaves them unchanged.
