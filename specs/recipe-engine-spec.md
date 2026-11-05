@@ -591,7 +591,7 @@ Each step lands on its own, building and passing its tests.
    - `docs/recipe-format.md`: the binary layout.
    - `docs/remote-protocol.md`: the new commands, and protocol 3.
    - `docs/adr/0005-pattern-recipes.md`: close the open question on built-ins.
-   - `CONTEXT.md`, `CLAUDE.md`, `designer/README.md`, and `patterns/README.md`, which should say which
+   - `CONTEXT.md`, `AGENTS.md`, `designer/README.md`, and `patterns/README.md`, which should say which
      recipes are built in and point to `built-ins.txt`.
    - `docs/open-questions.md`: its scope list still names only flow and fire-trail.
 

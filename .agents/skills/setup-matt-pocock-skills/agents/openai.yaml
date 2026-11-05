@@ -1,0 +1,5 @@
+interface:
+  display_name: "Set up engineering skills"
+  short_description: "Configure issue tracking, triage labels, and domain docs"
+policy:
+  allow_implicit_invocation: false
