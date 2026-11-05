@@ -1,184 +1,250 @@
 package main
 
 import (
-	"slices"
+	"bytes"
+	"context"
+	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/spf13/cobra"
+
+	"firewalker/cli/internal/bench"
+	"firewalker/cli/internal/boards"
+	"firewalker/cli/internal/protocol"
 )
 
-const deviceList = `[
-  {"port": "/dev/cu.debug-console", "description": "n/a", "hwid": "n/a"},
-  {"port": "/dev/cu.usbmodem111", "description": "Other", "hwid": "USB VID:PID=239A:80F1 SER=FEATHER LOCATION=1-1"},
-  {"port": "/dev/cu.usbmodem572C60FA3", "description": "XIAO", "hwid": "USB VID:PID=2886:0062 SER=572C60FA LOCATION=2-1"},
-  {"port": "/dev/cu.usbmodemAAAA1", "description": "XIAO", "hwid": "USB VID:PID=2886:0062 SER=AAAA LOCATION=2-2"}
-]`
+func run(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	cmd := newCommand()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs(append([]string{"--repo-root", "../.."}, args...))
+	err := cmd.ExecuteContext(context.Background())
+	return out.String(), err
+}
 
-func TestParseBoardsKeepsOnlyMG24Boards(t *testing.T) {
-	boards, err := parseBoards([]byte(deviceList))
+// Nobody can press keys in a pipe, so bare `./cli` has to print help there rather than
+// try to open a full-screen app. Tests run with no terminal, which is exactly that case.
+func TestBareCommandPrintsHelpWithoutATerminal(t *testing.T) {
+	out, err := run(t)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []board{{"/dev/cu.usbmodem572C60FA3", "572C60FA"}, {"/dev/cu.usbmodemAAAA1", "AAAA"}}
-	if !slices.Equal(boards, want) {
-		t.Fatalf("got %v, want %v", boards, want)
+	if !strings.Contains(out, "Usage:") || !strings.Contains(out, "flow") || !strings.Contains(out, "app") {
+		t.Fatalf("got %q", out)
 	}
 }
 
-func TestSelectBoardNeverGuesses(t *testing.T) {
-	left := board{"/dev/cu.left", "LEFT"}
-	right := board{"/dev/cu.right", "RIGHT"}
-	tests := []struct {
-		name         string
-		boards       []board
-		port, serial string
-		want         board
-		wantErr      string
-	}{
-		{name: "one board needs no selection", boards: []board{left}, want: left},
-		{name: "two boards refuse to guess", boards: []board{left, right}, wantErr: "select one"},
-		{name: "serial picks a board", boards: []board{left, right}, serial: "RIGHT", want: right},
-		{name: "port picks a board", boards: []board{left, right}, port: "/dev/cu.left", want: left},
-		{name: "unknown serial fails", boards: []board{left, right}, serial: "NOPE", wantErr: "no matching"},
-		{name: "a selection can't fall through to the other board", boards: []board{left}, serial: "RIGHT", wantErr: "no matching"},
-		{name: "no boards fails", wantErr: "no matching"},
+func TestExplicitLayoutRunsInEitherOrderWithoutAnyBoard(t *testing.T) {
+	out, err := run(t, "flow", "--pixels", "94", "--toe", "86", "--heel", "48", "--dry-run")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got, err := selectBoard(test.boards, test.port, test.serial)
-			if test.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
-					t.Fatalf("got error %v, want it to mention %q", err, test.wantErr)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			if got != test.want {
-				t.Fatalf("got %v, want %v", got, test.want)
-			}
-		})
+	if !strings.Contains(out, "pixels: 94") || !strings.Contains(out, "toe=86 heel=48") {
+		t.Fatalf("got %q", out)
+	}
+	if !strings.Contains(out, "--pixels") {
+		t.Fatalf("should say the layout came from flags: %q", out)
 	}
 }
 
-func validConfig(test int) (*options, *testConfig) {
-	return &options{pixels: 160, brightness: 16},
-		&testConfig{test: test, toe: -1, heel: -1, lit: -1, color: "cycle", interval: 500 * time.Millisecond}
+func TestAppRefusesFlagsItWouldIgnore(t *testing.T) {
+	for _, flag := range []string{"--pixels", "--brightness"} {
+		if _, err := run(t, "app", flag, "20", "--dry-run"); err == nil || !strings.Contains(err.Error(), flag) {
+			t.Errorf("app %s: got %v", flag, err)
+		}
+	}
 }
 
-func TestValidateRejectsConflictingFlags(t *testing.T) {
+func TestWebRefusesFlagsMeantForBoards(t *testing.T) {
+	for _, args := range [][]string{
+		{"web", "--pixels", "20"},
+		{"web", "--brightness", "20"},
+		{"web", "--port", "/dev/cu.left"},
+		{"web", "--serial", "LEFT"},
+		{"web", "--debug"},
+	} {
+		if _, err := run(t, append(args, "--dry-run")...); err == nil || !strings.Contains(err.Error(), args[1]) {
+			t.Errorf("%v: got %v", args, err)
+		}
+	}
+}
+
+func TestWebDryRunShowsThePlanAndRunsNothing(t *testing.T) {
+	out, err := run(t, "web", "--fake", "--dry-run")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"bun install", "bun run build", "bun run vite preview --port 5173 --strictPort", "http://localhost:5173/?boot=fake&paired=1"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in %q", want, out)
+		}
+	}
+}
+
+func TestDebugNeedsAnUpload(t *testing.T) {
+	for _, args := range [][]string{
+		{"app", "--debug", "--build-only"},
+		{"flow", "--debug", "--build-only", "--pixels", "94"},
+	} {
+		if _, err := run(t, args...); err == nil || !strings.Contains(err.Error(), "--debug") {
+			t.Errorf("%v: got %v", args, err)
+		}
+	}
+}
+
+// The TUI shows a command for every test so that anything done by hand can be scripted.
+// That's only true if pasting it runs the same test, so each of these goes through the
+// real flag parser and has to come back equal.
+func TestPreviewedCommandsParseBackToTheSameTest(t *testing.T) {
+	saved := bench.StripLayout{Pixels: 94, Toe: 86, Heel: 48}
+	base := func(test int) (*bench.Options, *bench.Config) {
+		return &bench.Options{Pixels: 94, Brightness: 16},
+			&bench.Config{Name: bench.TestNames[test], Test: test, Toe: 86, Heel: 48, Lit: -1, Color: "cycle", Interval: 500 * time.Millisecond}
+	}
 	tests := []struct {
 		name   string
-		mutate func(*options, *testConfig)
+		test   int
+		mutate func(*bench.Options, *bench.Config)
 	}{
-		{"no pixels", func(o *options, _ *testConfig) { o.pixels = 0 }},
-		{"too many pixels", func(o *options, _ *testConfig) { o.pixels = 5000 }},
-		{"no brightness", func(o *options, _ *testConfig) { o.brightness = 0 }},
-		{"motion with simulated tilt", func(_ *options, c *testConfig) { c.motion, c.tilt = true, 0.5 }},
-		{"motion with timed impacts", func(_ *options, c *testConfig) { c.motion, c.stompEvery = true, time.Second }},
-		{"logs without motion", func(_ *options, c *testConfig) { c.logMotion = true }},
-		{"logs with no upload", func(o *options, c *testConfig) { c.motion, c.logMotion, o.buildOnly = true, true, true }},
-		{"both port and serial", func(o *options, _ *testConfig) { o.port, o.serial = "a", "b" }},
-		{"toe past heel", func(_ *options, c *testConfig) { c.toe, c.heel = 100, 50 }},
-		{"tilt out of range", func(_ *options, c *testConfig) { c.tilt = 2 }},
+		{"simulated flow", bench.TestFlow, func(_ *bench.Options, c *bench.Config) { c.Tilt, c.StompEvery = -0.5, 2*time.Second }},
+		{"flow with motion and logs", bench.TestFlow, func(_ *bench.Options, c *bench.Config) { c.Motion, c.LogMotion = true, true }},
+		{"edited layout", bench.TestFlow, func(o *bench.Options, c *bench.Config) { o.Pixels, c.Toe, c.Heel = 90, 10, 60 }},
+		{"bright flow", bench.TestFlow, func(o *bench.Options, _ *bench.Config) { o.Brightness = 40 }},
+		{"timed fire-trail", bench.TestFireTrail, func(_ *bench.Options, c *bench.Config) { c.StompEvery = time.Second }},
+		{"fire-trail with its timer off", bench.TestFireTrail, func(_ *bench.Options, c *bench.Config) { c.StompEvery = 0 }},
+		{"fire-trail from the toe", bench.TestFireTrail, func(_ *bench.Options, c *bench.Config) { c.Tilt, c.StompEvery = 1, time.Second }},
+		{"fire-trail on motion", bench.TestFireTrail, func(_ *bench.Options, c *bench.Config) { c.Motion = true }},
+		{"fixed color", bench.TestColor, func(_ *bench.Options, c *bench.Config) { c.Color, c.Lit = "#ff8000", 10 }},
+		{"slow cycle", bench.TestColor, func(_ *bench.Options, c *bench.Config) { c.Interval = 2 * time.Second }},
+		{"off", bench.TestOff, func(*bench.Options, *bench.Config) {}},
+		{"named board", bench.TestFlow, func(o *bench.Options, _ *bench.Config) { o.Serial = "99C817E5" }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			o, c := validConfig(testFlow)
-			test.mutate(o, c)
-			if err := validate(o, c); err == nil {
-				t.Fatal("expected an error")
+			wantO, wantC := base(test.test)
+			test.mutate(wantO, wantC)
+			if !wantC.IsPattern() {
+				wantC.Toe, wantC.Heel = -1, -1
+			}
+			if err := bench.Validate(wantO, wantC); err != nil {
+				t.Fatal(err)
+			}
+
+			var gotO *bench.Options
+			var gotC *bench.Config
+			cmd := newCommandWith(func(_ context.Context, cmd *cobra.Command, o *bench.Options, c *bench.Config) error {
+				// What runTest would do: a command with no --pixels gets the boot's layout.
+				if !cmd.Flag("pixels").Changed {
+					if c.IsPattern() {
+						bench.ApplyLayout(o, c, saved)
+					} else {
+						o.Pixels = saved.Pixels
+					}
+				}
+				gotO, gotC = o, c
+				return bench.Validate(o, c)
+			})
+			args := bench.Args(wantO, wantC, saved)
+			cmd.SetArgs(args)
+			if err := cmd.ExecuteContext(context.Background()); err != nil {
+				t.Fatalf("%v: %v", args, err)
+			}
+			gotO.RepoRoot = ""
+			if *gotO != *wantO {
+				t.Errorf("%v\noptions: got %+v, want %+v", args, *gotO, *wantO)
+			}
+			if *gotC != *wantC {
+				t.Errorf("%v\nconfig: got %+v, want %+v", args, *gotC, *wantC)
 			}
 		})
 	}
 }
 
-// Fire-trail starts from the part of the boot that's down, so a simulated tilt picks its origin.
-func TestValidateAllowsFireTrailTilt(t *testing.T) {
-	o, c := validConfig(testFireTrail)
-	c.tilt = -1
-	if err := validate(o, c); err != nil {
-		t.Fatal(err)
+func saved(leds, toe, heel int) *protocol.Status {
+	return &protocol.Status{Proto: 2, ID: "3ED8", LEDs: &leds, Toe: &toe, Heel: &heel}
+}
+
+func TestSavedLayoutPrefersWhatTheBootSaysAndRemembersIt(t *testing.T) {
+	cache := boards.OpenCache(filepath.Join(t.TempDir(), "boards.json"))
+	config := bench.StripLayout{Pixels: 160, Toe: 52, Heel: 132}
+	target := boards.Board{Port: "/dev/cu.right", Serial: "99C817E5"}
+
+	asked := ""
+	finder := layoutFinder{cache: cache, query: func(_ context.Context, port string) (*protocol.Status, error) {
+		asked = port
+		return saved(94, 86, 48), nil
+	}}
+	got := finder.resolve(context.Background(), config, &target, "")
+	if asked != target.Port {
+		t.Fatalf("asked %q", asked)
+	}
+	if got.Layout != (bench.StripLayout{Pixels: 94, Toe: 86, Heel: 48}) || got.Source != bench.SourceBoot {
+		t.Fatalf("got %+v", got)
+	}
+	if !strings.Contains(got.Note, "3ED8") {
+		t.Fatalf("note = %q", got.Note)
+	}
+
+	// A later run finds a bench build on the board, which can't answer.
+	finder.query = func(context.Context, string) (*protocol.Status, error) {
+		return nil, errors.New("no reply")
+	}
+	got = finder.resolve(context.Background(), config, &target, "")
+	if got.Layout != (bench.StripLayout{Pixels: 94, Toe: 86, Heel: 48}) || got.Source != bench.SourceRemembered {
+		t.Fatalf("got %+v", got)
+	}
+	if !strings.Contains(got.Note, "3ED8") {
+		t.Fatalf("note = %q", got.Note)
 	}
 }
 
-func TestValidateDefaultsLayoutFromStripLength(t *testing.T) {
-	o, c := validConfig(testFlow)
-	if err := validate(o, c); err != nil {
-		t.Fatal(err)
+func TestSavedLayoutFallsBackToConfigForAnUnknownBoard(t *testing.T) {
+	cache := boards.OpenCache(filepath.Join(t.TempDir(), "boards.json"))
+	config := bench.StripLayout{Pixels: 160, Toe: 52, Heel: 132}
+	target := boards.Board{Port: "/dev/cu.left", Serial: "FBC116E9"}
+
+	// Proto 1 answers, but has no layout to offer.
+	finder := layoutFinder{cache: cache, query: func(context.Context, string) (*protocol.Status, error) {
+		return &protocol.Status{Proto: 1, ID: "3EB5"}, nil
+	}}
+	got := finder.resolve(context.Background(), config, &target, "")
+	if got.Layout != config || got.Source != bench.SourceConfig {
+		t.Fatalf("got %+v", got)
 	}
-	if c.toe != 52 || c.heel != 132 {
-		t.Fatalf("got toe=%d heel=%d, want the 160-pixel layout", c.toe, c.heel)
+	if !strings.Contains(got.Note, "config.h") {
+		t.Fatalf("note = %q", got.Note)
+	}
+	// Its id is still worth keeping for later.
+	if record, _ := cache.Get("FBC116E9"); record.ID != "3EB5" {
+		t.Fatalf("record = %+v", record)
 	}
 }
 
-func TestValidateParsesColors(t *testing.T) {
-	o, c := validConfig(testColor)
-	c.color = "#FF8000"
-	if err := validate(o, c); err != nil {
+// A dry run with two boards connected has no single target, but a board named with
+// --serial may still be remembered.
+func TestSavedLayoutWithNoReachableBoardUsesTheNamedSerial(t *testing.T) {
+	cache := boards.OpenCache(filepath.Join(t.TempDir(), "boards.json"))
+	if err := cache.Update("99C817E5", func(r *boards.Record) {
+		r.ID = "3ED8"
+		r.Layout = &boards.SavedLayout{LEDs: 94, Toe: 86, Heel: 48}
+	}); err != nil {
 		t.Fatal(err)
 	}
-	if c.colorCycle || c.colorRGB != 0xFF8000 {
-		t.Fatalf("got cycle=%t rgb=%06X", c.colorCycle, c.colorRGB)
+	finder := layoutFinder{cache: cache, query: func(context.Context, string) (*protocol.Status, error) {
+		t.Fatal("no board to ask")
+		return nil, nil
+	}}
+	config := bench.StripLayout{Pixels: 160, Toe: 52, Heel: 132}
+	got := finder.resolve(context.Background(), config, nil, "99C817E5")
+	if got.Source != bench.SourceRemembered || got.Layout.Pixels != 94 {
+		t.Fatalf("got %+v", got)
 	}
-	c.color = "chartreuse"
-	if err := validate(o, c); err == nil {
-		t.Fatal("expected an unknown color to fail")
-	}
-}
-
-func TestParseStripLayoutReadsConfig(t *testing.T) {
-	config := `
-#ifndef FIREWALKER_LED_COUNT
-#define FIREWALKER_LED_COUNT 110
-#endif
-#define FIREWALKER_STRIP_TOE_INDEX 36
-#define FIREWALKER_STRIP_HEEL_INDEX 91
-`
-	layout, err := parseStripLayout(config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if layout != (stripLayout{pixels: 110, toe: 36, heel: 91}) {
-		t.Fatalf("got %+v", layout)
-	}
-	if _, err := parseStripLayout("#define FIREWALKER_LED_COUNT 110"); err == nil {
-		t.Fatal("expected a missing toe index to fail")
-	}
-}
-
-func TestBuildFlagsDescribeTheTest(t *testing.T) {
-	o, c := validConfig(testFireTrail)
-	c.stompEvery = 2 * time.Second
-	if err := validate(o, c); err != nil {
-		t.Fatal(err)
-	}
-	flags := buildFlags(o, c)
-	for _, want := range []string{
-		"-DBENCH_TEST=1",
-		"-DFIREWALKER_LED_COUNT=160",
-		"-DFIREWALKER_LED_BRIGHTNESS=16",
-		"-DFIREWALKER_STRIP_TOE_INDEX=52",
-		"-DFIREWALKER_STRIP_HEEL_INDEX=132",
-		"-DBENCH_STOMP_MS=2000UL",
-	} {
-		if !slices.Contains(flags, want) {
-			t.Errorf("missing %s in %v", want, flags)
-		}
-	}
-}
-
-func TestBuildFlagsGiveShortColorTestsAValidLayout(t *testing.T) {
-	o, c := validConfig(testColor)
-	o.pixels = 1
-	if err := validate(o, c); err != nil {
-		t.Fatal(err)
-	}
-	flags := buildFlags(o, c)
-	for _, want := range []string{"-DFIREWALKER_STRIP_TOE_INDEX=0", "-DFIREWALKER_STRIP_HEEL_INDEX=1", "-DFIREWALKER_LED_COUNT=2", "-DBENCH_LIT_PIXELS=1"} {
-		if !slices.Contains(flags, want) {
-			t.Errorf("missing %s in %v", want, flags)
-		}
+	if got = finder.resolve(context.Background(), config, nil, ""); got.Source != bench.SourceConfig {
+		t.Fatalf("got %+v", got)
 	}
 }
