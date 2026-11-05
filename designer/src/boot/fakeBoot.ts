@@ -25,8 +25,6 @@ export interface FakeBootOptions {
 export class FakeBoot {
   readonly id: string;
   readonly proto: number;
-  private sensitivity = 65;
-  private noiseFloor = 8;
   readonly versions: number[];
   readonly slots: number;
   silent: boolean;
@@ -46,7 +44,7 @@ export class FakeBoot {
 
   constructor(options: FakeBootOptions = {}) {
     this.id = options.id ?? "FA4E";
-    this.proto = options.proto ?? 4;
+    this.proto = options.proto ?? 3;
     this.versions = options.versions ?? [1, RECIPE_VERSION];
     this.slots = options.slots ?? 16;
     this.silent = options.silent ?? false;
@@ -74,14 +72,6 @@ export class FakeBoot {
     switch (words[0]) {
       case "status":
         return [reply({ t: "status", proto: this.proto, id: this.id, pattern: this.pattern })];
-      case "audio":
-        if (words[1] === "gain") this.sensitivity = Number(words[2]);
-        if (words[1] === "calibrate") this.noiseFloor = 7;
-        return [
-          ...(words.length > 1 ? [reply({t:"ack", cmd:"audio", ok:true})] : []),
-          reply({t:"audio-config", ready:true, noiseFloor:this.noiseFloor,
-            sensitivity:this.sensitivity, calibrating:false, saved:true}),
-        ];
       case "recipes":
         return [
           reply({

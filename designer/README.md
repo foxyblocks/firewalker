@@ -47,10 +47,7 @@ It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
   now, with no need to save first. It works in Chrome and Arc, and it lists and deletes what's on a
   boot too. A boot takes one connection at a time, so disconnect the iPhone app or `pio device
   monitor` first. Add `?boot=fake` to the URL to try it with pretend boots.
-- **Microphone** in Send to boot tunes each connected boot running protocol 4 or later.
-  Pause music, keep the boot still, and press **Calibrate quiet** to remove background noise.
-  **Sensitivity** sets how easily the bar starts and fills. These settings apply to every
-  audio recipe and are saved on that boot.
+- Tune each boot’s microphone in the [boot remote](../app/README.md), under **Calibrate → Audio**.
 - **Undo** and **Redo** with ⌘Z and ⇧⌘Z. **Save** with ⌘S.
 - **The size at the top**, such as `103 / 254 bytes`, is what a recipe takes on a boot. A draft
   can go over while you work, but it turns red and can't be saved until it fits.

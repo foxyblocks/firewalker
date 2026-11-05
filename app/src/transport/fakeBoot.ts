@@ -21,7 +21,7 @@ import {
   type Transport,
 } from "./transport";
 import { USB_PORT_BUSY_MESSAGE } from "./usb";
-import type { Pose, StripSetting } from "../core/protocol";
+import { AUDIO_PROTOCOL_VERSION, type Pose, type StripSetting } from "../core/protocol";
 
 const STATUS_MIN_MS = 250;
 const MOTION_MS = 200;
@@ -92,6 +92,7 @@ export class FakeBoot {
   moving = false;
   /** The next capture ends with no `calibrate` line, leaving only the status field. */
   silentCaptureResult = false;
+  silentAudioCaptureResult = false;
   /** Sends a status holding the previous capture's result right after the ack. */
   staleStatusAfterAck = false;
   /** Commands it drops without answering, by first word. */
@@ -115,6 +116,10 @@ export class FakeBoot {
   heel: number;
   /** Whether the strip is showing its layout in place of its pattern. */
   preview = false;
+  audioSensitivity = 65;
+  audioNoiseFloor = 8;
+  audioReady = true;
+  private audioCalibrating = false;
 
   private events: LinkEvents | null = null;
   private readonly notificationBytes: number;
@@ -135,7 +140,7 @@ export class FakeBoot {
     this.id = options.id ?? "3ED1";
     this.deviceId = `fake-${this.id}`;
     this.name = `Firewalker-${this.id}`;
-    this.proto = options.proto ?? 2;
+    this.proto = options.proto ?? AUDIO_PROTOCOL_VERSION;
     this.availablePatterns = options.patterns ?? ["flow", "fire-trail"];
     this.pattern = options.pattern ?? "flow";
     this.lastLit = options.lastLit ?? (this.pattern === "off" ? "flow" : this.pattern);
@@ -195,6 +200,30 @@ export class FakeBoot {
     const arg = words[1];
 
     switch (verb) {
+      case "audio":
+        if (this.proto < AUDIO_PROTOCOL_VERSION) return this.ackInvalid("unknown-command");
+        if (arg === "gain") {
+          const value = Number(words[2]);
+          if (!Number.isInteger(value) || value < 0 || value > 100 || this.audioCalibrating) {
+            return this.send(JSON.stringify({ t: "ack", cmd: "audio", ok: false, error: "out-of-range" }));
+          }
+          this.audioSensitivity = value;
+          this.markChanged();
+          this.send(JSON.stringify({ t: "ack", cmd: "audio", ok: true }));
+        } else if (arg === "calibrate") {
+          if (!this.audioReady) return this.send(JSON.stringify({ t: "ack", cmd: "audio", ok: false, error: "audio-unavailable" }));
+          this.send(JSON.stringify({ t: "ack", cmd: "audio", ok: true }));
+          if (!this.audioCalibrating) {
+            this.audioCalibrating = true;
+            setTimeout(() => {
+              this.audioCalibrating = false;
+              this.audioNoiseFloor = 9;
+              this.markChanged();
+              if (!this.silentAudioCaptureResult) this.sendAudioConfig();
+            }, 1200);
+          }
+        }
+        return this.sendAudioConfig();
       case "status":
         return this.sendStatus();
       case "patterns":
@@ -292,6 +321,12 @@ export class FakeBoot {
     if (setting === "toe") this.toe = pixel;
     else this.heel = pixel;
     return null;
+  }
+
+  private sendAudioConfig(): void {
+    this.send(JSON.stringify({ t: "audio-config", ready: this.audioReady,
+      sensitivity: this.audioSensitivity, noiseFloor: this.audioNoiseFloor,
+      calibrating: this.audioCalibrating, saved: this.saved }));
   }
 
   private select(pattern: string): void {

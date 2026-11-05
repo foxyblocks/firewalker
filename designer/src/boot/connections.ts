@@ -6,7 +6,7 @@
 // Over USB it asks the dev server which program has the port (portHolders.ts), and can close our own bench
 // tools. Over Bluetooth nothing can say who's connected, so it says who it most likely is.
 
-import { BootSession, BYTES_PER_BLUETOOTH_LINE, BYTES_PER_USB_LINE, type SendProgress, type BootAudioConfig } from "./bootSession";
+import { BootSession, BYTES_PER_BLUETOOTH_LINE, BYTES_PER_USB_LINE, type SendProgress } from "./bootSession";
 import { devServerPorts, type BootPortsClient, type PortHolder } from "./portHolders";
 import { compileRecipe } from "../recipe/compile";
 import type { Recipe } from "../recipe/types";
@@ -36,7 +36,6 @@ export interface ConnectedBoot {
   // What's in this boot's upload slots. Null until it's known.
   uploads: string[] | null;
   slots: number | null;
-  audio: BootAudioConfig | null;
 }
 
 export interface ConnectionsState {
@@ -145,15 +144,10 @@ export class BootConnections {
       this.live.set(found.deviceId, {
         session,
         close: () => link.close(),
-        state: { deviceId: found.deviceId, name, activity: "", failed: false, sending: true, uploads: null, slots: null, audio: null },
+        state: { deviceId: found.deviceId, name, activity: "", failed: false, sending: false, uploads: null, slots: null },
       });
       this.update({});
       await this.refreshUploads(found.deviceId);
-      if (typeof status.proto === "number" && status.proto >= 4) {
-        const audio = await session.audioConfig().catch(() => null);
-        this.updateBoot(found.deviceId, { audio });
-      }
-      this.updateBoot(found.deviceId, { sending: false });
     } catch (error) {
       await this.explainFailure(method, (error as Error).message);
     } finally {
@@ -230,37 +224,22 @@ export class BootConnections {
       this.updateBoot(deviceId, { activity: progressText(progress) }),
     );
     if (result.ok) {
-      await this.refreshUploads(deviceId);
       this.updateBoot(deviceId, {
         sending: false,
         failed: false,
         activity: result.alreadyThere ? `${recipe.name} was already on this boot, so it's selected now.` : `${recipe.name} is on the strip.`,
       });
+      await this.refreshUploads(deviceId);
     } else {
       this.updateBoot(deviceId, { sending: false, failed: true, activity: result.error });
     }
   }
 
-  async configureAudio(deviceId: string, sensitivity?: number): Promise<void> {
-    const boot = this.live.get(deviceId);
-    if (!boot || boot.state.sending) return;
-    this.updateBoot(deviceId, { sending: true, failed: false,
-      activity: sensitivity === undefined ? "Measuring quiet audio…" : "Saving sensitivity…" });
-    try {
-      const audio = await boot.session.configureAudio(sensitivity);
-      this.updateBoot(deviceId, { audio, sending: false, failed: false,
-        activity: sensitivity === undefined ? "Quiet calibrated. Resume your music." : "Audio sensitivity updated." });
-    } catch (error) {
-      this.updateBoot(deviceId, { sending: false, failed: true, activity: (error as Error).message });
-    }
-  }
-
   async deleteUpload(deviceId: string, name: string): Promise<void> {
     const boot = this.live.get(deviceId);
-    if (!boot || boot.state.sending) return;
-    this.updateBoot(deviceId, { sending: true });
+    if (!boot) return;
     const failure = await boot.session.deleteRecipe(name).catch((error: Error) => error.message);
+    this.updateBoot(deviceId, { activity: failure ?? `Deleted ${name} from this boot.`, failed: failure !== null });
     await this.refreshUploads(deviceId);
-    this.updateBoot(deviceId, { sending: false, activity: failure ?? `Deleted ${name} from this boot.`, failed: failure !== null });
   }
 }

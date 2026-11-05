@@ -324,6 +324,7 @@ report. These lines are best-effort telemetry, so clients may skip them while a 
 
 ### Microphone tuning
 
+The boot remote exposes these controls under **Calibrate → Audio**, one boot at a time.
 Protocol 4 adds per-boot settings shared by every audio-reactive recipe. USB and BLE use the
 same commands. Sensitivity and quiet calibration are saved with the boot's other settings,
 using the same delayed save that combines slider changes into one flash write.

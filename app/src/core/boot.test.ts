@@ -752,3 +752,100 @@ describe("losing browser access", () => {
     expect(state(client).link).toBe("online");
   });
 });
+
+describe("microphone tuning", () => {
+  it("loads microphone settings on current firmware and skips queries on older boots", async () => {
+    const current = setup();
+    current.client.connect();
+    await settle();
+    expect(state(current.client).audio).toMatchObject({ sensitivity: 65, noiseFloor: 8, ready: true });
+
+    const old = setup({ proto: 3 });
+    old.client.connect();
+    await settle();
+    expect(state(old.client).audio).toBeUndefined();
+    expect(old.boot.received.some((line) => line.startsWith("audio"))).toBe(false);
+  });
+
+  it("coalesces sensitivity drags and settles the last value from the boot", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+    client.setDragging(true);
+    for (let value = 0; value <= 100; value++) client.setAudioSensitivity(value);
+    await settle();
+    expect(state(client).pending.audioSensitivity).toBe(100);
+    client.setDragging(false);
+    await settle();
+    expect(boot.audioSensitivity).toBe(100);
+    expect(state(client).audio?.sensitivity).toBe(100);
+    expect(state(client).pending.audioSensitivity).toBeUndefined();
+    expect(boot.received.filter((line) => line.startsWith("audio gain")).length).toBeLessThanOrEqual(2);
+  });
+
+  it("finishes quiet calibration and shows its saved result", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+    const captured = client.calibrateAudio();
+    await settle();
+    expect(state(client).audioCalibrating).toBe(true);
+    expect(state(client).audio?.calibrating).toBe(true);
+    await vi.advanceTimersByTimeAsync(1300);
+    expect(await captured).toEqual({ ok: true });
+    expect(state(client).audioCalibrating).toBe(false);
+    expect(state(client).audio?.noiseFloor).toBe(9);
+    await vi.advanceTimersByTimeAsync(1100);
+    client.requestAudio();
+    await settle();
+    expect(state(client).audio?.saved).toBe(true);
+    expect(boot.received).toContain("audio calibrate");
+  });
+
+  it("settles the audio save indicator after leaving the calibration tab", async () => {
+    const { client } = setup();
+    client.connect();
+    await settle();
+    client.setAudioSensitivity(80);
+    await settle();
+    expect(state(client).audio?.saved).toBe(false);
+    await vi.advanceTimersByTimeAsync(1300);
+    expect(state(client).audio?.saved).toBe(true);
+  });
+
+  it("recovers a lost final audio result by reading the boot's settings", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+    boot.silentAudioCaptureResult = true;
+    const captured = client.calibrateAudio();
+    await vi.advanceTimersByTimeAsync(1800);
+    expect(state(client).audioCalibrating).toBe(true);
+    await vi.advanceTimersByTimeAsync(2600);
+    expect(await captured).toEqual({ ok: true });
+    expect(state(client).audio?.noiseFloor).toBe(9);
+  });
+
+  it("fails a calibration cleanly when the connection drops", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+    const captured = client.calibrateAudio();
+    await settle();
+    boot.dropLink();
+    expect(await captured).toEqual({ ok: false, reason: "offline" });
+    expect(state(client).audioCalibrating).toBe(false);
+  });
+
+  it("restores the confirmed sensitivity when a command gets no reply", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+    boot.ignoring = ["audio"];
+    client.setAudioSensitivity(90);
+    await vi.advanceTimersByTimeAsync(2200);
+    expect(state(client).pending.audioSensitivity).toBeUndefined();
+    expect(state(client).audio?.sensitivity).toBe(65);
+    expect(state(client).notice).toBe("no-answer");
+  });
+});
