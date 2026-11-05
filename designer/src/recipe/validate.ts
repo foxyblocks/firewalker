@@ -20,8 +20,10 @@ export type Validation = { ok: true; recipe: Recipe } | { ok: false; errors: str
 
 const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
 const COLOR_PATTERN = /^#[0-9a-f]{6}$/;
-// `off` is how the remote turns the strip off, so no pattern can take it.
-const RESERVED_NAMES = new Set(["off"]);
+// Names a recipe can't take. `off` is how the remote turns the strip off, and `flow` and
+// `fire-trail` are the firmware's own patterns, which a boot lists alongside its recipes by
+// name. Keep this in step with SELECTABLE_PATTERNS in include/firewalker_remote_protocol.h.
+const RESERVED_NAMES = new Set(["off", "flow", "fire-trail"]);
 
 // Returns a reason the name can't be used, or null if it's fine.
 export function nameProblem(name: string): string | null {

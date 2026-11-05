@@ -28,7 +28,7 @@ and `designer/src/engine/engine.ts` shows what each layer draws.
 | --- | --- |
 | `format` | Always `firewalker-recipe` |
 | `version` | `1`. A reader refuses versions it doesn't know |
-| `name` | 1 to 12 characters: a lowercase letter, then `a-z`, `0-9`, or `-`. Not `off`. The boot lists patterns by this name, and the file is `patterns/<name>.json` |
+| `name` | 1 to 12 characters: a lowercase letter, then `a-z`, `0-9`, or `-`. Not `off`, `flow`, or `fire-trail`, which the boot already uses. The boot lists patterns by this name, and the file is `patterns/<name>.json` |
 | `description` | Up to 200 characters, for people. The boot never sees it |
 | `layers` | 1 to 8 layers, drawn first to last, so the last one is on top |
 

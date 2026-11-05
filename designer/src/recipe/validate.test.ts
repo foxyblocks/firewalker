@@ -58,7 +58,7 @@ describe("validateRecipe", () => {
 
 describe("nameProblem", () => {
   it("allows short lowercase names that fit a 20-byte BLE write", () => {
-    expect(nameProblem("fire-trail")).toBeNull();
+    expect(nameProblem("fire-stomp")).toBeNull();
     expect(nameProblem("abcdefghijkl")).toBeNull();
   });
 
@@ -67,7 +67,11 @@ describe("nameProblem", () => {
     expect(nameProblem("Lava")).not.toBeNull();
     expect(nameProblem("../etc")).not.toBeNull();
     expect(nameProblem("9lives")).not.toBeNull();
-    expect(nameProblem("off")).not.toBeNull();
+  });
+
+  it("reserves off and the firmware's own patterns", () => {
+    for (const name of ["off", "flow", "fire-trail"]) expect(nameProblem(name)).toBe(`"${name}" is reserved.`);
+    expect(validateRecipe(recipe({ name: "flow" }))).toMatchObject({ ok: false, errors: ['"flow" is reserved.'] });
   });
 });
 
