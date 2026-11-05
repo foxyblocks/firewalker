@@ -17,6 +17,7 @@ static UploadedRecipe uploads[4];
 static UploadedRecipe uploaded(const char* name) {
   UploadedRecipe recipe{};
   recipe.used = true;
+  recipe.readable = true;
   copyPatternName(recipe.name, name);
   return recipe;
 }
@@ -57,6 +58,15 @@ static void test_an_unknown_name_is_unknown() {
 static void test_an_empty_slot_is_not_a_pattern() {
   copyPatternName(uploads[0].name, "ghost");
   TEST_ASSERT_EQUAL(PatternSource::Unknown, findPattern(catalog(), "ghost").source);
+}
+
+static void test_an_upload_this_firmware_cant_read_is_not_a_pattern() {
+  uploads[0] = uploaded("future");
+  uploads[0].readable = false;
+  TEST_ASSERT_EQUAL(PatternSource::Unknown, findPattern(catalog(), "future").source);
+  const char* names[PATTERN_LIST_MAX];
+  const uint8_t count = listPatterns(catalog(), names, PATTERN_LIST_MAX);
+  for (uint8_t i = 0; i < count; i++) TEST_ASSERT_TRUE(strcmp(names[i], "future") != 0);
 }
 
 static void test_an_upload_hides_a_built_in_until_deleted() {
@@ -115,6 +125,7 @@ int main() {
   RUN_TEST(test_finds_an_upload_in_any_slot);
   RUN_TEST(test_an_unknown_name_is_unknown);
   RUN_TEST(test_an_empty_slot_is_not_a_pattern);
+  RUN_TEST(test_an_upload_this_firmware_cant_read_is_not_a_pattern);
   RUN_TEST(test_an_upload_hides_a_built_in_until_deleted);
   RUN_TEST(test_a_native_name_always_means_the_native_pattern);
   RUN_TEST(test_lists_natives_then_the_recipes_in_order_each_once);

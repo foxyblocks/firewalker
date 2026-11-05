@@ -16,7 +16,9 @@ class RecipePattern : public Pattern {
   // showing what it was. The bytes needn't stay around afterward.
   RecipeDecodeResult load(const uint8_t* bytes, size_t size);
 
-  const char* recipeName() const { return recipe_.name; }
+  // Space to decode a recipe into, for checking one without showing it. A decoded recipe is too big for
+  // the stack, and this saves keeping another one around. load() overwrites it.
+  Recipe& scratch() { return incoming_; }
 
   const __FlashStringHelper* name() const override;
   void enter() override;

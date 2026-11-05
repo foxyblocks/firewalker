@@ -36,6 +36,7 @@ struct BuiltInRecipe {
 // One upload slot, as the firmware keeps it in RAM so it needn't read flash to answer a question.
 struct UploadedRecipe {
   bool used;
+  bool readable;  // in a version this firmware can run
   char name[PATTERN_NAME_SIZE];
   uint16_t size;
   uint32_t crc;
@@ -62,7 +63,8 @@ inline PatternLookup findPattern(const PatternCatalog& catalog, const char* name
     if (strcmp(name, NATIVE_PATTERNS[i]) == 0) return {PatternSource::Native, i};
   }
   for (uint8_t i = 0; i < catalog.uploadSlots; i++) {
-    if (catalog.uploads[i].used && strcmp(name, catalog.uploads[i].name) == 0) return {PatternSource::Uploaded, i};
+    const UploadedRecipe& upload = catalog.uploads[i];
+    if (upload.used && upload.readable && strcmp(name, upload.name) == 0) return {PatternSource::Uploaded, i};
   }
   for (uint8_t i = 0; i < catalog.builtInCount; i++) {
     if (strcmp(name, catalog.builtIns[i].name) == 0) return {PatternSource::BuiltIn, i};
@@ -91,7 +93,7 @@ inline uint8_t listPatterns(const PatternCatalog& catalog, const char** out, uin
   };
   for (uint8_t i = 0; i < catalog.builtInCount; i++) insert(catalog.builtIns[i].name);
   for (uint8_t i = 0; i < catalog.uploadSlots; i++) {
-    if (catalog.uploads[i].used) insert(catalog.uploads[i].name);
+    if (catalog.uploads[i].used && catalog.uploads[i].readable) insert(catalog.uploads[i].name);
   }
   return count;
 }

@@ -20,6 +20,7 @@
 #include <string.h>
 
 #include "firewalker_calibration.h"
+#include "firewalker_pattern_list.h"
 #include "firewalker_settings.h"
 
 namespace Firewalker {
@@ -47,14 +48,26 @@ enum class CommandType : uint8_t {
   Identify,
   StripSet,
   StripPreview,
+  Recipes,
+  RecipeInfo,
+  RecipeBegin,
+  RecipeData,
+  RecipeEnd,
+  RecipeCancel,
+  RecipeDelete,
 };
+
+// The most hex characters a `recipe data` line can carry. See RECIPE_DATA_MAX_HEX.
+constexpr size_t REMOTE_RECIPE_HEX_MAX = 30;
 
 struct Command {
   CommandType type = CommandType::Invalid;
-  char pattern[PATTERN_NAME_SIZE] = "";  // for Pattern. Spelled legally, but it may not exist
+  // For Pattern, RecipeInfo, and RecipeDelete. Spelled legally, but it may not exist.
+  char pattern[PATTERN_NAME_SIZE] = "";
+  char hex[REMOTE_RECIPE_HEX_MAX + 1] = "";  // for RecipeData
   CalibrationPose pose = CalibrationPose::Neutral;  // for Calibrate
   bool on = false;                      // for Power, Debug, and StripPreview
-  int32_t value = 0;                    // for Brightness and StripSet
+  int32_t value = 0;                    // for Brightness, StripSet, RecipeBegin (size), and RecipeData (offset)
   StripField stripField = StripField::Count;   // for StripSet
   const char* error = nullptr;          // for Invalid: why it was rejected
 };
@@ -80,6 +93,13 @@ inline const char* commandName(CommandType type) {
     case CommandType::Debug: return "debug";
     case CommandType::StripSet: return "strip";
     case CommandType::StripPreview: return "strip";
+    case CommandType::Recipes: return "recipes";
+    case CommandType::RecipeInfo:
+    case CommandType::RecipeBegin:
+    case CommandType::RecipeData:
+    case CommandType::RecipeEnd:
+    case CommandType::RecipeCancel:
+    case CommandType::RecipeDelete: return "recipe";
     case CommandType::Invalid: break;
   }
   return "unknown";
@@ -132,6 +152,86 @@ inline void parseStripCommand(const char* setting, const char* value, Command& c
   command.type = CommandType::StripSet;
 }
 
+// A size or an offset in a `recipe` command. Returns false for anything but a small whole number.
+inline bool parseRecipeNumber(const char* word, int32_t& out) {
+  char* end = nullptr;
+  const long number = strtol(word, &end, 10);
+  if (end == word || *end != '\0' || number < 0 || number > 65535) return false;
+  out = (int32_t)number;
+  return true;
+}
+
+// Parses the words after `recipe`. `count` includes `recipe` itself. Whether a size, offset, or name
+// suits the upload in progress is the caller's check, so this only rejects what can't be right at all.
+inline void parseRecipeCommand(char* const* words, uint8_t count, Command& command) {
+  if (count < 2) {
+    command.error = "expected-recipe-command";
+    return;
+  }
+  const char* action = words[1];
+
+  if (strcmp(action, "end") == 0 || strcmp(action, "cancel") == 0) {
+    if (count != 2) {
+      command.error = "too-many-arguments";
+      return;
+    }
+    command.type = action[0] == 'e' ? CommandType::RecipeEnd : CommandType::RecipeCancel;
+    return;
+  }
+
+  if (strcmp(action, "info") == 0 || strcmp(action, "delete") == 0) {
+    if (count != 3) {
+      command.error = "expected-one-argument";
+      return;
+    }
+    if (!patternNameValid(words[2])) {
+      command.error = "bad-name";
+      return;
+    }
+    copyPatternName(command.pattern, words[2]);
+    command.type = action[0] == 'i' ? CommandType::RecipeInfo : CommandType::RecipeDelete;
+    return;
+  }
+
+  if (strcmp(action, "begin") == 0) {
+    if (count != 4) {
+      command.error = "expected-name-and-size";
+      return;
+    }
+    if (!patternNameValid(words[2])) {
+      command.error = "bad-name";
+      return;
+    }
+    if (!parseRecipeNumber(words[3], command.value)) {
+      command.error = "expected-number";
+      return;
+    }
+    copyPatternName(command.pattern, words[2]);
+    command.type = CommandType::RecipeBegin;
+    return;
+  }
+
+  if (strcmp(action, "data") == 0) {
+    if (count != 4) {
+      command.error = "expected-offset-and-hex";
+      return;
+    }
+    if (!parseRecipeNumber(words[2], command.value)) {
+      command.error = "expected-number";
+      return;
+    }
+    if (strlen(words[3]) > REMOTE_RECIPE_HEX_MAX) {
+      command.error = "bad-hex";
+      return;
+    }
+    strcpy(command.hex, words[3]);
+    command.type = CommandType::RecipeData;
+    return;
+  }
+
+  command.error = "unknown-recipe-command";
+}
+
 // Parses one command line. Surrounding whitespace and a trailing CR or LF are
 // ignored. A bad line returns type Invalid with `error` set. Range checks that
 // depend on the build's limits, such as the brightness cap, belong to the caller.
@@ -149,12 +249,12 @@ inline Command parseCommand(const char* line) {
   char buffer[REMOTE_COMMAND_MAX];
   strcpy(buffer, line);
 
-  // Split into at most three words.
-  char* words[3] = {nullptr, nullptr, nullptr};
+  // Split into words. Only `recipe` commands have a fourth, and that's checked below.
+  char* words[4] = {nullptr, nullptr, nullptr, nullptr};
   uint8_t count = 0;
   char* cursor = strtok(buffer, " \t\r\n");
   while (cursor) {
-    if (count == 3) {
+    if (count == 4) {
       command.error = "too-many-arguments";
       return command;
     }
@@ -169,16 +269,27 @@ inline Command parseCommand(const char* line) {
   const char* verb = words[0];
   const char* arg = words[1];
 
+  if (strcmp(verb, "recipe") == 0) {
+    parseRecipeCommand(words, count, command);
+    return command;
+  }
+  if (count == 4) {
+    command.error = "too-many-arguments";
+    return command;
+  }
+
   const bool isStatus = strcmp(verb, "status") == 0;
   const bool isPatterns = strcmp(verb, "patterns") == 0;
   const bool isIdentify = strcmp(verb, "identify") == 0;
-  if (isStatus || isPatterns || isIdentify) {
+  const bool isRecipes = strcmp(verb, "recipes") == 0;
+  if (isStatus || isPatterns || isIdentify || isRecipes) {
     if (count != 1) {
       command.error = "too-many-arguments";
       return command;
     }
     command.type = isStatus     ? CommandType::Status
                    : isPatterns ? CommandType::Patterns
+                   : isRecipes  ? CommandType::Recipes
                                 : CommandType::Identify;
     return command;
   }
@@ -298,6 +409,41 @@ inline void formatCalibrationFailed(char* out, size_t size, CalibrationPose pose
                                     const char* reason) {
   snprintf(out, size, "{\"t\":\"calibrate\",\"pose\":\"%s\",\"state\":\"failed\",\"reason\":\"%s\"}",
            poseName(pose), reason);
+}
+
+// A reply to a `recipe` command that moves an upload along. `next` is the offset to send next, so a
+// client can carry on after a lost line. Use a negative one to leave it out.
+inline void formatRecipeAck(char* out, size_t size, bool ok, const char* error, int32_t next) {
+  int written = snprintf(out, size, "{\"t\":\"ack\",\"cmd\":\"recipe\",\"ok\":%s", ok ? "true" : "false");
+  if (written < 0 || (size_t)written >= size) return;
+  if (error) written += snprintf(out + written, size - written, ",\"error\":\"%s\"", error);
+  if (written < 0 || (size_t)written >= size) return;
+  if (next >= 0) written += snprintf(out + written, size - written, ",\"next\":%ld", (long)next);
+  if (written >= 0 && (size_t)written < size) snprintf(out + written, size - written, "}");
+}
+
+// The reply to `recipes`: the versions this firmware can read, and what's in its upload slots.
+inline void formatRecipes(char* out, size_t size, uint8_t version, const UploadedRecipe* slots, uint8_t slotCount) {
+  uint8_t used = 0;
+  for (uint8_t i = 0; i < slotCount; i++) {
+    if (slots[i].used) used++;
+  }
+  int written = snprintf(out, size, "{\"t\":\"recipes\",\"versions\":[%u],\"slots\":%u,\"free\":%u,\"list\":[",
+                         (unsigned)version, (unsigned)slotCount, (unsigned)(slotCount - used));
+  bool first = true;
+  for (uint8_t i = 0; i < slotCount; i++) {
+    if (!slots[i].used) continue;
+    if (written < 0 || (size_t)written >= size) return;
+    written += snprintf(out + written, size - written, "%s\"%s\"", first ? "" : ",", slots[i].name);
+    first = false;
+  }
+  if (written >= 0 && (size_t)written < size) snprintf(out + written, size - written, "]}");
+}
+
+// The reply to `recipe info`, which lets a client see this boot already has a recipe, and skip sending it.
+inline void formatRecipeInfo(char* out, size_t size, const UploadedRecipe& recipe) {
+  snprintf(out, size, "{\"t\":\"recipe\",\"name\":\"%s\",\"bytes\":%u,\"crc\":\"%08lx\"}", recipe.name,
+           (unsigned)recipe.size, (unsigned long)recipe.crc);
 }
 
 inline void formatPatterns(char* out, size_t size, const char* const* names, size_t count) {

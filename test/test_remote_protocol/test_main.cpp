@@ -124,6 +124,91 @@ static void test_pattern_refuses_a_name_no_pattern_could_have() {
   }
 }
 
+static void test_recipes_takes_no_arguments() {
+  TEST_ASSERT_EQUAL(CommandType::Recipes, parseCommand("recipes").type);
+  TEST_ASSERT_EQUAL_STRING("too-many-arguments", parseCommand("recipes now").error);
+}
+
+static void test_recipe_info_and_delete_take_a_name() {
+  const Command info = parseCommand("recipe info comet");
+  TEST_ASSERT_EQUAL(CommandType::RecipeInfo, info.type);
+  TEST_ASSERT_EQUAL_STRING("comet", info.pattern);
+  const Command remove = parseCommand("recipe delete comet");
+  TEST_ASSERT_EQUAL(CommandType::RecipeDelete, remove.type);
+  TEST_ASSERT_EQUAL_STRING("comet", remove.pattern);
+
+  TEST_ASSERT_EQUAL_STRING("expected-one-argument", parseCommand("recipe info").error);
+  TEST_ASSERT_EQUAL_STRING("expected-one-argument", parseCommand("recipe delete a b").error);
+  TEST_ASSERT_EQUAL_STRING("bad-name", parseCommand("recipe delete Comet").error);
+}
+
+static void test_recipe_begin_takes_a_name_and_a_size() {
+  const Command begin = parseCommand("recipe begin abcdefghijkl 254");
+  TEST_ASSERT_EQUAL(CommandType::RecipeBegin, begin.type);
+  TEST_ASSERT_EQUAL_STRING("abcdefghijkl", begin.pattern);
+  TEST_ASSERT_EQUAL_INT32(254, begin.value);
+
+  TEST_ASSERT_EQUAL_STRING("expected-name-and-size", parseCommand("recipe begin comet").error);
+  TEST_ASSERT_EQUAL_STRING("bad-name", parseCommand("recipe begin Comet 74").error);
+  TEST_ASSERT_EQUAL_STRING("expected-number", parseCommand("recipe begin comet many").error);
+  TEST_ASSERT_EQUAL_STRING("expected-number", parseCommand("recipe begin comet -4").error);
+}
+
+static void test_recipe_data_takes_an_offset_and_hex() {
+  const char* longest = "recipe data 240 0123456789abcdef0123456789abcd";
+  TEST_ASSERT_TRUE(strlen(longest) < REMOTE_COMMAND_MAX);
+  const Command data = parseCommand(longest);
+  TEST_ASSERT_EQUAL(CommandType::RecipeData, data.type);
+  TEST_ASSERT_EQUAL_INT32(240, data.value);
+  TEST_ASSERT_EQUAL_STRING("0123456789abcdef0123456789abcd", data.hex);
+
+  TEST_ASSERT_EQUAL_STRING("expected-offset-and-hex", parseCommand("recipe data 0").error);
+  TEST_ASSERT_EQUAL_STRING("expected-number", parseCommand("recipe data x 00").error);
+  TEST_ASSERT_EQUAL_STRING("bad-hex", parseCommand("recipe data 0 0123456789abcdef0123456789abcdef").error);
+}
+
+static void test_recipe_end_and_cancel_take_nothing() {
+  TEST_ASSERT_EQUAL(CommandType::RecipeEnd, parseCommand("recipe end").type);
+  TEST_ASSERT_EQUAL(CommandType::RecipeCancel, parseCommand("recipe cancel").type);
+  TEST_ASSERT_EQUAL_STRING("too-many-arguments", parseCommand("recipe end now").error);
+  TEST_ASSERT_EQUAL_STRING("expected-recipe-command", parseCommand("recipe").error);
+  TEST_ASSERT_EQUAL_STRING("unknown-recipe-command", parseCommand("recipe burn").error);
+  TEST_ASSERT_EQUAL_STRING("too-many-arguments", parseCommand("recipe data 0 00 extra").error);
+}
+
+static void test_recipe_replies_are_well_formed() {
+  char line[REMOTE_LINE_MAX];
+  formatRecipeAck(line, sizeof(line), true, nullptr, 15);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"ack\",\"cmd\":\"recipe\",\"ok\":true,\"next\":15}", line);
+  formatRecipeAck(line, sizeof(line), false, "wrong-offset", 30);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"ack\",\"cmd\":\"recipe\",\"ok\":false,\"error\":\"wrong-offset\",\"next\":30}", line);
+  formatRecipeAck(line, sizeof(line), true, nullptr, -1);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"ack\",\"cmd\":\"recipe\",\"ok\":true}", line);
+
+  UploadedRecipe slots[16] = {};
+  formatRecipes(line, sizeof(line), 1, slots, 16);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"recipes\",\"versions\":[1],\"slots\":16,\"free\":16,\"list\":[]}", line);
+  slots[3].used = true;
+  copyPatternName(slots[3].name, "comet");
+  slots[3].size = 74;
+  slots[3].crc = 0xCB75D224u;
+  formatRecipes(line, sizeof(line), 1, slots, 16);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"recipes\",\"versions\":[1],\"slots\":16,\"free\":15,\"list\":[\"comet\"]}", line);
+  formatRecipeInfo(line, sizeof(line), slots[3]);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"recipe\",\"name\":\"comet\",\"bytes\":74,\"crc\":\"cb75d224\"}", line);
+}
+
+static void test_the_longest_recipes_line_fits() {
+  UploadedRecipe slots[16] = {};
+  for (UploadedRecipe& slot : slots) {
+    slot.used = true;
+    copyPatternName(slot.name, "abcdefghijkl");
+  }
+  char line[REMOTE_LINE_MAX];
+  formatRecipes(line, sizeof(line), 1, slots, 16);
+  TEST_ASSERT_EQUAL_STRING("]}", line + strlen(line) - 2);
+}
+
 static void test_power_and_debug_take_on_or_off() {
   const Command power = parseCommand("power off");
   TEST_ASSERT_EQUAL(CommandType::Power, power.type);
@@ -303,6 +388,13 @@ int main(int, char**) {
   RUN_TEST(test_the_longest_patterns_line_fits_the_line_buffer);
   RUN_TEST(test_pattern_takes_any_legally_spelled_name);
   RUN_TEST(test_pattern_refuses_a_name_no_pattern_could_have);
+  RUN_TEST(test_recipes_takes_no_arguments);
+  RUN_TEST(test_recipe_info_and_delete_take_a_name);
+  RUN_TEST(test_recipe_begin_takes_a_name_and_a_size);
+  RUN_TEST(test_recipe_data_takes_an_offset_and_hex);
+  RUN_TEST(test_recipe_end_and_cancel_take_nothing);
+  RUN_TEST(test_recipe_replies_are_well_formed);
+  RUN_TEST(test_the_longest_recipes_line_fits);
   RUN_TEST(test_power_and_debug_take_on_or_off);
   RUN_TEST(test_brightness_parses_a_whole_byte_value);
   RUN_TEST(test_line_endings_and_extra_spaces_are_ignored);

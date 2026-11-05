@@ -16,6 +16,8 @@
 #include "firewalker_calibration.h"
 #include "firewalker_imu.h"
 #include "firewalker_pattern_list.h"
+#include "firewalker_recipe_store.h"
+#include "firewalker_recipe_upload.h"
 #include "firewalker_remote.h"
 #include "firewalker_remote_protocol.h"
 #include "firewalker_settings.h"
@@ -43,6 +45,9 @@ static Pattern* activePattern = nullptr;  // null when the strip is off
 
 static UploadedRecipe uploads[RECIPE_SLOTS];
 static const PatternCatalog CATALOG = {RECIPE_BUILTINS, RECIPE_BUILTIN_COUNT, uploads, RECIPE_SLOTS};
+static RecipeUpload upload(RECIPE_UPLOAD_IDLE_MS);
+// Static, because it's too big for the loop's stack.
+static uint8_t storedRecipeBytes[RECIPE_MAX_BYTES];
 
 static Settings settings = defaultSettings(LED_BRIGHTNESS, STRIP_DEFAULT_LAYOUT);
 static SaveScheduler saveScheduler(SETTINGS_SAVE_QUIET_MS, SETTINGS_SAVE_MAX_MS);
@@ -134,8 +139,13 @@ static bool tryShowPattern(const char* name) {
       next = &recipePattern;
       break;
     }
-    case PatternSource::Uploaded:
-      return false;
+    case PatternSource::Uploaded: {
+      const UploadedRecipe& recipe = uploads[found.index];
+      if (!recipeStoreRead(found.index, storedRecipeBytes, recipe.size)) return false;
+      if (recipePattern.load(storedRecipeBytes, recipe.size) != RecipeDecodeResult::Ok) return false;
+      next = &recipePattern;
+      break;
+    }
   }
 
   activePattern = next;
@@ -178,6 +188,117 @@ static bool selectPattern(const char* name) {
   return true;
 }
 
+static void sendRecipeAck(bool ok, const char* error = nullptr, int32_t next = -1) {
+  char line[REMOTE_LINE_MAX];
+  formatRecipeAck(line, sizeof(line), ok, error, next);
+  remoteSend(line);
+}
+
+// Checks the finished upload and saves it. This is the only point an upload touches flash, and it's
+// one write, so a power cut leaves the old recipe or the new one. A recipe that's on the strip restarts
+// as the new version, which makes tuning one on a boot quick.
+static void finishUpload() {
+  const char* failure = upload.finish(recipePattern.scratch());
+  if (failure) {
+    sendRecipeAck(false, failure);
+    return;
+  }
+
+  const int16_t slot = uploadSlotFor(uploads, RECIPE_SLOTS, upload.name());
+  if (slot < 0) {
+    sendRecipeAck(false, "no-room");
+    return;
+  }
+  if (!recipeStoreWrite((uint8_t)slot, upload.bytes(), upload.size())) {
+    sendRecipeAck(false, "save-failed");
+    return;
+  }
+  describeStoredRecipe(upload.bytes(), upload.size(), uploads[slot]);
+  sendRecipeAck(true);
+  sendPatterns();
+  if (strcmp(settings.pattern, upload.name()) == 0) showSavedPattern();
+  statusPending = true;
+}
+
+// Deletes an upload. If it was on the strip or what turning on returns to, a built-in of the same name
+// takes over if there is one, and otherwise the boot falls back to flow.
+static void deleteUpload(const char* name) {
+  int16_t slot = -1;
+  for (uint8_t i = 0; i < RECIPE_SLOTS; i++) {
+    if (uploads[i].used && strcmp(uploads[i].name, name) == 0) slot = i;
+  }
+  if (slot < 0) {
+    const bool builtIn = findPattern(CATALOG, name).source == PatternSource::BuiltIn;
+    sendRecipeAck(false, builtIn ? "built-in" : "not-found");
+    return;
+  }
+  if (!recipeStoreDelete((uint8_t)slot)) {
+    sendRecipeAck(false, "save-failed");
+    return;
+  }
+  uploads[slot] = UploadedRecipe{};
+  sendRecipeAck(true);
+  sendPatterns();
+  if (strcmp(settings.pattern, name) == 0 || strcmp(settings.lastLitPattern, name) == 0) showSavedPattern();
+  statusPending = true;
+}
+
+// Handles every `recipe` command and `recipes`. They reply for themselves, and only send a status line
+// when something has actually changed.
+static void handleRecipeCommand(const Command& command) {
+  char line[REMOTE_LINE_MAX];
+  switch (command.type) {
+    case CommandType::Recipes:
+      formatRecipes(line, sizeof(line), RECIPE_VERSION, uploads, RECIPE_SLOTS);
+      remoteSend(line);
+      return;
+
+    case CommandType::RecipeInfo: {
+      for (const UploadedRecipe& recipe : uploads) {
+        if (recipe.used && strcmp(recipe.name, command.pattern) == 0) {
+          formatRecipeInfo(line, sizeof(line), recipe);
+          remoteSend(line);
+          return;
+        }
+      }
+      sendRecipeAck(false, "not-found");
+      return;
+    }
+
+    case CommandType::RecipeBegin: {
+      const char* failure = upload.begin(command.pattern, command.value, millis());
+      if (!failure && uploadSlotFor(uploads, RECIPE_SLOTS, command.pattern) < 0) {
+        upload.cancel();
+        failure = "no-room";
+      }
+      sendRecipeAck(failure == nullptr, failure, failure ? -1 : 0);
+      return;
+    }
+
+    case CommandType::RecipeData: {
+      const char* failure = upload.data(command.value, command.hex, millis());
+      sendRecipeAck(failure == nullptr, failure, upload.active() ? (int32_t)upload.next() : -1);
+      return;
+    }
+
+    case CommandType::RecipeEnd:
+      finishUpload();
+      return;
+
+    case CommandType::RecipeCancel:
+      upload.cancel();
+      sendRecipeAck(true);
+      return;
+
+    case CommandType::RecipeDelete:
+      deleteUpload(command.pattern);
+      return;
+
+    default:
+      return;
+  }
+}
+
 // Shows or stops showing a strip layout preview, which takes over the strip from the
 // pattern without changing any settings. Each call keeps a preview alive for another
 // STRIP_PREVIEW_HOLD_MS. Stopping brings back the saved brightness and restarts the pattern.
@@ -203,6 +324,16 @@ static void handleCommand(const Command& command) {
 
     case CommandType::Patterns:
       sendPatterns();
+      return;
+
+    case CommandType::Recipes:
+    case CommandType::RecipeInfo:
+    case CommandType::RecipeBegin:
+    case CommandType::RecipeData:
+    case CommandType::RecipeEnd:
+    case CommandType::RecipeCancel:
+    case CommandType::RecipeDelete:
+      handleRecipeCommand(command);
       return;
 
     // Blinks the strip so you can see which boot this is. It changes no settings, so
@@ -393,6 +524,8 @@ void setup() {
   imuBegin();
   imuSetCalibration(settings.calibration);
 
+  recipeStoreLoad(uploads, RECIPE_SLOTS);
+
   remoteBegin();
   setStripLayout(settings.strip);
   strip.setBrightness(settings.brightness);
@@ -422,6 +555,8 @@ void loop() {
   const unsigned long now = millis();
 
   if (saveScheduler.due(now)) saveNow();
+
+  if (upload.timedOut(now)) upload.cancel();
 
   if (stripPreview && (now - lastStripCommandMs) >= STRIP_PREVIEW_HOLD_MS) {
     setStripPreview(false);
