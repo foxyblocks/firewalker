@@ -95,9 +95,21 @@ describe("fill", () => {
       RING,
     );
     engine.enter();
-    engine.update({ tiltFwd: 0, stomp: false, stompStrength: 0, dt: 500 });
+    engine.update({ tiltFwd: 0, stomp: false, stompStrength: 0, dt: 250 });
+    engine.update({ tiltFwd: 0, stomp: false, stompStrength: 0, dt: 250 });
     expect(pixel(engine, 0)).toEqual([0, 0, 1]);
     expect(pixel(engine, 77)).toEqual([0, 0, 1]);
+  });
+
+  it("counts a long stall as 250 ms, like the firmware", () => {
+    const fill = recipe(layer("fill", { palette: ["#ff0000", "#0000ff"], spread: "solid", scroll: 1 }));
+    const stalled = new RecipeEngine(fill, RING);
+    const capped = new RecipeEngine(fill, RING);
+    stalled.enter();
+    capped.enter();
+    stalled.update({ tiltFwd: 0, stomp: false, stompStrength: 0, dt: 5000 });
+    capped.update({ tiltFwd: 0, stomp: false, stompStrength: 0, dt: 250 });
+    expect(pixel(stalled, 0)).toEqual(pixel(capped, 0));
   });
 
   it("lays a two-color gradient heel to toe at repeat 0.5", () => {
@@ -252,8 +264,17 @@ describe("chase", () => {
   function footChase(speed: number, dt: number): number[] {
     const engine = new RecipeEngine(recipe(layer("chase", { path: "foot", count: 1, length: 1, speed })), RING);
     engine.enter();
-    engine.update({ tiltFwd: 0, stomp: false, stompStrength: 0, dt });
+    advance(engine, dt);
     return lit(engine);
+  }
+
+  // Runs dt in steps the engine takes whole, since it caps one step at 250 ms.
+  function advance(engine: RecipeEngine, dt: number): void {
+    do {
+      const slice = Math.min(dt, 250);
+      engine.update({ tiltFwd: 0, stomp: false, stompStrength: 0, dt: slice });
+      dt -= slice;
+    } while (dt > 0);
   }
 
   it("runs heel to toe up both sides at once", () => {
@@ -271,7 +292,7 @@ describe("chase", () => {
     const engine = new RecipeEngine(recipe(layer("chase", { path: "foot", count: 1, length: 5, speed: 55 })), RING);
     engine.enter();
     // 57 px along: the head has gone past the toe, and the rest of the tail is leaving.
-    engine.update({ tiltFwd: 0, stomp: false, stompStrength: 0, dt: 1000 * (57 / 55) });
+    advance(engine, 1000 * (57 / 55));
     expect(lit(engine)).toEqual([RING.toe - 2, RING.toe - 1, RING.toe, RING.toe + 1, RING.toe + 2]);
   });
 });

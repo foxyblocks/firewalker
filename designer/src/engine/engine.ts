@@ -34,6 +34,7 @@ export interface EngineInput {
 
 const MAX_FRONTS = 16;
 const RNG_SEED = 0x9e3779b9;
+const MAX_DT_MS = 250;
 
 interface Front {
   active: boolean;
@@ -110,7 +111,8 @@ export class RecipeEngine {
   }
 
   update(input: EngineInput): void {
-    const dt = Math.max(0, input.dt);
+    // A long stall counts as MAX_DT_MS, so one frame can't do unbounded work. The firmware does the same.
+    const dt = Math.min(MAX_DT_MS, Math.max(0, input.dt));
     this.timeMs += dt;
     this.sinceStompMs += dt;
     this.tilt = Math.max(-1, Math.min(1, input.tiltFwd));
