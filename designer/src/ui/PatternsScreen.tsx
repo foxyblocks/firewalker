@@ -152,6 +152,11 @@ export function PatternsScreen() {
                 <div className="card-head">
                   <h2>{entry.name}</h2>
                   <span className={`badge ${entry.status}`}>{STATUS_TEXT[entry.status]}</span>
+                  {entry.builtIn && (
+                    <span className="badge built-in" title="Listed in patterns/built-ins.txt, so every boot ships with it">
+                      Built in
+                    </span>
+                  )}
                 </div>
                 {entry.savedAs && entry.savedAs !== entry.name && (
                   <p className="quiet small">Renamed from {entry.savedAs}</p>
@@ -253,6 +258,7 @@ export function PatternsScreen() {
             <p>
               This deletes <code>patterns/{dialog.entry.savedAs}.json</code> from the repo, and any unsaved changes. If the file
               was committed, git still has it.
+              {dialog.entry.builtIn && " It also takes this recipe off the built-ins list, so boots stop shipping with it at their next firmware update."}
             </p>
           ) : (
             <p>This pattern was never saved, so it's gone for good.</p>

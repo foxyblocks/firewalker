@@ -3,28 +3,33 @@
 What the designer's TypeScript engine draws for a fixed script of motion. A test of the firmware's
 C++ engine can run the same inputs and compare pixels, with no boot needed.
 
-Everything here except this file is generated from `patterns/` and
-`designer/src/engine/referenceFrames.ts`. Don't edit it by hand. After changing what the engine
-draws, or a recipe in `patterns/`, regenerate it and commit the result:
+The frames come only from the test recipes in `recipes/`. Recipes in `patterns/` aren't involved,
+so saving or editing a pattern never changes anything here.
+
+Regenerate them only after changing what the engine draws, or one of the test recipes:
 
 ```bash
 cd designer
 bun run reference-frames
 ```
 
-`bun run test` fails if these files are out of date.
+`bun run test` fails if the frames don't match the engine, or if a layer type, blend, choice, or
+knob source has no test recipe.
 
 ## What's here
 
 | File | Holds |
 |---|---|
-| `manifest.json` | Every case: its frames file, recipe, and strip layout |
-| `inputs.bin` | The motion script, shared by every case |
-| `<recipe>--<layout>.bin` | One recipe's expected frames on one strip layout |
-| `recipes/*.json` | Small recipes that exercise every layer type, blend, choice, and knob source |
+| `recipes/*.json` | Small test recipes that exercise every layer type, blend, choice, and knob source. Edited by hand |
+| `compiled/*.bin` | Generated. Each test recipe compiled, as a boot would receive it. A change here means the binary format changed |
+| `manifest.json` | Generated. Every case: its frames file, recipe, and strip layout |
+| `inputs.bin` | Generated. The motion script, shared by every case |
+| `<recipe>--<layout>.bin` | Generated. One recipe's expected frames on one strip layout |
 
-The kept recipes in `patterns/` run on two layouts: `bench` (160 pixels, toe 52, heel 132) and
-`3eb5` (107 pixels, toe 72, heel 19). The small recipes run on `3eb5`.
+Each frames file comes from the compiled recipe, decoded and run, not the JSON directly. Every test
+recipe runs on two layouts: `bench` (160 pixels, toe 52, heel 132) and `heel-first` (107 pixels, toe 72,
+heel 19). The first runs toe first with even arcs, and the second runs heel first with uneven ones, so they
+catch different bugs. They're fixed here on purpose, so re-cutting a boot never changes these files.
 
 ## File formats
 
@@ -64,7 +69,8 @@ runs every frame in between, so a difference in how state builds up shows at the
 
 ## Using them
 
-Start the engine fresh on the case's layout, as a boot does when it switches to a pattern. Then feed
-it every record in `inputs.bin` in order, and compare at each saved frame.
+Decode the case's compiled recipe, and start the engine fresh on its layout, as a boot does when it
+switches to a pattern. Then feed it every record in `inputs.bin` in order, and compare at each saved
+frame.
 
 C++ does its math differently from JavaScript in small ways, so allow a difference of 1 per channel.

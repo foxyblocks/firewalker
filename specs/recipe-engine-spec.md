@@ -1,6 +1,7 @@
 # Recipe engine, built-in recipes, and upload
 
 Status: Approved by foxy on 2026-11-04, with `starfield` and `lava-pour` taken out of the built-ins.
+Recipe format version 1 froze on 2026-11-05 at the limits in `spec.ts`, after measuring on boot `3EB5`.
 Firmware work starts on the `recipe-engine` branch, cut from `main` once PR #9 merges.
 Date: 2026-11-04
 
@@ -31,7 +32,7 @@ foxy approved these on 2026-11-04.
 | 7 | Upload is 15 bytes per command, one at a time. The recipe's own CRC-32 is the checksum | Fits the 48-byte command limit, and nothing is saved until the whole recipe checks out |
 | 8 | Each boot has 16 upload slots | Far more than today's five keepers, and only about 4 KB of a 40 KB region |
 | 9 | An upload can replace a built-in of the same name, on that boot. `flow`, `fire-trail`, and `off` can't be replaced | Otherwise you couldn't send a tweaked `comet` to a boot to try it |
-| 10 | The boot lists the recipe versions it can read. Version 1 freezes when the first firmware ships | Boots only update over USB, so the designer will often be newer |
+| 10 | The boot lists the recipe versions it can read. Version 1 is frozen, as of the first firmware that runs recipes | Boots only update over USB, so the designer will often be newer |
 | 11 | Built-ins are a generated file checked into the repo. A stale file fails the firmware build | Firmware builds don't need Bun, and you can't flash old built-ins by accident |
 | 12 | The designer is the only upload client this phase | The iPhone app already lists and selects whatever a boot reports |
 | 13 | Measure flash, RAM, and frame time on a board before version 1 freezes | A legal recipe may be too slow at 39 MHz, and the fix is a lower limit in the format |
@@ -206,7 +207,8 @@ at most about 0.002% of the range, which can't show up in 8-bit color. The range
 generated table, so nothing needs a second copy of them.
 
 Reordering a field or an option changes what saved recipes mean. A test pins the exact bytes
-of each keeper, so that can't happen quietly.
+of the test recipes that sit with the reference frames, so that can't happen quietly. It doesn't use
+the recipes in `patterns/`, so tuning a pattern can't trip it.
 
 ## Size limits
 
@@ -276,6 +278,8 @@ C++ floats don't round the same way, so:
   hours, and `wave` would start to jitter.
 - Rounding is `floor(x + 0.5)`, because that's JavaScript's `Math.round`. C's `round` differs on
   negative halves.
+- Scaled numbers decode in single precision on both sides, so a fixed knob is the exact same value.
+  Knob values are then worked out in `double`, since they feed the state that builds up.
 - Random numbers use the same xorshift32, the same seed, and the same order of draws.
 - "No stomp yet" is an explicit state, where TypeScript uses `Infinity`.
 - Both engines clamp `dt` to 250 ms, so a long stall can't make one frame do unbounded work.
@@ -287,20 +291,23 @@ A change to engine behavior goes into both engines in one commit, with new refer
 ## Reference frames
 
 These are the acceptance test for the port. They already exist, in `test/fixtures/recipe-frames/`,
-written by `bun run reference-frames`. That folder's README describes the file formats.
+written by `bun run reference-frames`. That folder's README describes the file formats. They only
+change when the engine or their test recipes do, so saving a pattern never touches them.
 
 - **Inputs:** a fixed script of about 7 seconds, with uneven `dt`, a tilt sweep, stomps at several
   strengths, and stomps at exactly level so `flat` triggers fire.
-- **Recipes:** all five keepers, built in or not, because the engine has to draw uploads correctly too.
-  Small fixtures then cover every layer type, blend, and knob source. Each case stores its own compiled
-  bytes, so the C++ test doesn't depend on which recipes are built in.
-- **Layouts:** the uncut bench strip (160 px, toe 52, heel 132) and boot `3EB5` (107 px, toe 72,
-  heel 19).
+- **Recipes:** only the small test recipes in that folder's `recipes/`, which together cover every layer
+  type, blend, knob source, trail origin, and chase path. A test fails if a new one has no coverage.
+  Their compiled bytes sit beside the frames, so the C++ test doesn't depend on which recipes are built in.
+- **Not the recipes in `patterns/`.** They're combinations of the same layers, and they change every time
+  someone tunes a pattern. If the built-ins ever need parity checks, the compiler's round-trip tests can
+  cover them.
+- **Layouts:** the uncut bench strip (160 px, toe 52, heel 132) and a shape like a real boot's (107 px, toe 72,
+  heel 19). One runs toe first and the other heel first. They're fixed, so re-cutting a boot doesn't change them.
 - **Path:** JSON, then compile, then decode, then the TypeScript engine. So rounding from the
-  binary format can't cause a false failure. They come straight from JSON today, and rollout step 1
-  adds compile and decode, then regenerates them.
-- **Stored:** 8-bit frames every 16th frame, as binary files. That's about 100 KB for the keepers,
-  and a native test reads them. The C++ engine still runs every frame in between.
+  binary format can't cause a false failure.
+- **Stored:** 8-bit frames every 16th frame, as binary files, about 220 KB in all. A native test reads
+  them. The C++ engine still runs every frame in between.
 - **Pass:** every checked channel within ±1. A failure names the recipe, frame, pixel, and channel.
 
 ## Dynamic pattern list
@@ -379,6 +386,11 @@ An upload looks like this. The first line of data is `comet`'s real first 15 byt
 ```
 
 - **One line at a time.** A client waits for each `ack`, so the 8-line BLE queue can't overflow.
+- **Shorter lines over USB, and retries.** The board buffers only 32 received bytes until the main loop reads
+  them, and on a real boot 2 to 7% of 46-character lines lost characters. So over USB a line carries 7 bytes,
+  which keeps it to 31 characters. BLE delivers a line whole and carries 15. About 0.3% of short lines are still
+  damaged, so the designer resends them, and starts over if `begin` arrived wrong. The checksum means a damaged
+  recipe is never saved.
 - **The offset guards the order.** A lost or repeated line gets `wrong-offset` with the right `next`,
   and the client carries on from there.
 - **The checksum is the recipe's own CRC-32.** `recipe end` checks the size, the checksum, and the
@@ -427,7 +439,7 @@ under 2 seconds over BLE, and less over USB.
 2. `versions` doesn't include the recipe's version: the same message.
 3. Otherwise, send it.
 
-After version 1 freezes, any change to a field, its order, or an option is version 2. New firmware keeps
+Version 1 is frozen, so any change to a field, its order, or an option is version 2. New firmware keeps
 reading version 1 for as long as it can, because uploads live through firmware updates. An upload in a
 version the firmware can't read stays in `recipes` so it can be deleted or replaced, but it isn't
 selectable.
@@ -452,8 +464,8 @@ nothing had shipped. That ends with this phase.
 
 ## Budgets on the board
 
-The chip runs at 39 MHz, per the core's `boards.txt`. Measure on a real board, with BLE connected and
-`debug on`, before version 1 freezes.
+The chip runs at 39 MHz, per the core's `boards.txt`. These were measured on a real board, with BLE connected
+and `debug on`, before version 1 froze.
 
 | Budget | Today | This phase adds (estimate) | Pass |
 |---|---|---|---|
@@ -478,21 +490,54 @@ pixels, and it blocks the main loop. That leaves about 11 ms, and motion and the
 Also pass: at least 50 frames a second, no missed stomps, and no BLE drops, including while saving a
 recipe.
 
-Add `frameUs`, the slowest engine time since the last line, to the debug `motion` line. It stays after
-this phase. Test with three heavy recipes, built in for a test build only:
+The `recipe_budget` build measures this, logging over USB. Run `bun run budget-recipes` in `designer/` first.
+`frameUs` in the debug `motion` line stays after this phase, and shows the slowest pattern update since the
+last line, including sending the frame. Test with five heavy recipes:
 
 - 8 fills spread around the ring, with mixed blends.
 - 8 trails, each with 16 fronts of 60 pixels.
 - 8 sparkles at full density.
+- 8 chases around the ring, each with 8 comets of 60 pixels.
+- 8 chases along the foot, each with 8 comets of 60 pixels, painted on both sides.
 
-**The trail recipe is the likely failure.** It's only 187 bytes, so it's legal, and it can paint up to
+**Measured on boot `3EB5`, 2026-11-05.** Engine time per frame, average and slowest, after the speed-ups
+below. Each recipe ran with a stomp every 300 ms and the tilt sweeping.
+
+| Recipe | 107 px | Frame rate | 160 px | Frame rate |
+|---|---|---|---|---|
+| `fire-stomp` | 0.9, 1.4 ms | 61 fps | | |
+| `comet` | 1.7, 2.4 ms | 60 fps | | |
+| `starfield` | 1.8, 2.5 ms | 60 fps | | |
+| `lava-pour` | 1.9, 2.4 ms | 60 fps | | |
+| `rainbow-pool` | 2.3, 3.0 ms | 60 fps | | |
+| 8 sparkles | 4.9, 6.0 ms | 61 fps | 6.8, 8.2 ms | 60 fps |
+| 8 fills | 5.4, 6.0 ms | 61 fps | 7.8, 8.5 ms | 62 fps |
+| 8 ring chases | 7.2, 7.8 ms | 60 fps | 8.3, 9.0 ms | 58 fps |
+| 8 trails | 9.5, 13.5 ms | 52 fps | 10.8, 15.1 ms | 49 fps |
+| 8 foot chases | 9.6, 10.3 ms | 58 fps | 11.5, 12.3 ms | 48 fps |
+
+Before the speed-ups, the foot chase took 168 ms, or 6 fps. What made the difference: no doubles or library
+calls in per-pixel loops, a trail's or comet's colors worked out once, a separate loop per blend, and building
+the engine with `-O2`. `show()` measured 5.6 to 5.9 ms, not 4.8, and a motion read can take 4 ms.
+
+Memory on the same boot: 50,000 bytes of static RAM, 289,984 bytes of flash (18.4% of the chip's own), 176,632
+bytes of free heap, and 7,376 bytes of spare stack. All 16 slots held 254-byte recipes, with settings still
+saving, and survived a reflash.
+
+**What this leaves.** Every kept recipe beats its target, with room to spare. Only 8 trails of 16 fronts and
+60 pixels, and 8 foot chases of 8 comets and 60 pixels, stay over 9 ms. On a real boot they hold at least 50 fps.
+foxy kept the limits as they are, so version 1 froze at them.
+Below is what was expected before measuring.
+
+**The trail recipe was the likely failure.** It's only 187 bytes, so it's legal, and it can paint up to
 7,680 pixels a frame. My rough estimate is about 20 ms at 39 MHz. Being over budget doesn't crash
 anything, since animations follow `dt` and just drop frames, but it squeezes motion and the radio.
 
-If a case fails, fix it in this order, before version 1 freezes:
+Version 1 is frozen, so a recipe that turns out too slow gets fixed in this order:
 
 1. Speed up the engine without changing its output, such as color ramps and skipping dark pixels.
-2. Lower the format's limits, such as fronts or trail length, in both the validator and the decoder.
+2. Lower the format's limits, such as fronts or trail length, in a version 2. Lowering them in version 1
+   would make boots refuse recipes they used to accept.
 
 ## The designer
 
@@ -501,13 +546,18 @@ If a case fails, fix it in this order, before version 1 freezes:
   identical recipe, sends the current version with no need to Save first, selects it, and shows
   progress. Errors use plain language.
 - **Each boot is sent to separately,** because a boot takes one connection and keeps its own flash.
-- **It shares the app's connection code, without copying it,** through a Bun workspace: the `Transport`
-  seam, `protocol.ts`, and `ble.ts`. USB comes from draft PR #8's `usb.ts`, so that PR merges first.
-- The upload steps are one pure function over `write(line)`, tested against `fakeBoot`.
+- **It says what's in the way.** When a USB port won't open, the dev server names what holds it, using `lsof`. It can
+  close our own bench tools with SIGTERM, and nothing else. Bluetooth can't say who's connected, so the panel says
+  it's usually the phone app.
+- **It shares the app's connection code, without copying it,** by relative import: the `Transport` seam,
+  `ble.ts`, and `usb.ts`. A Bun workspace would move `node_modules`, and the app's iOS build points at
+  `app/node_modules`.
+- The upload steps are one pure class over `write(line)`, tested against a fake boot that speaks the
+  recipe commands. `?boot=fake` shows the panel with pretend boots.
 
 ## Risks and Mitigations
 
-- **Frame time at 39 MHz.** The biggest unknown, so it's measured before the format freezes. See above.
+- **Frame time at 39 MHz.** The biggest unknown, so it was measured on `3EB5` before the format froze. See above.
 - **Two engines drifting.** Reference frames, and the rule that behavior changes go into both at once.
 - **Anyone nearby can upload.** There's no pairing today, so anyone in range can already change a boot's
   pattern or calibration. Uploading adds a nuisance: filling slots. The decoder keeps bad data from
@@ -532,7 +582,7 @@ Each step lands on its own, building and passing its tests.
 2. **Engine, off hardware.** Decoder and engine in pure C++, passing reference frames under
    `pio test -e native`.
 3. **Budgets.** Run the keepers and the heavy recipes on one board. Change limits if needed. Then freeze
-   version 1.
+   version 1. Done on 2026-11-05, with the limits unchanged.
 4. **Dynamic list and built-ins.** Pattern list, settings version 4, protocol 3, `RecipePattern`,
    generated built-ins, and the build's staleness check. Check the upgrade on a boot with real poses.
 5. **Upload.** Recipe store, upload commands, and their tests, driven over the USB console first.
@@ -549,7 +599,7 @@ Each step lands on its own, building and passing its tests.
 
 **Designer (`bun run test`)**
 
-- Every keeper compiles, and its bytes match a pinned copy.
+- Every keeper compiles. Every test recipe's bytes match a pinned copy.
 - Compile then decode returns the same recipe, within rounding.
 - Too big, no enabled layers, and reserved names all give clear errors.
 - Generated files are current. Saving a recipe that isn't built in leaves them unchanged.

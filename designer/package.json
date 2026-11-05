@@ -9,7 +9,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "reference-frames": "UPDATE_REFERENCE_FRAMES=1 vitest run src/engine/referenceFrames.test.ts"
+    "reference-frames": "UPDATE_REFERENCE_FRAMES=1 vitest run src/engine/referenceFrames.test.ts",
+    "build-recipes": "bun run scripts/build-recipes.ts",
+    "budget-recipes": "bun run scripts/budget-recipes.ts"
   },
   "dependencies": {
     "@fontsource-variable/big-shoulders-display": "^5.3.0",
@@ -21,6 +23,8 @@
     "@types/node": "^22.19.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/w3c-web-serial": "^1.0.9",
+    "@types/web-bluetooth": "^0.0.21",
     "@vitejs/plugin-react": "^6.2.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",

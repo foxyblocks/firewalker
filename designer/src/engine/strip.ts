@@ -17,8 +17,9 @@ export interface StripLayout {
 
 // The uncut bench strip, matching STRIP_DEFAULT_LAYOUT in include/config.h.
 export const BENCH_STRIP: StripLayout = { count: 160, toe: 52, heel: 132 };
-// The two boots as set up from the app's Strip tab on 2026-11-04. Each ring runs heel first.
-export const BOOT_3EB5: StripLayout = { count: 107, toe: 72, heel: 19 };
+// Each boot's saved layout, as set from the app's Strip tab, so the simulator's strip menu matches the real
+// boot. Each ring runs heel first. Read from the boots: 3EB5 on 2026-11-05, and 3ED8 on 2026-11-04.
+export const BOOT_3EB5: StripLayout = { count: 107, toe: 72, heel: 18 };
 export const BOOT_3ED8: StripLayout = { count: 94, toe: 86, heel: 48 };
 // What the pattern list's thumbnails show.
 export const DEFAULT_STRIP = BOOT_3EB5;

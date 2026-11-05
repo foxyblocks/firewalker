@@ -60,8 +60,8 @@ so check each mounted shoe:
 
 ## Scope guardrails
 
-In scope: one strip per shoe, the onboard sensor, the flow and fire-trail patterns, the
-iPhone remote, the USB console, and the `cli` bench tool. Out of scope: the 2-D
+In scope: one strip per shoe, the onboard sensor, native patterns and recipes, the iPhone
+remote, the USB console, the designer, and the `cli` bench tool. Out of scope: the 2-D
 "perimeter bubble" flow, multiple strips per shoe, synchronization between shoes,
 Android, over-the-air firmware updates, and the final battery and enclosure.
 

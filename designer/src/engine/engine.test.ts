@@ -9,6 +9,9 @@ import type { Layer, Recipe, TrailLayer } from "../recipe/types";
 const FRAME_MS = 16;
 // A ring that runs toe first, with even arcs of 55 steps, so the numbers below stay readable.
 const RING: StripLayout = { count: 110, toe: 36, heel: 91 };
+// A ring like a real boot's that runs heel first, with uneven arcs. It's written out here, so the numbers
+// below don't change when a boot is re-cut.
+const HEEL_FIRST: StripLayout = { count: 107, toe: 72, heel: 19 };
 
 function recipe(...layers: Layer[]): Recipe {
   return { format: "firewalker-recipe", version: 1, name: "test", description: "", layers };
@@ -43,25 +46,25 @@ describe("strip map", () => {
   });
 
   it("runs either way round: the boots put the heel before the toe", () => {
-    expect(toeToHeelLength(BOOT_3EB5)).toBe(54);
-    expect(heelToToeLength(BOOT_3EB5)).toBe(53);
-    expect(foreAft(BOOT_3EB5.toe, BOOT_3EB5)).toBe(1);
-    expect(foreAft(BOOT_3EB5.heel, BOOT_3EB5)).toBe(0);
+    expect(toeToHeelLength(HEEL_FIRST)).toBe(54);
+    expect(heelToToeLength(HEEL_FIRST)).toBe(53);
+    expect(foreAft(HEEL_FIRST.toe, HEEL_FIRST)).toBe(1);
+    expect(foreAft(HEEL_FIRST.heel, HEEL_FIRST)).toBe(0);
     // Pixel 0 is 35 steps on from the toe, on the arc that crosses the seam.
-    expect(foreAft(0, BOOT_3EB5)).toBeCloseTo(19 / 54);
-    expect(foreAft(45, BOOT_3EB5)).toBeCloseTo(26 / 53);
+    expect(foreAft(0, HEEL_FIRST)).toBeCloseTo(19 / 54);
+    expect(foreAft(45, HEEL_FIRST)).toBeCloseTo(26 / 53);
   });
 
   it("puts the arc through pixel 0 on the outer side", () => {
-    expect(onOuterArc(0, BOOT_3EB5)).toBe(true);
-    expect(onOuterArc(100, BOOT_3EB5)).toBe(true);
-    expect(onOuterArc(45, BOOT_3EB5)).toBe(false);
+    expect(onOuterArc(0, HEEL_FIRST)).toBe(true);
+    expect(onOuterArc(100, HEEL_FIRST)).toBe(true);
+    expect(onOuterArc(45, HEEL_FIRST)).toBe(false);
     expect(onOuterArc(0, RING)).toBe(true);
     expect(onOuterArc(60, RING)).toBe(false);
   });
 
   it("accepts the boot and bench layouts, and rejects a toe and heel on one pixel", () => {
-    for (const layout of [RING, BOOT_3EB5, BOOT_3ED8, BENCH_STRIP]) expect(layoutProblem(layout)).toBeNull();
+    for (const layout of [RING, HEEL_FIRST, BOOT_3EB5, BOOT_3ED8, BENCH_STRIP]) expect(layoutProblem(layout)).toBeNull();
     expect(layoutProblem({ count: 110, toe: 36, heel: 36 })).not.toBeNull();
     expect(layoutProblem({ count: 110, toe: 36, heel: 110 })).not.toBeNull();
   });
@@ -186,7 +189,7 @@ describe("trail", () => {
   function downEnd(tiltFwd: number): RecipeEngine {
     const engine = new RecipeEngine(
       recipe(layer("trail", { from: "down-end", trigger: "any", length: 1, speed: 1000, brightness: 1 })),
-      BOOT_3EB5,
+      HEEL_FIRST,
     );
     engine.enter();
     engine.update({ tiltFwd, stomp: true, stompStrength: 1, dt: 10 });
