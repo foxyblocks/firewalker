@@ -35,7 +35,7 @@ Look for the originating spec, in this order:
 
 Anything in the repo that documents how code should be written. Common locations:
 
-- `CLAUDE.md`, `AGENTS.md`
+- `AGENTS.md` (also exposed through the `CLAUDE.md` symlink)
 - `CONTRIBUTING.md`
 - `CONTEXT.md`, `CONTEXT-MAP.md`, per-context `CONTEXT.md` files
 - `docs/adr/` (architectural decisions are standards)
@@ -46,7 +46,7 @@ Collect the list of files. The **Standards** sub-agent will read them.
 
 ### 4. Spawn both sub-agents in parallel
 
-Send a single message with two `Agent` tool calls. Use the `general-purpose` subagent for both.
+Use the current platform's delegation tools to run the two reviews in parallel. If delegation is unavailable, run both reviews sequentially and keep their findings separate.
 
 **Standards sub-agent prompt** — include:
 

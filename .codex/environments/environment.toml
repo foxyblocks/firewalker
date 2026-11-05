@@ -1,0 +1,17 @@
+# App actions wrap the same package scripts used by .claude/launch.json.
+# Keep dev-server behavior in app/package.json and designer/package.json.
+version = 1
+name = "Firewalker"
+
+[setup]
+script = "bash tools/setup-worktree.sh"
+
+[[actions]]
+name = "Remote app"
+icon = "run"
+command = "bun run --cwd app dev"
+
+[[actions]]
+name = "Pattern designer"
+icon = "run"
+command = "bun run --cwd designer dev"

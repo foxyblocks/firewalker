@@ -1,10 +1,12 @@
 ---
 name: setup-matt-pocock-skills
-description: Sets up an `## Agent skills` block in AGENTS.md/CLAUDE.md and `docs/agents/` so the engineering skills know this repo's issue tracker (GitHub or local markdown), triage label vocabulary, and domain doc layout. Run before first use of `to-issues`, `to-prd`, `triage`, `diagnose`, `tdd`, `improve-codebase-architecture`, or `zoom-out` — or if those skills appear to be missing context about the issue tracker, triage labels, or domain docs.
+description: Sets up an `## Agent skills` block in AGENTS.md and `docs/agents/` so the engineering skills know this repo's issue tracker (GitHub or local markdown), triage label vocabulary, and domain doc layout. Run before first use of `to-issues`, `to-prd`, `triage`, `diagnose`, `tdd`, `improve-codebase-architecture`, or `zoom-out` — or if those skills appear to be missing context about the issue tracker, triage labels, or domain docs.
 disable-model-invocation: true
 ---
 
 # Setup Matt Pocock's Skills
+
+Use this skill only when the user explicitly requests it.
 
 Scaffold the per-repo configuration that the engineering skills assume:
 
@@ -71,20 +73,20 @@ Confirm the layout:
 
 Show the user a draft of:
 
-- The `## Agent skills` block to add to whichever of `CLAUDE.md` / `AGENTS.md` is being edited (see step 4 for selection rules)
+- The `## Agent skills` block to add to `AGENTS.md` (see step 4 for existing-file handling)
 - The contents of `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, `docs/agents/domain.md`
 
 Let them edit before writing.
 
 ### 4. Write
 
-**Pick the file to edit:**
+**Use one shared instructions file:**
 
-- If `CLAUDE.md` exists, edit it.
-- Else if `AGENTS.md` exists, edit it.
-- If neither exists, ask the user which one to create — don't pick for them.
+- Edit `AGENTS.md` as the canonical file, and keep `CLAUDE.md` as a relative symlink to it.
+- If only a regular `CLAUDE.md` exists, move its contents to `AGENTS.md` before creating the symlink. If both are regular files, reconcile their existing instructions before replacing `CLAUDE.md`.
+- If neither exists, create `AGENTS.md` and the `CLAUDE.md` symlink.
 
-Never create `AGENTS.md` when `CLAUDE.md` already exists (or vice versa) — always edit the one that's already there.
+Keep shared skills in `.agents/skills/`, with `.claude/skills` symlinked to `../.agents/skills`. Write instructions in terms of available capabilities so they work with both Claude and Codex; keep any required platform-specific configuration as a thin wrapper around shared commands.
 
 If an `## Agent skills` block already exists in the chosen file, update its contents in-place rather than appending a duplicate. Don't overwrite user edits to the surrounding sections.
 
