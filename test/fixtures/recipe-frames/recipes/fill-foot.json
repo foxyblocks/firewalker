@@ -1,0 +1,20 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "fill-foot",
+  "description": "",
+  "layers": [
+    {
+      "type": "fill",
+      "enabled": true,
+      "palette": ["#ffffff", "#ffc800", "#ff3c00"],
+      "spread": "foot",
+      "repeat": 2,
+      "offset": 0,
+      "scroll": { "source": "stompStrength", "min": 0, "max": 1 },
+      "brightness": { "source": "tiltAmount", "min": 0.2, "max": 1 },
+      "blend": "over",
+      "opacity": 1
+    }
+  ]
+}

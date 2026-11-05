@@ -14,8 +14,9 @@ Boots can't run recipes yet. Sending one to a boot comes with the firmware's rec
 cd designer
 bun install
 bun run dev          # http://localhost:5174
-bun run test         # engine, format, storage, and geometry tests
+bun run test         # engine, format, storage, and geometry tests, and every file in patterns/
 bun run typecheck
+bun run reference-frames   # rewrites the firmware engine's reference frames
 ```
 
 It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
@@ -72,7 +73,10 @@ import only. Save and Delete stay off, and a banner says why.
   every time.
 - `src/engine/`: runs a recipe one 16 ms frame at a time, like the firmware's patterns.
   `strip.ts` is a port of `include/firewalker_strip_map.h`, and `output.ts` is a port of how
-  the strip driver applies brightness.
+  the strip driver applies brightness. `referenceFrames.ts` saves what this engine draws for a
+  fixed script of motion to `test/fixtures/recipe-frames/`, so the firmware's engine can be
+  checked against it. Change what the engine draws, or a recipe in `patterns/`, and `bun run
+  reference-frames` rewrites those files.
 - `src/sim/`: the boot drawings and the frame loop. The drawings assume the controller, and
   so pixel 0, is on the boot's outer side.
 - `server/`: the dev server's `/api/patterns` endpoints.

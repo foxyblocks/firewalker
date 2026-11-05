@@ -1,0 +1,28 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "sparkle",
+  "description": "",
+  "layers": [
+    {
+      "type": "sparkle",
+      "enabled": true,
+      "palette": ["#ffffff", "#9fd8ff"],
+      "density": 30,
+      "fadeMs": 400,
+      "brightness": 1,
+      "blend": "add",
+      "opacity": 1
+    },
+    {
+      "type": "sparkle",
+      "enabled": true,
+      "palette": ["#ffffff", "#ffc800", "#ff3c00"],
+      "density": { "source": "stompFade", "min": 0, "max": 150, "fadeMs": 1200 },
+      "fadeMs": 900,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": { "source": "wave", "min": 0.3, "max": 1, "periodMs": 1100 }
+    }
+  ]
+}

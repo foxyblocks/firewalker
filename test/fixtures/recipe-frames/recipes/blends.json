@@ -1,0 +1,68 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "blends",
+  "description": "",
+  "layers": [
+    {
+      "type": "fill",
+      "enabled": true,
+      "palette": ["#ff0000", "#ffff00", "#00ff00", "#00ffff", "#0000ff", "#ff00ff"],
+      "spread": "ring",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0.2,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "fill",
+      "enabled": true,
+      "palette": ["#804000"],
+      "spread": "solid",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": { "source": "wave", "min": 0, "max": 0.8, "periodMs": 900 }
+    },
+    {
+      "type": "fill",
+      "enabled": true,
+      "palette": ["#004080"],
+      "spread": "solid",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0,
+      "brightness": 1,
+      "blend": "add",
+      "opacity": { "source": "stompFade", "min": 0, "max": 1, "fadeMs": 600 }
+    },
+    {
+      "type": "fill",
+      "enabled": true,
+      "palette": ["#208020"],
+      "spread": "solid",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0,
+      "brightness": 1,
+      "blend": "max",
+      "opacity": { "source": "tilt", "min": 0, "max": 1 }
+    },
+    {
+      "type": "fill",
+      "enabled": true,
+      "palette": ["#c0c0ff"],
+      "spread": "solid",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0,
+      "brightness": 1,
+      "blend": "multiply",
+      "opacity": { "source": "tiltAmount", "min": 0, "max": 1 }
+    }
+  ]
+}

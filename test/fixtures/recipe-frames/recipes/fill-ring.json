@@ -1,0 +1,20 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "fill-ring",
+  "description": "",
+  "layers": [
+    {
+      "type": "fill",
+      "enabled": true,
+      "palette": ["#ff0000", "#ffff00", "#00ff00", "#00ffff", "#0000ff", "#ff00ff"],
+      "spread": "ring",
+      "repeat": { "source": "wave", "min": 1, "max": 3, "periodMs": 1500 },
+      "offset": { "source": "stompFade", "min": 0, "max": 0.5, "fadeMs": 800 },
+      "scroll": -0.5,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    }
+  ]
+}

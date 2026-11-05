@@ -13,4 +13,9 @@ Pattern recipes worth keeping, one `<name>.json` each. The designer in
 | `comet` | Two neon comets circling faster the more you tilt |
 
 Edit them in the designer rather than by hand. It checks every value and writes the file
-the same way each time, so diffs stay small.
+the same way each time, so diffs stay small. `bun run test` in `designer/` checks every file
+here too.
+
+The firmware engine's [reference frames](../test/fixtures/recipe-frames/README.md) are made from
+these recipes. After adding or changing one, run `bun run reference-frames` in `designer/` and
+commit the result along with it.

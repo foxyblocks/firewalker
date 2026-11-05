@@ -1,0 +1,36 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "trail-end",
+  "description": "",
+  "layers": [
+    {
+      "type": "trail",
+      "enabled": true,
+      "trigger": "tilted",
+      "from": "down-end",
+      "flatZone": 0.3,
+      "palette": ["#ffffff", "#ffc800", "#ff3c00"],
+      "speed": { "source": "tilt", "min": 20, "max": 200 },
+      "length": 8,
+      "brightness": { "source": "stompStrength", "min": 0.3, "max": 1 },
+      "maxFronts": 3,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "trail",
+      "enabled": true,
+      "trigger": "any",
+      "from": "down-end",
+      "flatZone": 0.6,
+      "palette": ["#ffffff", "#7fe8ff", "#0080ff"],
+      "speed": 60,
+      "length": 12,
+      "brightness": 0.5,
+      "maxFronts": 16,
+      "blend": "max",
+      "opacity": 1
+    }
+  ]
+}
