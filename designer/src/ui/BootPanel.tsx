@@ -6,6 +6,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import { useBoots } from "./App";
 import type { ConnectedBoot } from "../boot/connections";
+import { describeHolder } from "../boot/portHolders";
 import type { Recipe } from "../recipe/types";
 
 const METHOD_LABEL = { usb: "Connect over USB", bluetooth: "Connect over Bluetooth" } as const;
@@ -35,6 +36,17 @@ export function BootPanel({ recipe, canSend, onClose }: { recipe: Recipe; canSen
       </div>
 
       {state.error && <p className="small bad">{state.error}</p>}
+      {state.hint && <p className="small">{state.hint}</p>}
+      {state.holders.map((holder) => (
+        <p key={`${holder.pid} ${holder.port}`} className="boot-holder small">
+          <span>{describeHolder(holder)}</span>
+          {holder.canFree && (
+            <button type="button" className="button small" disabled={state.freeing !== null} onClick={() => void boots.free(holder)}>
+              {state.freeing === holder.pid ? "Closing…" : "Free it"}
+            </button>
+          )}
+        </p>
+      ))}
       {state.connecting && <p className="quiet small">Connecting…</p>}
       {state.ready && state.boots.length === 0 && !state.connecting && (
         <p className="quiet small">Connect a boot to try this pattern on the real strip. A boot takes one connection at a time.</p>

@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BootSession, BYTES_PER_USB_LINE, NEEDS_FIRMWARE, type SendProgress } from "./bootSession";
 import { BootConnections } from "./connections";
-import { FakeBoot, FakeBootTransport } from "./fakeBoot";
+import { FakeBoot, FakeBootPorts, FakeBootTransport } from "./fakeBoot";
+import { describeHolder, type BootPortsClient } from "./portHolders";
 import { compileRecipe } from "../recipe/compile";
 import { newLayer } from "../recipe/spec";
 import type { Layer, Recipe } from "../recipe/types";
@@ -300,6 +301,98 @@ describe("connections", () => {
     const [boot] = connections.getSnapshot().boots;
     await connections.disconnect(boot!.deviceId);
     expect(connections.getSnapshot().boots).toEqual([]);
+  });
+
+  describe("when something's holding a boot", () => {
+    async function connected(busy: string | null) {
+      const ports = new FakeBootPorts(busy);
+      const connections = new BootConnections(async () => new FakeBootTransport([new FakeBoot()], ports), ports);
+      await connections.prepare();
+      return { ports, connections };
+    }
+
+    it("names one of our tools as soon as the panel opens", async () => {
+      const { connections } = await connected("tool");
+      expect(connections.getSnapshot().holders).toMatchObject([{ name: "./cli", canFree: true }]);
+    });
+
+    it("doesn't mention a browser until connecting fails, since it's often this very tab", async () => {
+      const { connections } = await connected("browser");
+      expect(connections.getSnapshot().holders).toEqual([]);
+      await connections.connect("usb");
+      expect(connections.getSnapshot().holders).toMatchObject([{ kind: "browser", canFree: false }]);
+      expect(connections.getSnapshot().error).toBeNull();
+    });
+
+    it("names what's holding the port when USB can't connect", async () => {
+      const { connections } = await connected("other");
+      await connections.connect("usb");
+      const [holder] = connections.getSnapshot().holders;
+      expect(describeHolder(holder!)).toBe("SomeApp (pid 4244) has this boot open. Quit it to connect here.");
+      expect(holder!.canFree).toBe(false);
+    });
+
+    it("falls back to the connection's own error when nothing is named, as in a built copy", async () => {
+      const noServer: BootPortsClient = { list: async () => Promise.reject(new Error("no server")), free: async () => ({ freed: false }) };
+      const transport = new FakeBootTransport([new FakeBoot()], new FakeBootPorts("tool"));
+      const connections = new BootConnections(async () => transport, noServer);
+      await connections.prepare();
+      await connections.connect("usb");
+      expect(connections.getSnapshot().error).toMatch(/Couldn't open/);
+    });
+
+    it("closes our tool and connects", async () => {
+      const { ports, connections } = await connected("tool");
+      await connections.free(connections.getSnapshot().holders[0]!);
+      expect(ports.freed).toEqual([4242]);
+      expect(connections.getSnapshot()).toMatchObject({ holders: [], error: null, freeing: null });
+      expect(connections.getSnapshot().boots).toHaveLength(1);
+    });
+
+    it("says what to press if the browser won't show its picker after closing", async () => {
+      const ports = new FakeBootPorts("tool");
+      const transport = new FakeBootTransport([new FakeBoot()], ports);
+      const connections = new BootConnections(async () => transport, ports);
+      await connections.prepare();
+      vi.spyOn(transport, "pick").mockResolvedValue(null);
+      await connections.free(connections.getSnapshot().holders[0]!);
+      expect(connections.getSnapshot().hint).toMatch(/port's free\. Press Connect over USB/);
+    });
+
+    it("says so if the tool won't close", async () => {
+      const ports: BootPortsClient = {
+        list: async () => new FakeBootPorts("tool").holders,
+        free: async () => ({ freed: false, error: "./cli didn't close." }),
+      };
+      const connections = new BootConnections(async () => new FakeBootTransport([new FakeBoot()]), ports);
+      await connections.prepare();
+      await connections.free(connections.getSnapshot().holders[0]!);
+      expect(connections.getSnapshot()).toMatchObject({ error: "./cli didn't close.", boots: [] });
+    });
+
+    it("says it's usually the phone app when a Bluetooth boot isn't in the picker", async () => {
+      const transport = new FakeBootTransport([new FakeBoot()]);
+      const connections = new BootConnections(async () => transport, new FakeBootPorts());
+      await connections.prepare();
+      vi.spyOn(transport, "pick").mockResolvedValue(null);
+      await connections.connect("bluetooth");
+      expect(connections.getSnapshot().hint).toMatch(/one Bluetooth connection at a time.*phone app.*connect over USB/);
+    });
+
+    it("says it's usually the phone app when Bluetooth can't connect", async () => {
+      const transport = new FakeBootTransport([new FakeBoot()]);
+      const connections = new BootConnections(async () => transport, new FakeBootPorts());
+      await connections.prepare();
+      vi.spyOn(transport, "open").mockRejectedValue(new Error("timed out"));
+      await connections.connect("bluetooth");
+      expect(connections.getSnapshot().error).toMatch(/one Bluetooth connection at a time/);
+    });
+
+    it("words each kind of holder plainly", () => {
+      const base = { port: "/dev/cu.usbmodem1", pid: 1234, process: "x", canFree: false };
+      expect(describeHolder({ ...base, kind: "tool", name: "./cli", canFree: true })).toBe("./cli (pid 1234) has this boot open.");
+      expect(describeHolder({ ...base, kind: "browser", name: "A browser tab" })).toMatch(/^Another browser tab has this boot open/);
+    });
   });
 
   it("says when boots can't be reached from this browser", async () => {

@@ -6,6 +6,7 @@ import { defineConfig } from "vitest/config";
 
 // Explicit .ts extensions here and in server/: Vite loads this config through Node, which
 // resolves TypeScript imports only by their full file name.
+import { bootPortsApi } from "./server/bootPortsApi.ts";
 import { patternsApi } from "./server/patternsApi.ts";
 
 // Recipes live in the repo's patterns/ folder, next to this one. PATTERNS_DIR points the
@@ -19,7 +20,7 @@ const builtinsHeader = process.env.PATTERNS_DIR ? undefined : fileURLToPath(new 
 
 // Port 5174, so the designer and the iPhone app's dev server (5173) can run side by side.
 export default defineConfig({
-  plugins: [react(), patternsApi(patternsDir, shownDir, builtinsHeader)],
+  plugins: [react(), patternsApi(patternsDir, shownDir, builtinsHeader), bootPortsApi()],
   // Send to boot reuses the iPhone app's connection code from ../app.
   server: { host: "localhost", port: 5174, fs: { allow: [".."] } },
   test: { environment: "node", globals: true },

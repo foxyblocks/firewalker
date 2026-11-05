@@ -77,6 +77,21 @@ PATTERNS_DIR=/tmp/scratch-patterns bun run dev
 A built copy (`bun run build`) has no dev server, so it works from drafts, download, and
 import only. Save and Delete stay off, and a banner says why.
 
+## If a boot won't connect
+
+A USB port can only be open in one program at a time. When Send to boot can't open one, it names what has it
+open. For `./cli`, `pio device monitor`, a PlatformIO upload, miniterm, or a pyserial script, **Free it** asks that
+program to close and connects again. If that leaves its terminal acting oddly, type `reset` there. A browser or
+anything else you close yourself, because it could be doing something you'd lose. The same list from a terminal:
+
+```bash
+lsof /dev/cu.usbmodem*
+```
+
+A boot also takes one Bluetooth connection at a time, and it disappears from the browser's picker while it has
+one. It's usually the iPhone app, so close the app, or connect over USB. To check, `status` over USB reports
+`"ble":true` while something's connected over Bluetooth, but a boot can't say what.
+
 ## How the simulation works
 
 - `src/recipe/`: the format. `spec.ts` has every layer's fields, ranges, and defaults, which

@@ -543,6 +543,9 @@ If a case fails, fix it in this order, before version 1 freezes:
   identical recipe, sends the current version with no need to Save first, selects it, and shows
   progress. Errors use plain language.
 - **Each boot is sent to separately,** because a boot takes one connection and keeps its own flash.
+- **It says what's in the way.** When a USB port won't open, the dev server names what holds it, using `lsof`. It can
+  close our own bench tools with SIGTERM, and nothing else. Bluetooth can't say who's connected, so the panel says
+  it's usually the phone app.
 - **It shares the app's connection code, without copying it,** by relative import: the `Transport` seam,
   `ble.ts`, and `usb.ts`. A Bun workspace would move `node_modules`, and the app's iOS build points at
   `app/node_modules`.

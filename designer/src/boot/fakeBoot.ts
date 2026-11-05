@@ -4,6 +4,7 @@
 // include/firewalker_recipe_upload.h.
 
 import type { PickMethod } from "../../../app/src/transport/transport";
+import type { BootPortsClient, FreeResult, PortHolder } from "./portHolders";
 import { decodeRecipe, MAX_COMPILED_BYTES, recipeCrc } from "../recipe/compile";
 import { RECIPE_VERSION } from "../recipe/types";
 
@@ -141,13 +142,45 @@ export class FakeBoot {
   }
 }
 
+const FAKE_HOLDERS: Record<string, Omit<PortHolder, "port">> = {
+  tool: { pid: 4242, process: "cli", kind: "tool", name: "./cli", canFree: true },
+  browser: { pid: 4243, process: "Arc Helper", kind: "browser", name: "A browser tab", canFree: false },
+  other: { pid: 4244, process: "SomeApp", kind: "other", name: "SomeApp", canFree: false },
+};
+
+// Pretends something holds a boot's USB port, for tests and for `?boot=fake&busy=tool`.
+export class FakeBootPorts implements BootPortsClient {
+  holders: PortHolder[];
+  freed: number[] = [];
+
+  constructor(busy: string | null = null) {
+    const holder = busy ? FAKE_HOLDERS[busy] : undefined;
+    this.holders = holder ? [{ ...holder, port: "/dev/cu.usbmodemFAKE1" }] : [];
+  }
+
+  async list(): Promise<PortHolder[]> {
+    return this.holders;
+  }
+
+  async free(pid: number): Promise<FreeResult> {
+    const holder = this.holders.find((candidate) => candidate.pid === pid);
+    if (holder && !holder.canFree) return { freed: false, error: "Only the bench tools can be closed from here." };
+    this.freed.push(pid);
+    this.holders = this.holders.filter((candidate) => candidate.pid !== pid);
+    return { freed: true };
+  }
+}
+
 // The part of the app's Transport that connections.ts uses, over pretend boots.
 export class FakeBootTransport {
   readonly pickers: readonly PickMethod[] = ["usb", "bluetooth"];
   readonly boots: FakeBoot[];
   private next = 0;
 
-  constructor(boots: FakeBoot[] = [new FakeBoot({ id: "3EB5" }), new FakeBoot({ id: "3ED8" })]) {
+  constructor(
+    boots: FakeBoot[] = [new FakeBoot({ id: "3EB5" }), new FakeBoot({ id: "3ED8" })],
+    private readonly ports: FakeBootPorts = new FakeBootPorts(),
+  ) {
     this.boots = boots;
   }
 
@@ -156,6 +189,7 @@ export class FakeBootTransport {
   }
 
   async pick(method: PickMethod = "bluetooth"): Promise<{ deviceId: string; name: string } | null> {
+    if (method === "usb" && this.ports.holders.length > 0) throw new Error("Couldn't open that boot's USB port.");
     const boot = this.boots[this.next++ % this.boots.length]!;
     return { deviceId: `${method}:${boot.id}`, name: `Firewalker-${boot.id}` };
   }

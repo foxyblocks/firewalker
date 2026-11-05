@@ -6,6 +6,8 @@ import { createContext, useContext, useEffect, useMemo, useState, useSyncExterna
 import { DesignScreen } from "./DesignScreen";
 import { PatternsScreen } from "./PatternsScreen";
 import { BootConnections, type BootTransport } from "../boot/connections";
+import { FakeBootPorts, FakeBootTransport } from "../boot/fakeBoot";
+import { devServerPorts } from "../boot/portHolders";
 import { PatternLibrary, type LibraryState } from "../store/patterns";
 
 const LibraryContext = createContext<PatternLibrary | null>(null);
@@ -17,15 +19,19 @@ export function useBoots(): BootConnections {
   return boots;
 }
 
-// Real boots, or pretend ones with ?boot=fake, for trying the panel with no boot around. Both load only
-// when the panel opens, because the real ones pull in the iPhone app's Bluetooth plugin.
-async function loadBootTransport(): Promise<BootTransport> {
-  if (new URLSearchParams(window.location.search).get("boot") === "fake") {
-    const { FakeBootTransport } = await import("../boot/fakeBoot");
-    return new FakeBootTransport();
-  }
+// Real boots load only when the panel opens, because they pull in the iPhone app's Bluetooth plugin.
+async function loadRealTransport(): Promise<BootTransport> {
   const { createRealTransport } = await import("../boot/realTransport");
   return createRealTransport();
+}
+
+// Real boots, or pretend ones with ?boot=fake, for trying the panel with no boot around. Adding &busy=tool,
+// &busy=browser, or &busy=other makes something pretend to hold the USB port.
+function createBootConnections(): BootConnections {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("boot") !== "fake") return new BootConnections(loadRealTransport, devServerPorts);
+  const ports = new FakeBootPorts(params.get("busy"));
+  return new BootConnections(async () => new FakeBootTransport(undefined, ports), ports);
 }
 
 export function useLibrary(): [PatternLibrary, LibraryState] {
@@ -48,7 +54,7 @@ function readRoute(): Route {
 
 export function App() {
   const library = useMemo(() => new PatternLibrary(), []);
-  const boots = useMemo(() => new BootConnections(loadBootTransport), []);
+  const boots = useMemo(createBootConnections, []);
   const [route, setRoute] = useState(readRoute);
 
   useEffect(() => {
