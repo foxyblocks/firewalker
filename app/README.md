@@ -65,7 +65,8 @@ each other. While something else has the port, the app shows the boot as reconne
 it up once the port is free. Flashing over SWD doesn't need the port, so it works alongside the
 app.
 
-Safari and Firefox have no Web Serial, so they can't do this.
+Safari and Firefox have no Web Serial, so they can't do this. The browser pane in the Claude
+app shows the buttons, but it has no USB picker, so Add over USB stops at "No boot picked".
 
 ### In the iOS Simulator
 

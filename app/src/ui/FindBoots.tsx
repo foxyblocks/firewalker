@@ -21,6 +21,9 @@ const PICK_LABELS: Record<PickMethod | "only", string> = {
   usb: "Add over USB",
 };
 
+const NO_USB_PICK =
+  "No boot picked. If no list of boots appeared, this browser can't show the USB picker, so open this page in Chrome or Arc.";
+
 const signalWord = (rssi?: number) => {
   if (rssi === undefined) return "";
   if (rssi > -60) return "Strong signal";
@@ -55,7 +58,9 @@ export function FindBoots({ store, onDone }: { store: BootsStore; onDone: () => 
     try {
       const boot = await store.transport.pick(method);
       if (boot) addFound(boot);
-      else setPickProblem("No boot picked. Tap Add to try again.");
+      // A browser with no USB picker, such as an embedded one, reports the same thing as
+      // someone cancelling, so this can't tell them apart and covers both.
+      else setPickProblem(method === "usb" ? NO_USB_PICK : "No boot picked. Tap Add to try again.");
     } catch (error) {
       setPickProblem(error instanceof Error ? error.message : "Couldn't reach that boot.");
     } finally {
