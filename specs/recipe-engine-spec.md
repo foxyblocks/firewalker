@@ -9,7 +9,8 @@ Date: 2026-11-04
 Boots start running recipes. One phase delivers three things together:
 
 1. A C++ recipe engine in the firmware.
-2. The keepers in `patterns/` built into the firmware.
+2. A chosen set of recipes from `patterns/` built into the firmware: `rainbow-pool`, `fire-stomp`,
+   and `comet`.
 3. Uploading, listing, and deleting recipes over BLE and USB.
 
 The designer compiles a recipe's JSON into a small binary. That one compiler feeds both the
@@ -17,7 +18,7 @@ built-ins and uploads. The firmware only ever sees the binary.
 
 ## Decisions
 
-Every decision here is a proposal until foxy approves the spec, except the first.
+Every decision here is a proposal until foxy approves the spec, except the first and the last.
 
 | # | Decision | Why |
 |---|---|---|
@@ -34,6 +35,7 @@ Every decision here is a proposal until foxy approves the spec, except the first
 | 11 | Built-ins are a generated file checked into the repo. A stale file fails the firmware build | Firmware builds don't need Bun, and you can't flash old built-ins by accident |
 | 12 | The designer is the only upload client this phase | The iPhone app already lists and selects whatever a boot reports |
 | 13 | Measure flash, RAM, and frame time on a board before version 1 freezes | A legal recipe may be too slow at 39 MHz, and the fix is a lower limit in the format |
+| 14 | Only `rainbow-pool`, `fire-stomp`, and `comet` are built in. `starfield` and `lava-pour` stay in `patterns/` as recipes you upload. A list in `patterns/built-ins.txt` sets this | foxy's change to the draft. Being in `patterns/` means a recipe is kept, and being on the list means every boot ships with it |
 
 Rejected for storage:
 
@@ -53,8 +55,9 @@ a way to send a recipe in pieces.
 
 ## Goals
 
-- Run every recipe in `patterns/` on a boot with no upload.
-- Send a new or changed recipe to a boot in a couple of seconds, with no firmware build.
+- Run the built-in recipes on a boot with no upload.
+- Send any other recipe to a boot in a couple of seconds, with no firmware build. That includes the
+  ones kept in `patterns/` that aren't built in.
 - Keep uploads through a firmware update and a power cycle.
 - Make a recipe look the same in the simulator and on a boot, apart from what the strip and
   brightness do to color.
@@ -78,8 +81,10 @@ a way to send a recipe in pieces.
 Add these to `CONTEXT.md`.
 
 - **Native pattern**: written in C++. Today `flow` and `fire-trail`.
-- **Built-in recipe**: a keeper from `patterns/`, compiled into the firmware. It can't be
-  deleted.
+- **Kept recipe**, or **keeper**: any recipe in `patterns/`. It's in the repo, but it only reaches
+  a boot by being built in or uploaded.
+- **Built-in recipe**: a keeper listed in `patterns/built-ins.txt`, compiled into the firmware. It
+  can't be deleted.
 - **Uploaded recipe**: a recipe stored in one boot's flash, in a **slot**.
 - **Compiled recipe**: the binary form of a recipe.
 
@@ -102,18 +107,48 @@ It runs the validator first. Then it:
 
 | File | Holds |
 |---|---|
-| `include/generated/recipe_builtins.h` | Each keeper's bytes, and a hash of the `patterns/` files they came from |
+| `include/generated/recipe_builtins.h` | Each built-in's bytes, and a hash of the list and the files they came from |
 | `include/generated/recipe_tables.h` | Every layer's field order, kinds, and ranges, plus the format's limits and reserved names, all from `spec.ts` and `types.ts` |
 
 Checks that keep these honest:
 
 - The designer's Save compiles the recipe first, and refuses one that doesn't compile.
-- Save then re-runs the built-ins step when it's saving to the repo's `patterns/`, so the
-  header changes in the same commit as the recipe. A `PATTERNS_DIR` scratch folder doesn't
-  touch it.
+- When the saved recipe is on the built-ins list, Save then re-runs the built-ins step, so the
+  header changes in the same commit as the recipe. Saving any other recipe, or saving to a
+  `PATTERNS_DIR` scratch folder, doesn't touch it.
 - A PlatformIO build step recomputes the hash and fails the build if the header is stale,
   telling you to run `bun run build-recipes`. This needs Python only, not Bun.
 - A designer test fails if any generated file differs from what the script would write.
+
+### Choosing the built-ins
+
+`patterns/built-ins.txt` lists them, one name per line. Lines starting with `#` are comments.
+
+```text
+# Recipes compiled into the firmware. Everything else in this folder can still be uploaded.
+comet
+fire-stomp
+rainbow-pool
+```
+
+- **Adding or removing a built-in** means editing this file, running `bun run build-recipes`, and
+  flashing the boots.
+- **`bun run build-recipes` fails** on a name with no recipe, or on more than 14 names.
+- **The designer shows a "Built in" label** on those recipes. It's read-only for now.
+- **Renaming a built-in** in the designer updates the list. **Deleting one** removes it from the list,
+  and the delete dialog says so.
+
+It's a `.txt` file so the designer, which treats every `.json` in the folder as a recipe, ignores it.
+
+Rejected:
+
+- **A `builtIn` field in each recipe.** A recipe describes a look, and which recipes boots ship with is
+  a choice about the firmware. The field would also travel with every download and import, and the boot
+  has no use for it.
+- **Reading the table in `patterns/README.md`.** Editing the docs shouldn't be able to change the
+  firmware.
+- **A list in `config.h` or `platformio.ini`.** The compiler that needs the list runs in the designer,
+  which would then have to parse firmware files. It also puts the list far from the recipes it names.
 
 ## Binary layout
 
@@ -210,9 +245,9 @@ What fits in 254 bytes, with 12-character names:
 | 8 layers, 6 colors each, one binding each | 296 | Too big |
 | 8 fills, 16 colors each, every knob bound | 723 | Too big, the largest legal recipe |
 
-Every keeper gets built in, so a recipe has to compile to be kept. The designer shows the size
-all the time, such as `103 / 254 bytes`, and turns it red when over. A draft can go over while
-you work. Save and Send to boot both refuse it, with a clear reason.
+Every kept recipe is meant to run on a boot, built in or uploaded, so a recipe has to compile to be
+kept. The designer shows the size all the time, such as `103 / 254 bytes`, and turns it red when
+over. A draft can go over while you work. Save and Send to boot both refuse it, with a clear reason.
 
 ## The C++ engine
 
@@ -256,8 +291,9 @@ written by `bun run reference-frames`. That folder's README describes the file f
 
 - **Inputs:** a fixed script of about 7 seconds, with uneven `dt`, a tilt sweep, stomps at several
   strengths, and stomps at exactly level so `flat` triggers fire.
-- **Recipes:** all five keepers, plus small fixtures that together cover every layer type, blend,
-  and knob source.
+- **Recipes:** all five keepers, built in or not, because the engine has to draw uploads correctly too.
+  Small fixtures then cover every layer type, blend, and knob source. Each case stores its own compiled
+  bytes, so the C++ test doesn't depend on which recipes are built in.
 - **Layouts:** the uncut bench strip (160 px, toe 52, heel 132) and boot `3EB5` (107 px, toe 72,
   heel 19).
 - **Path:** JSON, then compile, then decode, then the TypeScript engine. So rounding from the
@@ -505,7 +541,8 @@ Each step lands on its own, building and passing its tests.
    - `docs/recipe-format.md`: the binary layout.
    - `docs/remote-protocol.md`: the new commands, and protocol 3.
    - `docs/adr/0005-pattern-recipes.md`: close the open question on built-ins.
-   - `CONTEXT.md`, `CLAUDE.md`, `designer/README.md`, and `patterns/README.md`.
+   - `CONTEXT.md`, `CLAUDE.md`, `designer/README.md`, and `patterns/README.md`, which should say which
+     recipes are built in and point to `built-ins.txt`.
    - `docs/open-questions.md`: its scope list still names only flow and fire-trail.
 
 ## Testing Plan
@@ -515,12 +552,15 @@ Each step lands on its own, building and passing its tests.
 - Every keeper compiles, and its bytes match a pinned copy.
 - Compile then decode returns the same recipe, within rounding.
 - Too big, no enabled layers, and reserved names all give clear errors.
-- Generated files are current.
+- Generated files are current. Saving a recipe that isn't built in leaves them unchanged.
+- `build-recipes` fails on a listed name with no recipe, and on too many names. A rename updates the
+  list, and a delete removes the name from it.
 - Upload steps against `fakeBoot`: normal, `wrong-offset`, an error at each step, and a dropped link.
 
 **Firmware (`pio test -e native`)**
 
-- `test_recipe_decode`: every keeper decodes, plus corrupted, cut-off, and out-of-range bytes, which must
+- `test_recipe_decode`: every built-in and every reference case decodes, plus corrupted, cut-off, and
+  out-of-range bytes, which must
   be refused or clamped without reading out of bounds. Run with address checks on where the host allows.
 - `test_recipe_engine`: reference frames.
 - `test_recipe_upload`: the upload steps, the timeout, and bad input.
@@ -531,7 +571,8 @@ Each step lands on its own, building and passing its tests.
 **On a board**
 
 - All budgets above.
-- Upload, list, info, and delete over USB and BLE.
+- Upload, list, info, and delete over USB and BLE. Use `starfield` and `lava-pour`, which only reach a
+  boot this way.
 - Power cut during `recipe data`, and during `recipe end`.
 - Fill every slot, then get `no-room`. Delete one and upload again.
 - Replace the recipe on the strip, and delete the recipe on the strip.
@@ -544,8 +585,9 @@ Each step lands on its own, building and passing its tests.
 
 ## Acceptance Criteria
 
-- All five keepers run on both boots with no upload, and look like the simulator apart from known
-  brightness effects.
+- `rainbow-pool`, `fire-stomp`, and `comet` run on both boots with no upload. `starfield` and
+  `lava-pour` aren't listed until they're uploaded, and then they run too. All five look like the
+  simulator apart from known brightness effects.
 - The C++ engine matches every reference frame within ±1.
 - A recipe sent from the designer shows on a boot over both USB and BLE, in under 5 seconds.
 - Uploads survive a power cycle and a firmware update. A power cut during an upload never damages a
@@ -559,7 +601,8 @@ Each step lands on its own, building and passing its tests.
   firmware update.
 - Every budget passes on a board, with the results recorded in `docs/power-budget.md` or a new budget doc.
 - The iPhone app lists and selects recipes with no app change.
-- A stale built-ins header fails the firmware build.
+- A stale built-ins header fails the firmware build, and changing `built-ins.txt` without rebuilding
+  counts as stale.
 
 ## Open Questions
 
@@ -574,7 +617,7 @@ Each has a recommendation. These are foxy's to confirm.
    `patterns` line longer.
 4. **A CI job.** The repo has no CI and no commit hooks, so these checks only run when someone runs them.
    Recommend one GitHub Actions job for `bun run test` and `pio test -e native`.
-5. **Save regenerating the built-ins header.** Recommend yes, so a kept recipe and its header stay in one
+5. **Save regenerating the built-ins header.** Recommend yes, so a built-in recipe and its header stay in one
    commit. The cost is that Save changes a second file.
 6. **Retiring `flow` and `fire-trail`.** Recommend deciding after the comparison on a boot, as a separate
    change. Then one engine draws everything, and those two names stop being reserved.
