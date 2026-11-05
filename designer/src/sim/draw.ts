@@ -13,6 +13,8 @@ const COLORS = {
   unlit: "#2a2622",
   controller: "#4a443c",
   label: "#6f675e",
+  shadow: "0 0 0",
+  dust: "167 157 144",
 };
 
 // LEDs emit light linearly in their PWM value, but a screen expects gamma-encoded values.
@@ -163,7 +165,16 @@ const BOOT_UPPER: Point[] = [
   { x: 538, y: 274 },
 ];
 
-export function drawSideView(canvas: HTMLCanvasElement, frame: Float32Array, geometry: SideGeometry, tilt: number): void {
+// Where the boot is in the side view: its tilt, how high it is off the ground mid-stomp, and
+// how fresh the last landing is, which drives the dust and the squash.
+export interface SidePose {
+  tilt: number;
+  lift: number;
+  impact: number;
+  impactStrength: number;
+}
+
+export function drawSideView(canvas: HTMLCanvasElement, frame: Float32Array, geometry: SideGeometry, pose: SidePose): void {
   const ctx = fitCanvas(canvas);
   if (!ctx) return;
   const { width, height } = canvas;
@@ -173,6 +184,7 @@ export function drawSideView(canvas: HTMLCanvasElement, frame: Float32Array, geo
   const fit = fitBox(width, height, SIDE_BOX, Math.min(width, height) * 0.06);
   ctx.setTransform(fit.scale, 0, 0, fit.scale, fit.dx, fit.dy);
   const line = 1 / fit.scale;
+  const { tilt, lift } = pose;
 
   ctx.strokeStyle = COLORS.ground;
   ctx.lineWidth = 1.5 * line;
@@ -181,8 +193,23 @@ export function drawSideView(canvas: HTMLCanvasElement, frame: Float32Array, geo
   ctx.lineTo(SIDE_BOX.width, SIDE_GROUND_Y);
   ctx.stroke();
 
+  // A shadow that shrinks and fades as the boot rises, so the height reads at a glance.
+  const away = Math.min(1, lift / 90);
+  const centerX = (geometry.heelContact.x + geometry.toeContact.x) / 2;
+  ctx.fillStyle = `rgb(${COLORS.shadow} / ${0.55 * (1 - away)})`;
+  ctx.beginPath();
+  ctx.ellipse(centerX, SIDE_GROUND_Y + 3, 250 * (1 - 0.35 * away), 6 * (1 - 0.5 * away), 0, 0, Math.PI * 2);
+  ctx.fill();
+
   // Toe down pivots on the toe, heel down on the heel, the way a foot rolls.
   const pivot = tilt >= 0 ? geometry.toeContact : geometry.heelContact;
+  if (pose.impact > 0) drawDust(ctx, line, tilt === 0 ? [geometry.heelContact, geometry.toeContact] : [pivot], pose);
+
+  // A landing squashes the boot a little against the ground, and it springs back.
+  const squash = 1 - 0.05 * pose.impactStrength * pose.impact;
+  ctx.translate(0, SIDE_GROUND_Y - lift);
+  ctx.scale(1, squash);
+  ctx.translate(0, -SIDE_GROUND_Y);
   const angle = (tilt * MAX_SIDE_ANGLE_DEG * Math.PI) / 180;
   ctx.translate(pivot.x, pivot.y);
   ctx.rotate(angle);
@@ -214,6 +241,34 @@ export function drawSideView(canvas: HTMLCanvasElement, frame: Float32Array, geo
   }
 
   drawLeds(ctx, frame, geometry.near, 4.6);
+}
+
+// Puffs of dust that spray out along the ground from where the boot landed.
+function drawDust(ctx: CanvasRenderingContext2D, line: number, contacts: Point[], pose: SidePose): void {
+  const spread = 1 - pose.impact;
+  const size = 0.7 + pose.impactStrength;
+  ctx.strokeStyle = `rgb(${COLORS.dust} / ${0.9 * pose.impact})`;
+  ctx.lineWidth = 2.5 * line;
+  ctx.lineCap = "round";
+  for (const contact of contacts) {
+    for (const side of [-1, 1]) {
+      for (const [rise, reach] of [
+        [0, 1],
+        [10, 0.75],
+        [20, 0.5],
+      ] as const) {
+        const start = 8 + 50 * size * spread * reach;
+        const length = 8 + 16 * size * (1 - spread * 0.5);
+        const x0 = contact.x + side * start;
+        const y0 = SIDE_GROUND_Y - 2 - rise * spread * size * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x0 + side * length, y0 - rise * 0.25);
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.lineCap = "butt";
 }
 
 export function drawStripView(canvas: HTMLCanvasElement, frame: Float32Array, layout: StripLayout): void {

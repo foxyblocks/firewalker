@@ -848,6 +848,17 @@ input[type="range"] {
   gap: 8px;
 }
 
+.beat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.beat input {
+  width: 64px;
+  font-variant-numeric: tabular-nums;
+}
+
 .control.playback select {
   width: auto;
   margin-left: auto;

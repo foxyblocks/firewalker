@@ -28,8 +28,10 @@ It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
   layer's settings on the right. Any number can be **Fixed**, or **Follows** tilt, a stomp,
   or a wave. The JSON tab shows the file as it will be saved.
 - **The boot** shows from above and from its outer side, with the strip in index order
-  below. Drag **Tilt**, press **Stomp** or the space bar, or press **Walk** for a steady gait.
-  The strip menu switches between each boot's saved layout and the uncut bench strip.
+  below. Drag **Tilt**, or press **Stomp** or the space bar. A stomp lifts the boot and drops
+  it, and the pattern gets the stomp the moment it lands, at the **Strength** you set.
+  **Beat** stomps on every beat at the BPM beside it, and **Walk** plays a steady gait. The
+  strip menu switches between each boot's saved layout and the uncut bench strip.
 - **Undo** and **Redo** with ⌘Z and ⇧⌘Z. **Save** with ⌘S.
 
 ## Where recipes are kept

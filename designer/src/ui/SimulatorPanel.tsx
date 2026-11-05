@@ -1,5 +1,6 @@
 // The boot from above and from the outer side, the strip in index order, and the motion
-// controls: a tilt slider, a stomp button (or the space bar), and a walking gait.
+// controls: a tilt slider, a stomp button (or the space bar), a stomp on every beat, and a
+// walking gait.
 
 import { useEffect, useRef, useState } from "react";
 
@@ -11,6 +12,8 @@ import type { Recipe } from "../recipe/types";
 const STRIPS = Object.fromEntries(STRIP_PRESETS.map((preset) => [preset.key, preset]));
 // The firmware's dead zone reads exactly 0 near level, so the slider snaps there too.
 const TILT_SNAP = 0.04;
+const BPM_MIN = 30;
+const BPM_MAX = 240;
 
 export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
   const topRef = useRef<HTMLCanvasElement>(null);
@@ -23,10 +26,14 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
   const [tilt, setTilt] = useState(0);
   const [strength, setStrength] = useState(0.7);
   const [walking, setWalking] = useState(false);
+  const [beating, setBeating] = useState(false);
+  const [bpm, setBpm] = useState(100);
+  // What's typed in the BPM box, which can be part way to a number in range.
+  const [bpmText, setBpmText] = useState("100");
   const [paused, setPaused] = useState(false);
   const [speed, setSpeed] = useState("1");
   const [strip, setStrip] = useState(STRIP_PRESETS[0]!.key);
-  const [readout, setReadout] = useState<Readout>({ tilt: 0, lastStomp: null, timeMs: 0 });
+  const [readout, setReadout] = useState<Readout>({ tilt: 0, lastStomp: null, stomps: 0, timeMs: 0 });
   const [flash, setFlash] = useState(false);
 
   useEffect(() => {
@@ -39,15 +46,20 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
   useEffect(() => simRef.current?.setRecipe(recipe), [recipe]);
   useEffect(() => simRef.current?.setTilt(tilt), [tilt]);
   useEffect(() => simRef.current?.setWalking(walking), [walking]);
+  useEffect(() => simRef.current?.setBeat(beating ? bpm : null, strength), [beating, bpm, strength]);
   useEffect(() => simRef.current?.setPaused(paused), [paused]);
   useEffect(() => simRef.current?.setSpeed(Number(speed)), [speed]);
   useEffect(() => simRef.current?.setLayout(recipeRef.current, STRIPS[strip]!.layout), [strip]);
 
-  const stomp = () => {
-    simRef.current?.stomp(strength);
+  const stomp = () => simRef.current?.stomp(strength);
+
+  // The button lights when a stomp lands, whatever started it.
+  useEffect(() => {
+    if (readout.stomps === 0) return;
     setFlash(true);
-    window.setTimeout(() => setFlash(false), 120);
-  };
+    const timer = window.setTimeout(() => setFlash(false), 120);
+    return () => window.clearTimeout(timer);
+  }, [readout.stomps]);
 
   // Space stomps, unless you're typing somewhere.
   useEffect(() => {
@@ -121,9 +133,46 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
         </div>
 
         <div className="control playback">
-          <button type="button" className={walking ? "button on" : "button"} aria-pressed={walking} onClick={() => setWalking(!walking)}>
+          <button
+            type="button"
+            className={walking ? "button on" : "button"}
+            aria-pressed={walking}
+            onClick={() => {
+              setWalking(!walking);
+              setBeating(false);
+            }}
+          >
             {walking ? "Stop walking" : "Walk"}
           </button>
+          <div className="beat">
+            <button
+              type="button"
+              className={beating ? "button on" : "button"}
+              aria-pressed={beating}
+              title="Stomp on every beat, at the strength above"
+              onClick={() => {
+                setBeating(!beating);
+                setWalking(false);
+              }}
+            >
+              {beating ? "Stop beat" : "Beat"}
+            </button>
+            <input
+              type="number"
+              aria-label="Beats per minute"
+              min={BPM_MIN}
+              max={BPM_MAX}
+              step={1}
+              value={bpmText}
+              onChange={(event) => {
+                setBpmText(event.target.value);
+                const value = Number(event.target.value);
+                if (value >= BPM_MIN && value <= BPM_MAX) setBpm(Math.round(value));
+              }}
+              onBlur={() => setBpmText(String(bpm))}
+            />
+            <span className="quiet small">BPM</span>
+          </div>
           <button type="button" className="button" aria-pressed={paused} onClick={() => setPaused(!paused)}>
             {paused ? "Play" : "Pause"}
           </button>
