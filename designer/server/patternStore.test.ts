@@ -88,6 +88,18 @@ describe("pattern store", () => {
       expect(await readdir(dir)).toEqual(["ember.json", "glow.json"]);
     });
 
+    it("lets only one of two saves from the same version through", async () => {
+      const { version } = await savePattern(dir, "glow", recipe("glow"));
+      const results = await Promise.allSettled([
+        savePattern(dir, "glow", warmer, undefined, version),
+        savePattern(dir, "glow", { ...recipe("glow"), description: "cooler" }, undefined, version),
+      ]);
+      expect(results.map((result) => result.status)).toEqual(["fulfilled", "rejected"]);
+      expect(results[1]).toMatchObject({ reason: { status: 409 } });
+      expect((await listPatterns(dir))[0]?.recipe?.description).toBe("warmer");
+      expect(await readdir(dir)).toEqual(["glow.json"]);
+    });
+
     it("renames when the old file is as expected", async () => {
       const { version } = await savePattern(dir, "glow", recipe("glow"));
       await savePattern(dir, "ember", recipe("ember"), "glow", version);

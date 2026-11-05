@@ -75,12 +75,47 @@ export async function listPatterns(dir: string): Promise<StoredPattern[]> {
 // before anything is written. A version means the file being saved over (`replaces`, or else
 // `name`) still has that version. Null means this is a new pattern, so `<name>.json` shouldn't
 // exist yet. Leaving it out writes without checking.
-export async function savePattern(
+export function savePattern(
   dir: string,
   name: string,
   body: unknown,
   replaces?: string,
   expected?: string | null,
+): Promise<{ recipe: Recipe; version: string }> {
+  return oneAtATime(dir, () => writePattern(dir, name, body, replaces, expected));
+}
+
+export function deletePattern(dir: string, name: string): Promise<void> {
+  return oneAtATime(dir, async () => {
+    checkName(name);
+    await rm(path.join(dir, `${name}.json`), { force: true });
+  });
+}
+
+// Saves and deletes in one folder run one at a time. Otherwise two saves from the same version
+// could both pass the version check before either writes, and one edit would be lost.
+const queues = new Map<string, Promise<unknown>>();
+
+function oneAtATime<T>(dir: string, work: () => Promise<T>): Promise<T> {
+  const key = path.resolve(dir);
+  const run = (queues.get(key) ?? Promise.resolve()).then(work);
+  const settled = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  queues.set(key, settled);
+  void settled.then(() => {
+    if (queues.get(key) === settled) queues.delete(key);
+  });
+  return run;
+}
+
+async function writePattern(
+  dir: string,
+  name: string,
+  body: unknown,
+  replaces: string | undefined,
+  expected: string | null | undefined,
 ): Promise<{ recipe: Recipe; version: string }> {
   checkName(name);
   if (replaces !== undefined) checkName(replaces);
@@ -102,11 +137,6 @@ export async function savePattern(
     await rm(path.join(dir, `${replaces}.json`), { force: true });
   }
   return { recipe: result.recipe, version: fileVersion(text) };
-}
-
-export async function deletePattern(dir: string, name: string): Promise<void> {
-  checkName(name);
-  await rm(path.join(dir, `${name}.json`), { force: true });
 }
 
 // Fails if the files on disk aren't what the caller expects. See savePattern.
