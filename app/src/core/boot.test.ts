@@ -837,6 +837,19 @@ describe("microphone tuning", () => {
     expect(state(client).audioCalibrating).toBe(false);
   });
 
+  it("releases the capture lock if both its final reply and fallback query are lost", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+    boot.silentAudioCaptureResult = true;
+    const captured = client.calibrateAudio();
+    await settle();
+    boot.ignoring = ["audio"];
+    await vi.advanceTimersByTimeAsync(6200);
+    expect(await captured).toEqual({ ok: false, reason: "no-answer" });
+    expect(state(client).audioCalibrating).toBe(false);
+  });
+
   it("restores the confirmed sensitivity when a command gets no reply", async () => {
     const { boot, client } = setup();
     client.connect();

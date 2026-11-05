@@ -23,7 +23,10 @@ export function AudioSetup({ store, onBusy, onClose }: {
   const state = client?.getState();
   const online = state?.link === "online";
   const supported = (state?.status?.proto ?? 0) >= AUDIO_PROTOCOL_VERSION;
-  const busy = Boolean(online && supported && (state?.audioCalibrating || state?.audio?.calibrating));
+  // Only a capture this client is awaiting locks navigation. A cached firmware
+  // progress line can outlive a timeout, so it must not trap the sheet open.
+  const busy = Boolean(online && supported && state?.audioCalibrating);
+  const measuring = busy || Boolean(online && supported && state?.audio?.calibrating);
   const audio = state?.audio;
   const sensitivity = state?.pending.audioSensitivity ?? audio?.sensitivity ?? 0;
   const name = side ? store.displayName(side) : "this boot";
@@ -88,15 +91,15 @@ export function AudioSetup({ store, onBusy, onClose }: {
                 value={sensitivity}
                 min={0}
                 max={100}
-                disabled={busy}
+                disabled={measuring}
                 onStart={() => client?.setDragging(true)}
                 onChange={(value) => client?.setAudioSensitivity(value)}
                 onEnd={() => client?.setDragging(false)}
               />
             </section>
           </div>
-          <button type="button" className="button button-primary button-wide" disabled={busy} onClick={() => void calibrate()}>
-            {busy ? "Measuring quiet…" : "Calibrate quiet"}
+          <button type="button" className="button button-primary button-wide" disabled={measuring} onClick={() => void calibrate()}>
+            {measuring ? "Measuring quiet…" : "Calibrate quiet"}
           </button>
           <span className={`save-line${state?.status?.saveFailed ? " save-failed" : ""}`}>
             {state?.status?.saveFailed ? `Not saved on ${name}` : audio.saved ? `Saved on ${name}` : "Saving"}
