@@ -1,6 +1,6 @@
 // Writes include/generated/recipe_budget.h, the recipes the `recipe_budget` firmware build measures
 // on a real board: everything in patterns/, on a real boot's layout, and the heaviest recipes the
-// format allows, on the uncut strip. It's git-ignored, since it's only for that bench test. Run it with
+// format allows, on a real boot's layout and on the uncut strip. It's git-ignored, since it's only for that bench test. Run it with
 // `bun run budget-recipes` before building that environment.
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -42,6 +42,7 @@ const kept = readdirSync(PATTERNS_DIR)
 
 const cases: { recipe: Recipe; layout: StripLayout }[] = [
   ...kept.map((recipe) => ({ recipe, layout: BOOT_3EB5 })),
+  ...HEAVY.map((recipe) => ({ recipe, layout: BOOT_3EB5 })),
   ...HEAVY.map((recipe) => ({ recipe, layout: BENCH_STRIP })),
 ];
 
@@ -50,7 +51,7 @@ const rows: string[] = [];
 cases.forEach(({ recipe, layout }, i) => {
   const compiled = compileRecipe(recipe);
   if (!compiled.ok) throw new Error(`${recipe.name}: ${compiled.errors.join(" ")}`);
-  console.log(`${recipe.name}: ${compiled.size} bytes`);
+  console.log(`${recipe.name} on ${layout.count} px: ${compiled.size} bytes`);
   arrays.push(`static const uint8_t BUDGET_RECIPE_${i}[] = {${[...compiled.bytes].join(", ")}};`);
   rows.push(`  {${layout.count}, ${layout.toe}, ${layout.heel}, BUDGET_RECIPE_${i}, sizeof(BUDGET_RECIPE_${i})},`);
 });

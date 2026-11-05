@@ -20,6 +20,7 @@ constexpr uint16_t RECIPE_STOMP_FADE_MAX = 10000;
 constexpr uint8_t RECIPE_MAX_CHOICES = 3;
 constexpr uint8_t RECIPE_MAX_NUMBERS = 3;
 constexpr uint8_t RECIPE_MAX_KNOBS = 5;
+constexpr uint8_t RECIPE_MAX_TAIL_PIXELS = 60;
 
 // Names a recipe can't take.
 constexpr const char* const RECIPE_RESERVED_NAMES[] = {"off", "flow", "fire-trail"};

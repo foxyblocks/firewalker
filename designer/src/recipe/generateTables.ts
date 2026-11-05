@@ -67,6 +67,12 @@ function fieldRow(field: Field, slot: number): string {
   }
 }
 
+// The longest trail or comet any layer can have, which sizes the engine's table of their colors.
+function maxTailPixels(): number {
+  const lengths = LAYER_CODES.flatMap((type) => fieldsFor(type)).flatMap((field) => (field.key === "length" && field.kind === "number" ? [field.max] : []));
+  return Math.max(...lengths);
+}
+
 export function recipeTablesHeader(): string {
   const types = LAYER_CODES;
   const max: Record<SlotKind, number> = { choices: 0, numbers: 0, knobs: 0 };
@@ -115,6 +121,7 @@ export function recipeTablesHeader(): string {
     `constexpr uint8_t RECIPE_MAX_CHOICES = ${max.choices};`,
     `constexpr uint8_t RECIPE_MAX_NUMBERS = ${max.numbers};`,
     `constexpr uint8_t RECIPE_MAX_KNOBS = ${max.knobs};`,
+    `constexpr uint8_t RECIPE_MAX_TAIL_PIXELS = ${maxTailPixels()};`,
     "",
     "// Names a recipe can't take.",
     `constexpr const char* const RECIPE_RESERVED_NAMES[] = {${[...RESERVED_NAMES].map((name) => `"${name}"`).join(", ")}};`,

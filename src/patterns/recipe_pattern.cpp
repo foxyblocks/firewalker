@@ -1,3 +1,6 @@
+// The rest of the firmware builds for size. The engine is compiled here, and it needs the speed.
+#pragma GCC optimize("O2")
+
 #include "patterns/recipe_pattern.h"
 
 #include "firewalker_core.h"

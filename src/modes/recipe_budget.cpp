@@ -11,6 +11,9 @@
 
 #if defined(FIREWALKER_MODE_RECIPE_BUDGET)
 
+// The same setting as recipe_pattern.cpp, so these numbers are what the app really gets.
+#pragma GCC optimize("O2")
+
 #include "modes/recipe_budget.h"
 
 #include <Arduino.h>
@@ -34,7 +37,7 @@ namespace RecipeBudgetMode {
 
 using namespace Firewalker;
 
-static constexpr unsigned long CASE_MS = 6000;
+static constexpr unsigned long CASE_MS = 4000;
 // A stomp as often as the firmware can detect one, so stomp-driven layers work their hardest.
 static constexpr unsigned long STOMP_EVERY_MS = 300;
 static constexpr float STOMP_STRENGTH = 0.8f;

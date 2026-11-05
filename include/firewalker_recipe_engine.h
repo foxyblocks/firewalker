@@ -18,6 +18,11 @@
 //   8-bit color.
 // - Rounding is floor(x + 0.5), which is JavaScript's Math.round. C's round differs on negative
 //   halves, and positions along the strip can be negative here.
+//
+// It has to be quick, because the chip runs at 39 MHz and has no hardware for doubles, and a recipe can
+// paint thousands of pixels a frame. So nothing in a per-pixel loop uses a double or a library call, and
+// the colors along a trail or a comet are worked out once, when the recipe starts. These don't change what
+// it draws, and the reference frames check that.
 
 #include <math.h>
 #include <stdint.h>
@@ -34,6 +39,12 @@ constexpr uint32_t RECIPE_RNG_SEED = 0x9E3779B9u;
 constexpr uint32_t RECIPE_MAX_DT_MS = 250;
 
 inline double recipeClamp01(double x) { return x < 0.0 ? 0.0 : x > 1.0 ? 1.0 : x; }
+
+// Rounds down, like floorf, which is a slow library call on this chip. Only for numbers that fit an int32.
+inline int32_t recipeFloorF(float x) {
+  const int32_t whole = (int32_t)x;
+  return (float)whole > x ? whole - 1 : whole;
+}
 
 inline int32_t recipeRound(double x) { return (int32_t)floor(x + 0.5); }
 
@@ -67,6 +78,8 @@ class RecipeEngine {
     memset(states_, 0, sizeof(states_));
     for (uint8_t l = 0; l < RECIPE_MAX_LAYERS; l++) states_[l].dir = 1;
     memset(frame_, 0, sizeof(frame_));
+    if (!recipe_) return;
+    for (uint8_t l = 0; l < recipe_->layerCount; l++) buildTailColors(recipe_->layers[l], states_[l]);
   }
 
   // Advances one frame. `dtMs` is the time since the previous one, and `stompStrength` only counts
@@ -98,7 +111,7 @@ class RecipeEngine {
   uint8_t frameByte(uint16_t pixel, uint8_t channel) const {
     const float value = frame_[pixel * 3 + channel];
     const float limited = value < 0.0f ? 0.0f : value > 1.0f ? 1.0f : value;
-    return (uint8_t)floorf(limited * 255.0f + 0.5f);
+    return (uint8_t)(limited * 255.0f + 0.5f);
   }
 
  private:
@@ -123,7 +136,10 @@ class RecipeEngine {
     uint32_t flashRemainMs;
     int8_t dir;  // chase: which way it last moved, which sets where the tail points
     union {
-      Front fronts[RECIPE_MAX_FRONTS];
+      struct {
+        Front fronts[RECIPE_MAX_FRONTS];
+        float colors[RECIPE_MAX_TAIL_PIXELS][3];  // trail and chase: the palette, head to tail
+      } tail;
       struct {
         float level[MaxPixels];
         float hue[MaxPixels];
@@ -139,6 +155,22 @@ class RecipeEngine {
   };
 
   static uint8_t choiceOf(const RecipeLayer& layer, uint8_t slot) { return layer.choices[slot]; }
+
+  // Works out the colors along a trail or comet ahead of time, since they never change while it runs.
+  static void buildTailColors(const RecipeLayer& layer, LayerState& state) {
+    int32_t length;
+    if (layer.type == RecipeLayerType::Trail) {
+      length = (int32_t)layer.numbers[RecipeSlot::TrailLength];
+    } else if (layer.type == RecipeLayerType::Chase) {
+      length = (int32_t)layer.numbers[RecipeSlot::ChaseLength];
+    } else {
+      return;
+    }
+    for (int32_t d = 0; d < length; d++) {
+      const float u = length <= 1 ? 0.0f : (float)d / (float)(length - 1);
+      samplePalette(layer, u, false, state.tail.colors[d]);
+    }
+  }
 
   double sourceValue(const RecipeKnob& knob) const {
     switch (knob.source) {
@@ -174,13 +206,15 @@ class RecipeEngine {
     uint8_t b;
     float f;
     if (loop) {
-      const float x = (u - floorf(u)) * (float)n;
-      a = (uint8_t)((int32_t)floorf(x) % n);
-      b = (uint8_t)((a + 1) % n);
-      f = x - floorf(x);
+      const float x = (u - (float)recipeFloorF(u)) * (float)n;
+      const int32_t whole = (int32_t)x;
+      a = (uint8_t)(whole >= n ? whole - n : whole);
+      b = (uint8_t)(a + 1 >= n ? 0 : a + 1);
+      f = x - (float)whole;
     } else {
-      const float x = fminf(1.0f, fmaxf(0.0f, u)) * (float)(n - 1);
-      const int32_t whole = (int32_t)floorf(x);
+      const float limited = u < 0.0f ? 0.0f : u > 1.0f ? 1.0f : u;
+      const float x = limited * (float)(n - 1);
+      const int32_t whole = (int32_t)x;
       a = (uint8_t)(whole < n - 2 ? whole : n - 2);
       b = (uint8_t)(a + 1);
       f = x - (float)a;
@@ -306,7 +340,7 @@ class RecipeEngine {
   }
 
   void drawTrail(const RecipeLayer& layer, LayerState& state, bool fired, uint32_t dt) {
-    Front* fronts = state.fronts;
+    Front* fronts = state.tail.fronts;
     const int32_t length = (int32_t)layer.numbers[RecipeSlot::TrailLength];
     if (fired) {
       const double speed = fmax(0.0, knobValue(layer.knobs[RecipeSlot::TrailSpeed]));
@@ -339,8 +373,8 @@ class RecipeEngine {
       for (int32_t d = 0; d < length; d++) {
         const int32_t p = head - front.dir * d;
         if (p < front.lo || p > front.hi) continue;
-        const float u = length <= 1 ? 0.0f : (float)d / (float)(length - 1);
-        paint(layer, recipeWrapIndex(p, count), u, false, front.bright, 1.0f);
+        // Positions are unwrapped from toe or heel, so they run less than one lap past the strip's end.
+        setPixel(p >= count ? p - count : p, state.tail.colors[d], front.bright, 1.0f);
       }
     }
   }
@@ -394,18 +428,22 @@ class RecipeEngine {
     const int32_t length = (int32_t)layer.numbers[RecipeSlot::ChaseLength];
     const float bright = (float)recipeClamp01(knobValue(layer.knobs[RecipeSlot::ChaseBrightness]));
     if ((RecipeChasePath)choiceOf(layer, RecipeSlot::ChasePath) == RecipeChasePath::Foot) {
-      drawFootChase(layer, state, fabs(speed), comets, length, bright, dt);
+      drawFootChase(state, fabs(speed), comets, length, bright, dt);
       return;
     }
 
     state.position = recipeWrap(state.position + (speed * (double)dt) / 1000.0, (double)count);
+    const int32_t dir = state.dir;
+    const float perPixel = 1.0f / (float)length;
     for (int32_t k = 0; k < comets; k++) {
       const int32_t head = recipeRound(state.position + ((double)k * (double)count) / (double)comets);
       // Tail first, so a head that overlaps another comet's tail stays on top.
+      int32_t p = recipeWrapIndex(head - dir * (length - 1), count);
       for (int32_t d = length - 1; d >= 0; d--) {
-        const int32_t p = recipeWrapIndex(head - state.dir * d, count);
-        const float u = length <= 1 ? 0.0f : (float)d / (float)(length - 1);
-        paint(layer, p, u, false, bright, 1.0f - (float)d / (float)length);
+        setPixel(p, state.tail.colors[d], bright, 1.0f - (float)d * perPixel);
+        p += dir;
+        if (p >= count) p -= count;
+        if (p < 0) p += count;
       }
     }
   }
@@ -414,22 +452,29 @@ class RecipeEngine {
   // speed is negative. Progress counts pixels along an average side from the starting end, and each
   // lap is a comet's length longer than a side, so its tail leaves the far end before it comes back
   // in at the start.
-  void drawFootChase(const RecipeLayer& layer, LayerState& state, double speed, int32_t comets, int32_t length,
-                     float bright, uint32_t dt) {
+  void drawFootChase(LayerState& state, double speed, int32_t comets, int32_t length, float bright, uint32_t dt) {
     const int32_t count = layout_.count;
     const double side = (double)count / 2.0;
     const double lap = side + (double)length;
     state.progress = recipeWrap(state.progress + (speed * (double)dt) / 1000.0, lap);
+    const bool heelFirst = state.dir > 0;
+    const float perSide = 1.0f / (float)side;
+    const float perPixel = 1.0f / (float)length;
+    const float heelToToe = (float)heelToToe_;
+    const float toeToHeel = (float)toeToHeel_;
+    const int32_t heel = layout_.heel;
+    const int32_t toe = layout_.toe;
     for (int32_t k = 0; k < comets; k++) {
-      const double head = fmod(state.progress + ((double)k * lap) / (double)comets, lap);
+      const float head = (float)fmod(state.progress + ((double)k * lap) / (double)comets, lap);
       for (int32_t d = length - 1; d >= 0; d--) {
-        const double along = (head - (double)d) / side;
-        if (along < 0.0 || along > 1.0) continue;
-        const double s = state.dir > 0 ? along : 1.0 - along;
-        const float u = length <= 1 ? 0.0f : (float)d / (float)(length - 1);
-        const float alpha = 1.0f - (float)d / (float)length;
-        paint(layer, recipeWrapIndex((int32_t)layout_.heel + recipeRound(s * (double)heelToToe_), count), u, false, bright, alpha);
-        paint(layer, recipeWrapIndex((int32_t)layout_.toe + recipeRound((1.0 - s) * (double)toeToHeel_), count), u, false, bright, alpha);
+        const float along = (head - (float)d) * perSide;
+        if (along < 0.0f || along > 1.0f) continue;
+        const float s = heelFirst ? along : 1.0f - along;
+        const float alpha = 1.0f - (float)d * perPixel;
+        const int32_t a = heel + recipeFloorF(s * heelToToe + 0.5f);
+        const int32_t b = toe + recipeFloorF((1.0f - s) * toeToHeel + 0.5f);
+        setPixel(a >= count ? a - count : a, state.tail.colors[d], bright, alpha);
+        setPixel(b >= count ? b - count : b, state.tail.colors[d], bright, alpha);
       }
     }
   }
@@ -437,29 +482,41 @@ class RecipeEngine {
   void composite(const RecipeLayer& layer) {
     const float opacity = (float)recipeClamp01(knobValue(layer.knobs[RECIPE_OPACITY_SLOT]));
     if (opacity == 0.0f) return;
-    const RecipeBlend blend = (RecipeBlend)layer.choices[RECIPE_BLEND_SLOT];
-    for (uint16_t i = 0; i < layout_.count; i++) {
+    switch ((RecipeBlend)layer.choices[RECIPE_BLEND_SLOT]) {
+      case RecipeBlend::Over:
+        blendPixels(opacity, [](float below, float color, float a) { return below + (color - below) * a; });
+        return;
+      case RecipeBlend::Add:
+        blendPixels(opacity, [](float below, float color, float a) {
+          const float sum = below + color * a;
+          return sum > 1.0f ? 1.0f : sum;
+        });
+        return;
+      case RecipeBlend::Max:
+        blendPixels(opacity, [](float below, float color, float a) {
+          const float scaled = color * a;
+          return scaled > below ? scaled : below;
+        });
+        return;
+      case RecipeBlend::Multiply:
+        blendPixels(opacity, [](float below, float color, float a) { return below * (1.0f - a + color * a); });
+        return;
+    }
+  }
+
+  // Lays the current layer onto the frame. A template so each blend gets its own loop, with no choosing
+  // between blends on every channel of every pixel.
+  template <typename Blend>
+  void blendPixels(float opacity, Blend blend) {
+    const uint16_t count = layout_.count;
+    const float* color = layerColor_;
+    float* frame = frame_;
+    for (uint16_t i = 0; i < count; i++, color += 3, frame += 3) {
       const float a = layerAlpha_[i] * opacity;
       if (a == 0.0f) continue;
-      for (uint8_t c = 0; c < 3; c++) {
-        const uint16_t at = i * 3 + c;
-        const float below = frame_[at];
-        const float color = layerColor_[at];
-        switch (blend) {
-          case RecipeBlend::Over:
-            frame_[at] = below + (color - below) * a;
-            break;
-          case RecipeBlend::Add:
-            frame_[at] = fminf(1.0f, below + color * a);
-            break;
-          case RecipeBlend::Max:
-            frame_[at] = fmaxf(below, color * a);
-            break;
-          case RecipeBlend::Multiply:
-            frame_[at] = below * (1.0f - a + color * a);
-            break;
-        }
-      }
+      frame[0] = blend(frame[0], color[0], a);
+      frame[1] = blend(frame[1], color[1], a);
+      frame[2] = blend(frame[2], color[2], a);
     }
   }
 
