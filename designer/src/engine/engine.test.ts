@@ -247,6 +247,33 @@ describe("chase", () => {
     engine.update({ tiltFwd: 0, stomp: false, stompStrength: 0, dt: 100 });
     expect(lit(engine)).toEqual([10, 65]);
   });
+
+  // On RING each side is 55 steps, so 55 px/s crosses the foot in a second.
+  function footChase(speed: number, dt: number): number[] {
+    const engine = new RecipeEngine(recipe(layer("chase", { path: "foot", count: 1, length: 1, speed })), RING);
+    engine.enter();
+    engine.update({ tiltFwd: 0, stomp: false, stompStrength: 0, dt });
+    return lit(engine);
+  }
+
+  it("runs heel to toe up both sides at once", () => {
+    expect(footChase(55, 0)).toEqual([RING.heel]);
+    // Halfway: 91 + 28 folds to 9 on one side, and 36 + 28 is 64 on the other.
+    expect(footChase(55, 500)).toEqual([9, 64]);
+  });
+
+  it("runs toe to heel with a negative speed", () => {
+    // A tenth of the way from the toe at 36: five steps down each side.
+    expect(footChase(-55, 100)).toEqual([31, 41]);
+  });
+
+  it("lets the tail leave the toe before the comet starts again at the heel", () => {
+    const engine = new RecipeEngine(recipe(layer("chase", { path: "foot", count: 1, length: 5, speed: 55 })), RING);
+    engine.enter();
+    // 57 px along: the head has gone past the toe, and the rest of the tail is leaving.
+    engine.update({ tiltFwd: 0, stomp: false, stompStrength: 0, dt: 1000 * (57 / 55) });
+    expect(lit(engine)).toEqual([RING.toe - 2, RING.toe - 1, RING.toe, RING.toe + 1, RING.toe + 2]);
+  });
 });
 
 describe("compositing", () => {

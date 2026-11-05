@@ -4,6 +4,7 @@
 // move rather than a copy.
 
 import { recipeToJson } from "../recipe/serialize";
+import { withDefaults } from "../recipe/spec";
 import { MAX_NAME_LENGTH, type Recipe } from "../recipe/types";
 import { nameProblem, validateRecipe } from "../recipe/validate";
 
@@ -232,7 +233,11 @@ export class PatternLibrary {
     try {
       const raw = this.storage?.getItem(DRAFTS_KEY);
       const parsed = raw ? (JSON.parse(raw) as Record<string, Draft>) : {};
-      return typeof parsed === "object" && parsed !== null ? parsed : {};
+      if (typeof parsed !== "object" || parsed === null) return {};
+      for (const draft of Object.values(parsed)) {
+        if (draft && typeof draft === "object") draft.recipe = withDefaults(draft.recipe) as Recipe;
+      }
+      return parsed;
     } catch {
       return {};
     }

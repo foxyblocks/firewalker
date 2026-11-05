@@ -7,7 +7,7 @@ import { navigate, useLibrary } from "./App";
 import { ConfirmDialog, NameDialog } from "./dialogs";
 import { Thumbnail } from "./Thumbnail";
 import { recipeToJson } from "../recipe/serialize";
-import { LAYER_SPECS, newLayer } from "../recipe/spec";
+import { LAYER_SPECS, newLayer, withDefaults } from "../recipe/spec";
 import { RECIPE_FORMAT, RECIPE_VERSION, type Recipe } from "../recipe/types";
 import { nameProblem, validateRecipe } from "../recipe/validate";
 import type { PatternEntry, PatternStatus } from "../store/patterns";
@@ -53,7 +53,7 @@ export function PatternsScreen() {
     const messages: string[] = [];
     for (const file of Array.from(files)) {
       try {
-        const result = validateRecipe(JSON.parse(await file.text()));
+        const result = validateRecipe(withDefaults(JSON.parse(await file.text())));
         if (!result.ok) {
           messages.push(`${file.name}: ${result.errors[0]}`);
           continue;

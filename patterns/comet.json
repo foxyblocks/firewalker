@@ -21,6 +21,7 @@
       "type": "chase",
       "label": "Comets",
       "enabled": true,
+      "path": "ring",
       "palette": ["#ffffff", "#00f0ff", "#7a00ff"],
       "count": 2,
       "speed": { "source": "tiltAmount", "min": 40, "max": 220 },

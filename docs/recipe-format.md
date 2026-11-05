@@ -33,7 +33,9 @@ and `designer/src/engine/engine.ts` shows what each layer draws.
 | `layers` | 1 to 8 layers, drawn first to last, so the last one is on top |
 
 A file with an unknown field, or a value out of range, is invalid as a whole. That keeps a
-typo from turning into a silent default.
+typo from turning into a silent default. The designer does fill in a field that's missing
+entirely with its default when it opens a draft or imports a file, so recipes made before a
+field existed still open.
 
 Saved files list fields in a fixed order, two-space indented, with each palette and each
 binding on one line, so they diff cleanly.
@@ -150,14 +152,14 @@ blend: `add`.
 
 ### `chase`
 
-Comets that circle the ring, spaced evenly, head to tail through the palette. Default blend:
-`over`.
+Comets, spaced evenly, head to tail through the palette. Default blend: `over`.
 
 | Field | Values | Default |
 | --- | --- | --- |
+| `path` | `ring` circles the strip. `foot` runs up both sides of the foot at once, heel to toe, and starts again from the heel once the tail has left the toe | `ring` |
 | `palette` | 1 to 16 colors, head to tail | `#ffffff #00c8ff #0020ff` |
 | `count` | 1 to 8 | 2 |
-| `speed` | -400 to 400 px/s, knob. Negative runs toward lower indices | 60 |
+| `speed` | -400 to 400 px/s, knob. Negative runs the other way: toward lower indices on `ring`, toe to heel on `foot` | 60 |
 | `length` | 1 to 60 px | 10 |
 | `brightness` | 0 to 1, knob | 1 |
 

@@ -44,6 +44,8 @@ export type Trigger = (typeof TRIGGERS)[number];
 
 export const SPREADS = ["solid", "ring", "foot"] as const;
 export type Spread = (typeof SPREADS)[number];
+export const CHASE_PATHS = ["ring", "foot"] as const;
+export type ChasePath = (typeof CHASE_PATHS)[number];
 
 export const TRAIL_ORIGINS = ["down-point", "down-end"] as const;
 export type TrailOrigin = (typeof TRAIL_ORIGINS)[number];
@@ -107,6 +109,7 @@ export interface SparkleLayer extends LayerCommon {
 // Comets that circle the ring.
 export interface ChaseLayer extends LayerCommon {
   type: "chase";
+  path: ChasePath;
   palette: Color[];
   count: number;
   speed: Knob;

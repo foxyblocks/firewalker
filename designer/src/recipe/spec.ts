@@ -254,12 +254,33 @@ export const LAYER_SPECS: Record<LayerType, LayerSpec> = {
   chase: {
     type: "chase",
     title: "Chase",
-    summary: "Comets that circle the ring.",
+    summary: "Comets that circle the ring, or run heel to toe.",
     defaultBlend: "over",
     fields: [
+      {
+        kind: "enum",
+        key: "path",
+        label: "Path",
+        options: [
+          { value: "ring", label: "Around the ring" },
+          { value: "foot", label: "Heel to toe" },
+        ],
+        default: "ring",
+        help: "Around the ring circles the strip. Heel to toe runs up both sides of the foot at once, then starts again from the heel.",
+      },
       { kind: "palette", key: "palette", label: "Palette, head to tail", default: ["#ffffff", "#00c8ff", "#0020ff"] },
       { kind: "number", key: "count", label: "Comets", min: 1, max: 8, step: 1, integer: true, default: 2 },
-      { kind: "knob", key: "speed", label: "Speed", min: -400, max: 400, step: 1, unit: "px/s", default: 60, help: "Negative runs the other way." },
+      {
+        kind: "knob",
+        key: "speed",
+        label: "Speed",
+        min: -400,
+        max: 400,
+        step: 1,
+        unit: "px/s",
+        default: 60,
+        help: "Negative runs the other way: backward around the ring, or toe to heel.",
+      },
       { kind: "number", key: "length", label: "Length", min: 1, max: 60, step: 1, integer: true, unit: "px", default: 10 },
       brightness(1),
     ],
@@ -288,6 +309,25 @@ export const COMMON_FIELDS: Field[] = [
 // The fields a layer carries in its file, in file order, after `type`.
 export function fieldsFor(type: LayerType): Field[] {
   return [...LAYER_SPECS[type].fields, ...COMMON_FIELDS];
+}
+
+// Gives any layer missing a field that field's default, so drafts and files made before the
+// field existed still open. Anything it doesn't recognize is left for the validator to report.
+export function withDefaults(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || !Array.isArray((value as { layers?: unknown }).layers)) return value;
+  const recipe = value as { layers: unknown[] };
+  const layers = recipe.layers.map((layer) => {
+    if (typeof layer !== "object" || layer === null) return layer;
+    const type = (layer as { type?: unknown }).type;
+    if (typeof type !== "string" || !(type in LAYER_SPECS)) return layer;
+    const filled: Record<string, unknown> = { ...(layer as Record<string, unknown>) };
+    const fresh = newLayer(type as LayerType) as unknown as Record<string, unknown>;
+    for (const field of fieldsFor(type as LayerType)) {
+      if (filled[field.key] === undefined) filled[field.key] = fresh[field.key];
+    }
+    return filled;
+  });
+  return { ...recipe, layers };
 }
 
 export function newLayer(type: LayerType): Layer {

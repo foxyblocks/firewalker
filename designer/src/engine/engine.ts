@@ -51,7 +51,7 @@ type LayerState =
   | { type: "trail"; fronts: Front[] }
   | { type: "flash"; remainMs: number; bright: number }
   | { type: "sparkle"; level: Float32Array; hue: Float32Array; pending: number }
-  | { type: "chase"; position: number; dir: number };
+  | { type: "chase"; position: number; progress: number; dir: number };
 
 export class RecipeEngine {
   readonly frame: Float32Array;
@@ -180,7 +180,7 @@ export class RecipeEngine {
           pending: 0,
         };
       case "chase":
-        return { type: "chase", position: 0, dir: 1 };
+        return { type: "chase", position: 0, progress: 0, dir: 1 };
     }
   }
 
@@ -332,15 +332,24 @@ export class RecipeEngine {
     }
   }
 
-  private drawChase(layer: ChaseLayer, state: { position: number; dir: number }, palette: Rgb[], dt: number): void {
+  private drawChase(
+    layer: ChaseLayer,
+    state: { position: number; progress: number; dir: number },
+    palette: Rgb[],
+    dt: number,
+  ): void {
     const count = this.layout.count;
     const speed = this.knob(layer.speed);
     if (speed !== 0) state.dir = speed > 0 ? 1 : -1;
-    state.position = wrapIndex(state.position + (speed * dt) / 1000, count);
-
     const comets = Math.max(1, Math.round(layer.count));
     const length = Math.max(1, Math.round(layer.length));
     const bright = clamp01(this.knob(layer.brightness));
+    if (layer.path === "foot") {
+      this.drawFootChase(state, Math.abs(speed), comets, length, bright, palette, dt);
+      return;
+    }
+
+    state.position = wrapIndex(state.position + (speed * dt) / 1000, count);
     for (let k = 0; k < comets; k++) {
       const head = state.position + (k * count) / comets;
       // Tail first, so a head that overlaps another comet's tail stays on top.
@@ -348,6 +357,39 @@ export class RecipeEngine {
         const p = wrapIndex(Math.round(head - state.dir * d), count);
         const u = length <= 1 ? 0 : d / (length - 1);
         this.paint(p, palette, u, false, bright, 1 - d / length);
+      }
+    }
+  }
+
+  // Comets that run up both sides of the foot side by side, heel to toe, or toe to heel when
+  // the speed is negative. Progress counts pixels along an average side from the starting end,
+  // and each lap is a comet's length longer than a side, so its tail leaves the far end before
+  // it comes back in at the start.
+  private drawFootChase(
+    state: { progress: number; dir: number },
+    speed: number,
+    comets: number,
+    length: number,
+    bright: number,
+    palette: Rgb[],
+    dt: number,
+  ): void {
+    const { count, toe, heel } = this.layout;
+    const toeToHeel = toeToHeelLength(this.layout);
+    const heelToToe = heelToToeLength(this.layout);
+    const side = count / 2;
+    const lap = side + length;
+    state.progress = wrapIndex(state.progress + (speed * dt) / 1000, lap);
+    for (let k = 0; k < comets; k++) {
+      const head = (state.progress + (k * lap) / comets) % lap;
+      for (let d = length - 1; d >= 0; d--) {
+        const along = (head - d) / side;
+        if (along < 0 || along > 1) continue;
+        const s = state.dir > 0 ? along : 1 - along;
+        const u = length <= 1 ? 0 : d / (length - 1);
+        const alpha = 1 - d / length;
+        this.paint(wrapIndex(heel + Math.round(s * heelToToe), count), palette, u, false, bright, alpha);
+        this.paint(wrapIndex(toe + Math.round((1 - s) * toeToHeel), count), palette, u, false, bright, alpha);
       }
     }
   }

@@ -54,6 +54,14 @@ async function library(): Promise<PatternLibrary> {
 }
 
 describe("PatternLibrary", () => {
+  it("opens a draft made before a field existed, with that field's default", async () => {
+    const old = { ...recipe("comets"), layers: [{ ...newLayer("chase"), path: undefined }] };
+    storage.setItem("firewalker-designer:drafts:v1", JSON.stringify({ comets: { recipe: old, savedAs: null, updatedAt: 0 } }));
+    const entry = (await library()).entry("comets")!;
+    expect(entry.recipe.layers[0]).toMatchObject({ type: "chase", path: "ring" });
+    expect(entry.problems).toEqual([]);
+  });
+
   it("lists saved files", async () => {
     const lib = await library();
     expect(lib.getSnapshot().entries.map((e) => [e.name, e.status])).toEqual([["glow", "saved"]]);
