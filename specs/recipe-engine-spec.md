@@ -98,13 +98,12 @@ It runs the validator first. Then it:
   layer is an error.
 - Refuses a result over 254 bytes, and says how far over it is.
 
-`bun run build-recipes`, a script in `designer/scripts/`, writes three things:
+`bun run build-recipes`, a script in `designer/scripts/`, writes two things:
 
 | File | Holds |
 |---|---|
 | `include/generated/recipe_builtins.h` | Each keeper's bytes, and a hash of the `patterns/` files they came from |
 | `include/generated/recipe_tables.h` | Every layer's field order, kinds, and ranges, plus the format's limits and reserved names, all from `spec.ts` and `types.ts` |
-| `test/fixtures/recipe-frames/` | Reference frames for the C++ engine |
 
 Checks that keep these honest:
 
@@ -252,16 +251,18 @@ A change to engine behavior goes into both engines in one commit, with new refer
 
 ## Reference frames
 
-These are the acceptance test for the port.
+These are the acceptance test for the port. They already exist, in `test/fixtures/recipe-frames/`,
+written by `bun run reference-frames`. That folder's README describes the file formats.
 
-- **Inputs:** a fixed script of about 6 seconds, with uneven `dt`, a tilt sweep, stomps at several
+- **Inputs:** a fixed script of about 7 seconds, with uneven `dt`, a tilt sweep, stomps at several
   strengths, and stomps at exactly level so `flat` triggers fire.
 - **Recipes:** all five keepers, plus small fixtures that together cover every layer type, blend,
   and knob source.
 - **Layouts:** the uncut bench strip (160 px, toe 52, heel 132) and boot `3EB5` (107 px, toe 72,
   heel 19).
 - **Path:** JSON, then compile, then decode, then the TypeScript engine. So rounding from the
-  binary format can't cause a false failure.
+  binary format can't cause a false failure. They come straight from JSON today, and rollout step 1
+  adds compile and decode, then regenerates them.
 - **Stored:** 8-bit frames every 16th frame, as binary files. That's about 100 KB for the keepers,
   and a native test reads them. The C++ engine still runs every frame in between.
 - **Pass:** every checked channel within ±1. A failure names the recipe, frame, pixel, and channel.
@@ -407,8 +408,8 @@ nothing had shipped. That ends with this phase.
 | A built-in's name | Allowed. The upload replaces it on that boot |
 | Another upload's name | Allowed. The upload replaces it |
 
-- The validator already refuses `off`. Add the other two. The designer, the compiler, and the dev
-  server then all refuse them.
+- The validator already refuses all three, so the designer and dev server do too. The compiler runs
+  the same check.
 - The firmware refuses them on its own too, with `name-reserved`.
 - The reserved list is generated into `recipe_tables.h`, and a native test checks that it matches the
   firmware's native patterns.
@@ -482,7 +483,7 @@ If a case fails, fix it in this order, before version 1 freezes:
 - **Web Serial's buffer.** PR #8 found a status line already passes Web Serial's default 255 bytes. Check
   that its buffer also fits a 520-byte `patterns` line.
 - **Recipes that look different on a boot.** Expected at low brightness, where the default of 16 gives
-  only 17 steps per channel. The simulator's brightness setting shows that, and is separate work.
+  only 17 steps per channel. The simulator's Boot brightness setting shows that.
 - **Flashing boots other people are using.** Check the board is free and ask foxy first. A boot's settings
   can be lost by a flash during a check.
 
