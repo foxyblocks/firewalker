@@ -1,15 +1,28 @@
 /**
  * Finding boots and labeling them Left and Right. It's the first screen on a new phone.
  *
- * The iPhone scans and lists boots as they appear. Chrome only offers its own picker, so
- * there this shows an Add button instead, and each pick joins the same list. A boot with
- * a connection stops advertising, so boots you've already labeled are listed from the
- * store rather than the scan.
+ * The iPhone scans and lists boots as they appear. A browser only offers its own picker, so
+ * there this shows an Add button instead, and each pick joins the same list. A desktop browser
+ * can reach a boot over Bluetooth or USB, so it gets a button for each. A boot with a
+ * connection stops advertising, so boots you've already labeled are listed from the store
+ * rather than the scan.
+ *
+ * The same boot can be listed twice with the same name, once per way of reaching it, so a row
+ * says when it's the USB one. Labeling that row moves the boot to USB (`BootsStore.assign`).
  */
 
 import { useEffect, useState } from "react";
 import { SIDE_NAMES, type BootsStore, type Side } from "../core/boots";
-import type { FoundBoot } from "../transport/transport";
+import { isUsbBoot, type FoundBoot, type PickMethod } from "../transport/transport";
+
+const PICK_LABELS: Record<PickMethod | "only", string> = {
+  only: "Add a boot",
+  bluetooth: "Add over Bluetooth",
+  usb: "Add over USB",
+};
+
+const NO_USB_PICK =
+  "No boot picked. If no list of boots appeared, this browser can't show the USB picker, so open this page in Chrome or Arc.";
 
 const signalWord = (rssi?: number) => {
   if (rssi === undefined) return "";
@@ -20,8 +33,10 @@ const signalWord = (rssi?: number) => {
 
 export function FindBoots({ store, onDone }: { store: BootsStore; onDone: () => void }) {
   const [found, setFound] = useState<FoundBoot[]>([]);
-  const [noPick, setNoPick] = useState(false);
-  const { finding } = store.transport;
+  const [picking, setPicking] = useState(false);
+  const [pickProblem, setPickProblem] = useState<string | null>(null);
+  const { finding, pickers } = store.transport;
+  const offersUsb = pickers.includes("usb");
 
   const addFound = (boot: FoundBoot) => {
     setFound((current) =>
@@ -37,10 +52,20 @@ export function FindBoots({ store, onDone }: { store: BootsStore; onDone: () => 
     return () => void store.transport.stopScan();
   }, [store, finding]);
 
-  const pick = async () => {
-    const boot = await store.transport.pick();
-    setNoPick(boot === null);
-    if (boot) addFound(boot);
+  const pick = async (method: PickMethod) => {
+    setPicking(true);
+    setPickProblem(null);
+    try {
+      const boot = await store.transport.pick(method);
+      if (boot) addFound(boot);
+      // A browser with no USB picker, such as an embedded one, reports the same thing as
+      // someone cancelling, so this can't tell them apart and covers both.
+      else setPickProblem(method === "usb" ? NO_USB_PICK : "No boot picked. Tap Add to try again.");
+    } catch (error) {
+      setPickProblem(error instanceof Error ? error.message : "Couldn't reach that boot.");
+    } finally {
+      setPicking(false);
+    }
   };
 
   // Labeled boots first, then anything the scan found that isn't labeled yet.
@@ -65,16 +90,27 @@ export function FindBoots({ store, onDone }: { store: BootsStore; onDone: () => 
           <p className="empty">Looking for boots. Make sure they're powered on and nearby.</p>
         )}
 
-        {finding === "picker" && (
-          <button type="button" className="button button-wide" onClick={() => void pick()}>
-            Add a boot
-          </button>
+        {finding === "picker" &&
+          pickers.map((method) => (
+            <button key={method} type="button" className="button button-wide" disabled={picking} onClick={() => void pick(method)}>
+              {PICK_LABELS[pickers.length > 1 ? method : "only"]}
+            </button>
+          ))}
+        {pickProblem && (
+          <p className="empty" role="status">
+            {pickProblem}
+          </p>
         )}
-        {noPick && <p className="empty">No boot picked. Tap Add a boot to try again.</p>}
 
         <section className="help">
           <h2>Don't see a boot?</h2>
           <p>Each boot takes one connection at a time. If another device has it, it won't show up here.</p>
+          {offersUsb && (
+            <p>
+              For USB, plug the boot into this computer. Only one program can use its port, so close ./cli and pio device monitor
+              first.
+            </p>
+          )}
         </section>
       </main>
 
@@ -91,6 +127,9 @@ function BootRow({ store, boot }: { store: BootsStore; boot: FoundBoot }) {
   const [blinking, setBlinking] = useState(false);
   const currentSide = store.sides().find((side) => store.known(side)?.deviceId === boot.deviceId);
   const online = currentSide && store.client(currentSide)?.getState().link === "online";
+  const usb = isUsbBoot(boot.deviceId);
+  const linkWord = online ? "Connected" : "Reconnecting";
+  const hint = currentSide ? `${linkWord}${usb ? " over USB" : ""}` : usb ? "On USB" : signalWord(boot.rssi);
 
   const label = (side: Side) => (
     <button
@@ -107,7 +146,7 @@ function BootRow({ store, boot }: { store: BootsStore; boot: FoundBoot }) {
     <article className="boot-card">
       <div className="boot-head">
         <span className="card-name">{boot.name}</span>
-        <span className="card-hint">{currentSide ? (online ? "Connected" : "Reconnecting") : signalWord(boot.rssi)}</span>
+        <span className="card-hint">{hint}</span>
       </div>
       <div className="actions">
         <button

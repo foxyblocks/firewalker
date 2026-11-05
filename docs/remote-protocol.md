@@ -40,6 +40,13 @@ Open the board's USB serial port at 115200 baud, for example with
 back on the same port, alongside the firmware's `[firewalker]` log lines, which
 aren't JSON.
 
+- Opening the port doesn't reset the boot, and the boot sends nothing until it's asked,
+  so send `status` first. There's no subscribe, as there is over BLE.
+- The USB id is `2886:0062`, shared by every MG24, and the port has no other name a browser
+  can read. A client that has to tell boots apart reads `id` from a status line.
+- Replies go to USB and BLE alike, so a client on one sees the acks for commands sent on
+  the other.
+
 ## Commands
 
 | Command | Effect |

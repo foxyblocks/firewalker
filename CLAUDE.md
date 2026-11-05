@@ -41,7 +41,10 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
   Arduino-free logic that `test/` exercises off-hardware.
 - `tools/pio/mg24_stack.py` — PlatformIO build step: picks the core's radio stack, pins
   Arm's compiler, and makes uploads target exactly one board.
-- `tools/cli/` and `./cli` — the bench CLI: flag-configured strip tests.
+- `tools/cli/` and `./cli` — the bench tool. With no arguments it opens the TUI
+  (`internal/tui`), and its subcommands do the same jobs for scripts. `internal/bench` is what a
+  test is, `boards` is which board, `link` talks to it, `flash` runs PlatformIO, and `webapp`
+  serves the phone remote.
 - `test/` — host-native Unity tests for the pure logic (`pio test -e native`).
 - `app/` — the Capacitor iPhone remote (React + TypeScript, Bun). See `app/README.md`.
 - `designer/` — the pattern designer: a web app that edits and simulates pattern recipes
@@ -67,6 +70,9 @@ pio device monitor                     # USB console + logs at 115200 baud
 pio test -e native                     # host-native tests of the pure logic
 (cd tools/cli && go test ./...)       # tests for the bench CLI
 
+./cli                                 # the bench TUI: flash, test, and read logs
+./cli app                             # flash the app onto the one connected board
+./cli web                             # build the phone remote and open it in a browser
 ./cli flow --motion --log-motion      # one-off strip test, see README.md
 ```
 

@@ -1,5 +1,6 @@
 /**
- * Picks real or pretend boots at startup, and the storage that goes with them.
+ * Picks real or pretend boots at startup, and the storage that goes with them. Real boots are
+ * Bluetooth on an iPhone. A desktop browser with Web Serial offers USB too.
  *
  * Pretend boots are used in two cases: Chrome with `?boot=fake`, and the iOS Simulator,
  * which has no Bluetooth. A real iPhone always has it, so "unsupported" on a native
@@ -16,14 +17,18 @@
  *   &offline=1                     Right is out of range
  *   &access=lost                   the browser lost access to both, as a reload can do
  *   &capture=moving                Left moves during every capture
+ *   &usb=1                         offer Add over USB beside Bluetooth, as a desktop browser does
+ *   &usb=busy                      the same, but another program has the boot's USB port
  */
 
 import { Capacitor } from "@capacitor/core";
 import { Preferences } from "@capacitor/preferences";
 import type { KeyValueStore } from "../core/boots";
 import { BleTransport } from "./ble";
+import { BrowserTransport } from "./browser";
 import { FakeBoot, FakeTransport } from "./fakeBoot";
 import type { Transport } from "./transport";
+import { usbSupported, UsbTransport } from "./usb";
 
 const preferencesStorage: KeyValueStore = {
   async get(key) {
@@ -81,16 +86,23 @@ function fakeSetup(params: URLSearchParams): { transport: Transport; storage: Ke
       { side: "right", deviceId: right.deviceId, name: right.name },
     ]);
   }
-  return { transport: new FakeTransport([left, right]), storage: memoryStorage(saved) };
+  const usb = params.get("usb");
+  const transport = usb
+    ? new FakeTransport([left, right], "picker", ["bluetooth", "usb"])
+    : new FakeTransport([left, right]);
+  transport.usbPortBusy = usb === "busy";
+  return { transport, storage: memoryStorage(saved) };
 }
 
 export async function setUpBoots(): Promise<{ transport: Transport; storage: KeyValueStore }> {
   const params = new URLSearchParams(window.location.search);
   if (params.get("boot") === "fake") return fakeSetup(params);
 
-  const transport = new BleTransport();
-  if (Capacitor.isNativePlatform() && (await transport.radioState()) === "unsupported") {
-    return fakeSetup(params);
+  const bluetooth = new BleTransport();
+  if (Capacitor.isNativePlatform()) {
+    if ((await bluetooth.radioState()) === "unsupported") return fakeSetup(params);
+    return { transport: bluetooth, storage: preferencesStorage };
   }
+  const transport = usbSupported() ? new BrowserTransport(bluetooth, new UsbTransport()) : bluetooth;
   return { transport, storage: preferencesStorage };
 }
