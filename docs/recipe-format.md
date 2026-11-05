@@ -192,8 +192,9 @@ and one entry saves all at once. The designer shows the size, and won't save or 
 Compiling drops what a boot has no use for: the description, labels, and disabled layers. A recipe needs at
 least one enabled layer.
 
-Numbers are little-endian. The first byte is the same `version` as the file, so changing a field, its
-order, or an option means a new version.
+Numbers are little-endian. The first byte is the same `version` as the file. Version 1 is frozen, since
+boots run it and uploads outlive firmware updates, so changing a field, its order, an option, or a limit means
+a new version.
 
 | Bytes | Recipe |
 |---|---|

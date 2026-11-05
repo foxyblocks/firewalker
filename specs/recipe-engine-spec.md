@@ -1,6 +1,7 @@
 # Recipe engine, built-in recipes, and upload
 
 Status: Approved by foxy on 2026-11-04, with `starfield` and `lava-pour` taken out of the built-ins.
+Recipe format version 1 froze on 2026-11-05 at the limits in `spec.ts`, after measuring on boot `3EB5`.
 Firmware work starts on the `recipe-engine` branch, cut from `main` once PR #9 merges.
 Date: 2026-11-04
 
@@ -31,7 +32,7 @@ foxy approved these on 2026-11-04.
 | 7 | Upload is 15 bytes per command, one at a time. The recipe's own CRC-32 is the checksum | Fits the 48-byte command limit, and nothing is saved until the whole recipe checks out |
 | 8 | Each boot has 16 upload slots | Far more than today's five keepers, and only about 4 KB of a 40 KB region |
 | 9 | An upload can replace a built-in of the same name, on that boot. `flow`, `fire-trail`, and `off` can't be replaced | Otherwise you couldn't send a tweaked `comet` to a boot to try it |
-| 10 | The boot lists the recipe versions it can read. Version 1 freezes when the first firmware ships | Boots only update over USB, so the designer will often be newer |
+| 10 | The boot lists the recipe versions it can read. Version 1 is frozen, as of the first firmware that runs recipes | Boots only update over USB, so the designer will often be newer |
 | 11 | Built-ins are a generated file checked into the repo. A stale file fails the firmware build | Firmware builds don't need Bun, and you can't flash old built-ins by accident |
 | 12 | The designer is the only upload client this phase | The iPhone app already lists and selects whatever a boot reports |
 | 13 | Measure flash, RAM, and frame time on a board before version 1 freezes | A legal recipe may be too slow at 39 MHz, and the fix is a lower limit in the format |
@@ -438,7 +439,7 @@ under 2 seconds over BLE, and less over USB.
 2. `versions` doesn't include the recipe's version: the same message.
 3. Otherwise, send it.
 
-After version 1 freezes, any change to a field, its order, or an option is version 2. New firmware keeps
+Version 1 is frozen, so any change to a field, its order, or an option is version 2. New firmware keeps
 reading version 1 for as long as it can, because uploads live through firmware updates. An upload in a
 version the firmware can't read stays in `recipes` so it can be deleted or replaced, but it isn't
 selectable.
@@ -463,8 +464,8 @@ nothing had shipped. That ends with this phase.
 
 ## Budgets on the board
 
-The chip runs at 39 MHz, per the core's `boards.txt`. Measure on a real board, with BLE connected and
-`debug on`, before version 1 freezes.
+The chip runs at 39 MHz, per the core's `boards.txt`. These were measured on a real board, with BLE connected
+and `debug on`, before version 1 froze.
 
 | Budget | Today | This phase adds (estimate) | Pass |
 |---|---|---|---|
@@ -525,16 +526,18 @@ saving, and survived a reflash.
 
 **What this leaves.** Every kept recipe beats its target, with room to spare. Only 8 trails of 16 fronts and
 60 pixels, and 8 foot chases of 8 comets and 60 pixels, stay over 9 ms. On a real boot they hold at least 50 fps.
+foxy kept the limits as they are, so version 1 froze at them.
 Below is what was expected before measuring.
 
 **The trail recipe was the likely failure.** It's only 187 bytes, so it's legal, and it can paint up to
 7,680 pixels a frame. My rough estimate is about 20 ms at 39 MHz. Being over budget doesn't crash
 anything, since animations follow `dt` and just drop frames, but it squeezes motion and the radio.
 
-If a case fails, fix it in this order, before version 1 freezes:
+Version 1 is frozen, so a recipe that turns out too slow gets fixed in this order:
 
 1. Speed up the engine without changing its output, such as color ramps and skipping dark pixels.
-2. Lower the format's limits, such as fronts or trail length, in both the validator and the decoder.
+2. Lower the format's limits, such as fronts or trail length, in a version 2. Lowering them in version 1
+   would make boots refuse recipes they used to accept.
 
 ## The designer
 
@@ -554,7 +557,7 @@ If a case fails, fix it in this order, before version 1 freezes:
 
 ## Risks and Mitigations
 
-- **Frame time at 39 MHz.** The biggest unknown, so it's measured before the format freezes. See above.
+- **Frame time at 39 MHz.** The biggest unknown, so it was measured on `3EB5` before the format froze. See above.
 - **Two engines drifting.** Reference frames, and the rule that behavior changes go into both at once.
 - **Anyone nearby can upload.** There's no pairing today, so anyone in range can already change a boot's
   pattern or calibration. Uploading adds a nuisance: filling slots. The decoder keeps bad data from
@@ -579,7 +582,7 @@ Each step lands on its own, building and passing its tests.
 2. **Engine, off hardware.** Decoder and engine in pure C++, passing reference frames under
    `pio test -e native`.
 3. **Budgets.** Run the keepers and the heavy recipes on one board. Change limits if needed. Then freeze
-   version 1.
+   version 1. Done on 2026-11-05, with the limits unchanged.
 4. **Dynamic list and built-ins.** Pattern list, settings version 4, protocol 3, `RecipePattern`,
    generated built-ins, and the build's staleness check. Check the upgrade on a boot with real poses.
 5. **Upload.** Recipe store, upload commands, and their tests, driven over the USB console first.
