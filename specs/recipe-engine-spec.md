@@ -301,8 +301,8 @@ change when the engine or their test recipes do, so saving a pattern never touch
 - **Not the recipes in `patterns/`.** They're combinations of the same layers, and they change every time
   someone tunes a pattern. If the built-ins ever need parity checks, the compiler's round-trip tests can
   cover them.
-- **Layouts:** the uncut bench strip (160 px, toe 52, heel 132) and boot `3EB5` (107 px, toe 72,
-  heel 19). One runs toe first and the other heel first.
+- **Layouts:** the uncut bench strip (160 px, toe 52, heel 132) and a shape like a real boot's (107 px, toe 72,
+  heel 19). One runs toe first and the other heel first. They're fixed, so re-cutting a boot doesn't change them.
 - **Path:** JSON, then compile, then decode, then the TypeScript engine. So rounding from the
   binary format can't cause a false failure.
 - **Stored:** 8-bit frames every 16th frame, as binary files, about 220 KB in all. A native test reads

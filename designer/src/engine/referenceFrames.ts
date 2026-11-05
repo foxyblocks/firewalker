@@ -15,7 +15,7 @@
 
 import { RecipeEngine, type EngineInput } from "./engine";
 import { toChannelByte } from "./output";
-import { BENCH_STRIP, BOOT_3EB5, type StripLayout } from "./strip";
+import { BENCH_STRIP, type StripLayout } from "./strip";
 import { compileRecipe, decodeRecipe } from "../recipe/compile";
 import type { Recipe } from "../recipe/types";
 
@@ -83,11 +83,12 @@ export interface ReferenceCase {
   layout: StripLayout;
 }
 
-// Every test recipe runs on two layouts that catch different bugs: the bench strip runs toe
-// first with even arcs, and a real boot runs heel first with uneven ones.
+// Every test recipe runs on two layouts that catch different bugs: the bench strip runs toe first with even
+// arcs, and a shape like a real boot's runs heel first with uneven ones. It's written out here rather than
+// using a boot's preset, so re-cutting a boot never changes these files.
 const LAYOUTS: { name: string; layout: StripLayout }[] = [
   { name: "bench", layout: BENCH_STRIP },
-  { name: "3eb5", layout: BOOT_3EB5 },
+  { name: "heel-first", layout: { count: 107, toe: 72, heel: 19 } },
 ];
 
 export function referenceCases(recipes: Recipe[]): ReferenceCase[] {

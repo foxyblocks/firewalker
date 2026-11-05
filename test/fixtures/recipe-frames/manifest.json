@@ -13,10 +13,10 @@
       "heel": 132
     },
     {
-      "file": "blends--3eb5.bin",
+      "file": "blends--heel-first.bin",
       "recipe": "recipes/blends.json",
       "compiled": "compiled/blends.bin",
-      "layout": "3eb5",
+      "layout": "heel-first",
       "count": 107,
       "toe": 72,
       "heel": 19
@@ -31,10 +31,10 @@
       "heel": 132
     },
     {
-      "file": "chase-foot--3eb5.bin",
+      "file": "chase-foot--heel-first.bin",
       "recipe": "recipes/chase-foot.json",
       "compiled": "compiled/chase-foot.bin",
-      "layout": "3eb5",
+      "layout": "heel-first",
       "count": 107,
       "toe": 72,
       "heel": 19
@@ -49,10 +49,10 @@
       "heel": 132
     },
     {
-      "file": "chase-ring--3eb5.bin",
+      "file": "chase-ring--heel-first.bin",
       "recipe": "recipes/chase-ring.json",
       "compiled": "compiled/chase-ring.bin",
-      "layout": "3eb5",
+      "layout": "heel-first",
       "count": 107,
       "toe": 72,
       "heel": 19
@@ -67,10 +67,10 @@
       "heel": 132
     },
     {
-      "file": "fill-foot--3eb5.bin",
+      "file": "fill-foot--heel-first.bin",
       "recipe": "recipes/fill-foot.json",
       "compiled": "compiled/fill-foot.bin",
-      "layout": "3eb5",
+      "layout": "heel-first",
       "count": 107,
       "toe": 72,
       "heel": 19
@@ -85,10 +85,10 @@
       "heel": 132
     },
     {
-      "file": "fill-ring--3eb5.bin",
+      "file": "fill-ring--heel-first.bin",
       "recipe": "recipes/fill-ring.json",
       "compiled": "compiled/fill-ring.bin",
-      "layout": "3eb5",
+      "layout": "heel-first",
       "count": 107,
       "toe": 72,
       "heel": 19
@@ -103,10 +103,10 @@
       "heel": 132
     },
     {
-      "file": "fill-solid--3eb5.bin",
+      "file": "fill-solid--heel-first.bin",
       "recipe": "recipes/fill-solid.json",
       "compiled": "compiled/fill-solid.bin",
-      "layout": "3eb5",
+      "layout": "heel-first",
       "count": 107,
       "toe": 72,
       "heel": 19
@@ -121,10 +121,10 @@
       "heel": 132
     },
     {
-      "file": "flash--3eb5.bin",
+      "file": "flash--heel-first.bin",
       "recipe": "recipes/flash.json",
       "compiled": "compiled/flash.bin",
-      "layout": "3eb5",
+      "layout": "heel-first",
       "count": 107,
       "toe": 72,
       "heel": 19
@@ -139,10 +139,10 @@
       "heel": 132
     },
     {
-      "file": "pool--3eb5.bin",
+      "file": "pool--heel-first.bin",
       "recipe": "recipes/pool.json",
       "compiled": "compiled/pool.bin",
-      "layout": "3eb5",
+      "layout": "heel-first",
       "count": 107,
       "toe": 72,
       "heel": 19
@@ -157,10 +157,10 @@
       "heel": 132
     },
     {
-      "file": "sparkle--3eb5.bin",
+      "file": "sparkle--heel-first.bin",
       "recipe": "recipes/sparkle.json",
       "compiled": "compiled/sparkle.bin",
-      "layout": "3eb5",
+      "layout": "heel-first",
       "count": 107,
       "toe": 72,
       "heel": 19
@@ -175,10 +175,10 @@
       "heel": 132
     },
     {
-      "file": "trail-end--3eb5.bin",
+      "file": "trail-end--heel-first.bin",
       "recipe": "recipes/trail-end.json",
       "compiled": "compiled/trail-end.bin",
-      "layout": "3eb5",
+      "layout": "heel-first",
       "count": 107,
       "toe": 72,
       "heel": 19
@@ -193,10 +193,10 @@
       "heel": 132
     },
     {
-      "file": "trail-point--3eb5.bin",
+      "file": "trail-point--heel-first.bin",
       "recipe": "recipes/trail-point.json",
       "compiled": "compiled/trail-point.bin",
-      "layout": "3eb5",
+      "layout": "heel-first",
       "count": 107,
       "toe": 72,
       "heel": 19

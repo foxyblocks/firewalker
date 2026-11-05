@@ -27,9 +27,9 @@ knob source has no test recipe.
 | `<recipe>--<layout>.bin` | Generated. One recipe's expected frames on one strip layout |
 
 Each frames file comes from the compiled recipe, decoded and run, not the JSON directly. Every test
-recipe runs on two layouts: `bench` (160 pixels, toe 52, heel 132) and `3eb5` (107 pixels,
-toe 72, heel 19). The first runs toe first with even arcs, and the second runs heel first with uneven
-ones, so they catch different bugs.
+recipe runs on two layouts: `bench` (160 pixels, toe 52, heel 132) and `heel-first` (107 pixels, toe 72,
+heel 19). The first runs toe first with even arcs, and the second runs heel first with uneven ones, so they
+catch different bugs. They're fixed here on purpose, so re-cutting a boot never changes these files.
 
 ## File formats
 
