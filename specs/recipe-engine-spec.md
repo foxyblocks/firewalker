@@ -385,6 +385,11 @@ An upload looks like this. The first line of data is `comet`'s real first 15 byt
 ```
 
 - **One line at a time.** A client waits for each `ack`, so the 8-line BLE queue can't overflow.
+- **Shorter lines over USB, and retries.** The board buffers only 32 received bytes until the main loop reads
+  them, and on a real boot 2 to 7% of 46-character lines lost characters. So over USB a line carries 7 bytes,
+  which keeps it to 31 characters. BLE delivers a line whole and carries 15. About 0.3% of short lines are still
+  damaged, so the designer resends them, and starts over if `begin` arrived wrong. The checksum means a damaged
+  recipe is never saved.
 - **The offset guards the order.** A lost or repeated line gets `wrong-offset` with the right `next`,
   and the client carries on from there.
 - **The checksum is the recipe's own CRC-32.** `recipe end` checks the size, the checksum, and the
@@ -494,7 +499,35 @@ last line, including sending the frame. Test with five heavy recipes:
 - 8 chases around the ring, each with 8 comets of 60 pixels.
 - 8 chases along the foot, each with 8 comets of 60 pixels, painted on both sides.
 
-**The trail recipe is the likely failure.** It's only 187 bytes, so it's legal, and it can paint up to
+**Measured on boot `3EB5`, 2026-11-05.** Engine time per frame, average and slowest, after the speed-ups
+below. Each recipe ran with a stomp every 300 ms and the tilt sweeping.
+
+| Recipe | 107 px | Frame rate | 160 px | Frame rate |
+|---|---|---|---|---|
+| `fire-stomp` | 0.9, 1.4 ms | 61 fps | | |
+| `comet` | 1.7, 2.4 ms | 60 fps | | |
+| `starfield` | 1.8, 2.5 ms | 60 fps | | |
+| `lava-pour` | 1.9, 2.4 ms | 60 fps | | |
+| `rainbow-pool` | 2.3, 3.0 ms | 60 fps | | |
+| 8 sparkles | 4.9, 6.0 ms | 61 fps | 6.8, 8.2 ms | 60 fps |
+| 8 fills | 5.4, 6.0 ms | 61 fps | 7.8, 8.5 ms | 62 fps |
+| 8 ring chases | 7.2, 7.8 ms | 60 fps | 8.3, 9.0 ms | 58 fps |
+| 8 trails | 9.5, 13.5 ms | 52 fps | 10.8, 15.1 ms | 49 fps |
+| 8 foot chases | 9.6, 10.3 ms | 58 fps | 11.5, 12.3 ms | 48 fps |
+
+Before the speed-ups, the foot chase took 168 ms, or 6 fps. What made the difference: no doubles or library
+calls in per-pixel loops, a trail's or comet's colors worked out once, a separate loop per blend, and building
+the engine with `-O2`. `show()` measured 5.6 to 5.9 ms, not 4.8, and a motion read can take 4 ms.
+
+Memory on the same boot: 50,000 bytes of static RAM, 289,984 bytes of flash (18.4% of the chip's own), 176,632
+bytes of free heap, and 7,376 bytes of spare stack. All 16 slots held 254-byte recipes, with settings still
+saving, and survived a reflash.
+
+**What this leaves.** Every kept recipe beats its target, with room to spare. Only 8 trails of 16 fronts and
+60 pixels, and 8 foot chases of 8 comets and 60 pixels, stay over 9 ms. On a real boot they hold at least 50 fps.
+Below is what was expected before measuring.
+
+**The trail recipe was the likely failure.** It's only 187 bytes, so it's legal, and it can paint up to
 7,680 pixels a frame. My rough estimate is about 20 ms at 39 MHz. Being over budget doesn't crash
 anything, since animations follow `dt` and just drop frames, but it squeezes motion and the radio.
 
