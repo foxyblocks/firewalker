@@ -1,6 +1,7 @@
 // A Vite plugin that serves the patterns/ folder to the designer while `bun run dev` runs:
 //
-//   GET    /api/patterns                       every pattern file, with its version and any problems
+//   GET    /api/patterns                       every pattern file, with its version, whether it's
+//                                              built in, and any problems
 //   PUT    /api/patterns/<name>                save a recipe. Takes `replaces=old` to rename from
 //                                              `old`, and `expected=<version>` or `expected=none`
 //                                              to fail with a 409 if the file has moved on
@@ -18,18 +19,20 @@ const PREFIX = "/api/patterns";
 const MAX_BODY_BYTES = 64 * 1024;
 
 // `shownDir` is how the designer names the folder to people; `dir` is where the files go.
-export function patternsApi(dir: string, shownDir = dir): Plugin {
+// `builtinsHeader` is the firmware's header to keep in step with built-in recipes, for the repo's own
+// folder only.
+export function patternsApi(dir: string, shownDir = dir, builtinsHeader?: string): Plugin {
   return {
     name: "firewalker-patterns-api",
     configureServer(server) {
       server.middlewares.use(PREFIX, (req, res) => {
-        handle(dir, shownDir, req, res).catch((error: unknown) => sendError(res, error));
+        handle(dir, shownDir, builtinsHeader, req, res).catch((error: unknown) => sendError(res, error));
       });
     },
   };
 }
 
-async function handle(dir: string, shownDir: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+async function handle(dir: string, shownDir: string, builtinsHeader: string | undefined, req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url ?? "/", "http://localhost");
   const name = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
 
@@ -45,12 +48,13 @@ async function handle(dir: string, shownDir: string, req: IncomingMessage, res: 
       await readJson(req),
       url.searchParams.get("replaces") ?? undefined,
       expected === null ? undefined : expected === "none" ? null : expected,
+      builtinsHeader,
     );
     send(res, 200, { ok: true, ...saved });
     return;
   }
   if (req.method === "DELETE" && name !== "") {
-    await deletePattern(dir, name);
+    await deletePattern(dir, name, builtinsHeader);
     send(res, 200, { ok: true });
     return;
   }

@@ -1,6 +1,6 @@
 {
   "format": "firewalker-recipe",
-  "version": 1,
+  "version": 2,
   "name": "bass-ripple",
   "description": "A rainbow volume bar on both sides of the boot. Tilt slides it downhill, and stomps flash its brightness from 70% to 100%.",
   "layers": [

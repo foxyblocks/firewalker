@@ -50,10 +50,10 @@ describe("validateRecipe", () => {
     expect(empty.ok).toBe(false);
   });
 
-  it("round-trips an audio-bound knob through recipe JSON", () => {
+  it("upgrades an existing audio draft to version 2 when writing recipe JSON", () => {
     const fill = { ...newLayer("fill"), brightness: { source: "audioLevel", min: 0, max: 1 } } as Recipe["layers"][number];
     const source = recipe({ layers: [fill] });
-    expect(validateRecipe(JSON.parse(recipeToJson(source)))).toEqual({ ok: true, recipe: source });
+    expect(validateRecipe(JSON.parse(recipeToJson(source)))).toEqual({ ok: true, recipe: { ...source, version: 2 } });
   });
 
   it("caps the layer count", () => {

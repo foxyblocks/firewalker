@@ -10,7 +10,7 @@ import {
   MAX_NAME_LENGTH,
   MAX_PALETTE_STOPS,
   RECIPE_FORMAT,
-  RECIPE_VERSION,
+  isRecipeVersion,
   SOURCES,
   type LayerType,
   type Recipe,
@@ -23,7 +23,7 @@ const COLOR_PATTERN = /^#[0-9a-f]{6}$/;
 // Names a recipe can't take. `off` is how the remote turns the strip off, and `flow` and
 // `fire-trail` are the firmware's own patterns, which a boot lists alongside its recipes by
 // name. Keep this in step with SELECTABLE_PATTERNS in include/firewalker_remote_protocol.h.
-const RESERVED_NAMES = new Set(["off", "flow", "fire-trail"]);
+export const RESERVED_NAMES: ReadonlySet<string> = new Set(["off", "flow", "fire-trail"]);
 
 // Returns a reason the name can't be used, or null if it's fine.
 export function nameProblem(name: string): string | null {
@@ -39,7 +39,7 @@ export function validateRecipe(value: unknown): Validation {
   if (!isObject(value)) return { ok: false, errors: ["A recipe must be a JSON object."] };
 
   if (value.format !== RECIPE_FORMAT) errors.push(`format must be "${RECIPE_FORMAT}".`);
-  if (value.version !== RECIPE_VERSION) errors.push(`version must be ${RECIPE_VERSION}.`);
+  if (!isRecipeVersion(value.version)) errors.push("version must be 1 or 2.");
 
   if (typeof value.name !== "string") {
     errors.push("name must be a string.");

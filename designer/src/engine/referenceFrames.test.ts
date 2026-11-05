@@ -8,21 +8,23 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { buildReferenceFiles, CHECK_EVERY, FIXTURE_RECIPES, referenceCases, referenceInputs, REFERENCE_FRAMES, renderCase } from "./referenceFrames";
+import { buildReferenceFiles, CHECK_EVERY, referenceCases, referenceInputs, REFERENCE_FRAMES, renderCase } from "./referenceFrames";
 import { BOOT_3EB5 } from "./strip";
+import { recipeToJson } from "../recipe/serialize";
 import { fieldsFor, LAYER_TYPES } from "../recipe/spec";
 import { BLENDS, isBinding, SOURCES, type Recipe } from "../recipe/types";
 import { validateRecipe } from "../recipe/validate";
 
-const REPO = fileURLToPath(new URL("../../../", import.meta.url));
-const FIXTURE_DIR = path.join(REPO, "test/fixtures/recipe-frames");
-// The folder's own documentation, which nothing generates.
-const HAND_WRITTEN = new Set(["README.md"]);
+const FIXTURE_DIR = fileURLToPath(new URL("../../../test/fixtures/recipe-frames", import.meta.url));
+const RECIPE_DIR = path.join(FIXTURE_DIR, "recipes");
 
-const KEEPERS: Recipe[] = readdirSync(path.join(REPO, "patterns"))
+const RECIPES: Recipe[] = readdirSync(RECIPE_DIR)
   .filter((file) => file.endsWith(".json"))
   .sort()
-  .map((file) => JSON.parse(readFileSync(path.join(REPO, "patterns", file), "utf8")) as Recipe);
+  .map((file) => JSON.parse(readFileSync(path.join(RECIPE_DIR, file), "utf8")) as Recipe);
+
+// The test recipes and the folder's documentation are edited by hand. Everything else is generated.
+const isHandWritten = (file: string) => file === "README.md" || file.startsWith("recipes/");
 
 function filesOnDisk(dir: string, prefix = ""): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
@@ -31,20 +33,23 @@ function filesOnDisk(dir: string, prefix = ""): string[] {
 }
 
 function writeFiles(files: Map<string, Uint8Array>): void {
-  mkdirSync(path.join(FIXTURE_DIR, "recipes"), { recursive: true });
   for (const file of filesOnDisk(FIXTURE_DIR)) {
-    if (!files.has(file) && !HAND_WRITTEN.has(file)) rmSync(path.join(FIXTURE_DIR, file));
+    if (!files.has(file) && !isHandWritten(file)) rmSync(path.join(FIXTURE_DIR, file));
   }
-  for (const [file, bytes] of files) writeFileSync(path.join(FIXTURE_DIR, file), bytes);
+  for (const [file, bytes] of files) {
+    const target = path.join(FIXTURE_DIR, file);
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, bytes);
+  }
 }
 
 describe("reference frames", () => {
   it("match the files in test/fixtures/recipe-frames (bun run reference-frames rewrites them)", () => {
-    const files = buildReferenceFiles(KEEPERS);
+    const files = buildReferenceFiles(RECIPES);
     if (process.env.UPDATE_REFERENCE_FRAMES === "1") writeFiles(files);
 
     const generated = new Set(files.keys());
-    const onDisk = filesOnDisk(FIXTURE_DIR).filter((file) => !HAND_WRITTEN.has(file));
+    const onDisk = filesOnDisk(FIXTURE_DIR).filter((file) => !isHandWritten(file));
     const stale = [...generated].filter((file) => {
       const current = onDisk.includes(file) ? readFileSync(path.join(FIXTURE_DIR, file)) : null;
       return !current || !current.equals(files.get(file)!);
@@ -54,15 +59,15 @@ describe("reference frames", () => {
   });
 
   it("come out the same every run", () => {
-    const [testCase] = referenceCases(KEEPERS);
+    const [testCase] = referenceCases(RECIPES);
     const inputs = referenceInputs();
     expect(renderCase(testCase!.recipe, testCase!.layout, inputs)).toEqual(renderCase(testCase!.recipe, testCase!.layout, inputs));
   });
 
   it("save one frame per check, and each file's header says so", () => {
-    const files = buildReferenceFiles(KEEPERS);
+    const files = buildReferenceFiles(RECIPES);
     const checkpoints = Math.floor(REFERENCE_FRAMES / CHECK_EVERY);
-    for (const testCase of referenceCases(KEEPERS)) {
+    for (const testCase of referenceCases(RECIPES)) {
       const bytes = files.get(testCase.file)!;
       const view = new DataView(bytes.buffer);
       expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe("FWRF");
@@ -77,9 +82,10 @@ describe("reference frames", () => {
 
   it("save inputs a C++ test reads back exactly", () => {
     const inputs = referenceInputs();
-    const bytes = buildReferenceFiles(KEEPERS).get("inputs.bin")!;
+    const bytes = buildReferenceFiles(RECIPES).get("inputs.bin")!;
     const view = new DataView(bytes.buffer);
     expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe("FWRI");
+    expect(view.getUint16(4, true)).toBe(2);
     expect(view.getUint16(6, true)).toBe(REFERENCE_FRAMES);
     inputs.forEach((input, i) => {
       const at = 8 + i * 12;
@@ -87,6 +93,7 @@ describe("reference frames", () => {
       expect(view.getFloat32(at + 4, true)).toBe(input.stompStrength);
       expect(view.getUint16(at + 8, true)).toBe(input.dt);
       expect(view.getUint8(at + 10)).toBe(input.stomp ? 1 : 0);
+      expect(Math.fround(view.getUint8(at + 11) / 255)).toBe(input.audioLevel);
     });
   });
 
@@ -101,8 +108,9 @@ describe("reference frames", () => {
     expect(Math.min(...inputs.map((input) => input.tiltFwd))).toBeLessThan(-0.95);
   });
 
-  it.each(FIXTURE_RECIPES.map((recipe) => [recipe.name, recipe] as const))("fixture %s is a valid recipe that draws something that moves", (_, recipe) => {
+  it.each(RECIPES.map((recipe) => [recipe.name, recipe] as const))("test recipe %s is a valid recipe that draws something that moves", (name, recipe) => {
     expect(validateRecipe(recipe)).toMatchObject({ ok: true });
+    expect(readFileSync(path.join(RECIPE_DIR, `${name}.json`), "utf8")).toBe(recipeToJson(recipe));
     const frames = renderCase(recipe, BOOT_3EB5, referenceInputs());
     const size = BOOT_3EB5.count * 3;
     expect(frames.some((value) => value > 0)).toBe(true);
@@ -111,12 +119,10 @@ describe("reference frames", () => {
     expect(anyDifferent).toBe(true);
   });
 
-  // The reference input file stores motion, without audio. Audio bindings have
-  // live-level coverage in engine.test.ts; these frames cover the motion/time sources
-  // the firmware port can replay from this file.
-  it("cover every layer type, blend, choice, and motion/time knob source", () => {
-    const recipes = referenceCases(KEEPERS).map((testCase) => testCase.recipe);
-    const layers = recipes.flatMap((recipe) => recipe.layers) as unknown as (Record<string, unknown> & { type: (typeof LAYER_TYPES)[number] })[];
+  // A new layer type, blend, choice, or source has to get a case, or the C++ engine could get it
+  // wrong with nothing to catch it.
+  it("cover every layer type, blend, choice, and knob source", () => {
+    const layers = RECIPES.flatMap((recipe) => recipe.layers) as unknown as (Record<string, unknown> & { type: (typeof LAYER_TYPES)[number] })[];
 
     expect(new Set(layers.map((layer) => layer.type))).toEqual(new Set(LAYER_TYPES));
     expect(new Set(layers.map((layer) => layer.blend))).toEqual(new Set(BLENDS));
@@ -129,9 +135,7 @@ describe("reference frames", () => {
         }
       }
     }
-    // Kept recipes can bind audio, which reads zero in this motion-only recording.
-    sources.delete("audioLevel");
-    expect(sources).toEqual(new Set(SOURCES.filter((source) => source !== "audioLevel")));
+    expect(sources).toEqual(new Set(SOURCES));
 
     for (const type of LAYER_TYPES) {
       for (const field of fieldsFor(type)) {

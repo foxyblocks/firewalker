@@ -5,9 +5,34 @@ import { createContext, useContext, useEffect, useMemo, useState, useSyncExterna
 
 import { DesignScreen } from "./DesignScreen";
 import { PatternsScreen } from "./PatternsScreen";
+import { BootConnections, type BootTransport } from "../boot/connections";
+import { FakeBootPorts, FakeBootTransport } from "../boot/fakeBoot";
+import { devServerPorts } from "../boot/portHolders";
 import { PatternLibrary, type LibraryState } from "../store/patterns";
 
 const LibraryContext = createContext<PatternLibrary | null>(null);
+const BootsContext = createContext<BootConnections | null>(null);
+
+export function useBoots(): BootConnections {
+  const boots = useContext(BootsContext);
+  if (!boots) throw new Error("useBoots needs the App's provider.");
+  return boots;
+}
+
+// Real boots load only when the panel opens, because they pull in the iPhone app's Bluetooth plugin.
+async function loadRealTransport(): Promise<BootTransport> {
+  const { createRealTransport } = await import("../boot/realTransport");
+  return createRealTransport();
+}
+
+// Real boots, or pretend ones with ?boot=fake, for trying the panel with no boot around. Adding &busy=tool,
+// &busy=browser, or &busy=other makes something pretend to hold the USB port.
+function createBootConnections(): BootConnections {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("boot") !== "fake") return new BootConnections(loadRealTransport, devServerPorts);
+  const ports = new FakeBootPorts(params.get("busy"));
+  return new BootConnections(async () => new FakeBootTransport(undefined, ports), ports);
+}
 
 export function useLibrary(): [PatternLibrary, LibraryState] {
   const library = useContext(LibraryContext);
@@ -29,6 +54,7 @@ function readRoute(): Route {
 
 export function App() {
   const library = useMemo(() => new PatternLibrary(), []);
+  const boots = useMemo(createBootConnections, []);
   const [route, setRoute] = useState(readRoute);
 
   useEffect(() => {
@@ -46,7 +72,9 @@ export function App() {
 
   return (
     <LibraryContext.Provider value={library}>
-      {route.screen === "design" ? <DesignScreen key={route.name} name={route.name} /> : <PatternsScreen />}
+      <BootsContext.Provider value={boots}>
+        {route.screen === "design" ? <DesignScreen key={route.name} name={route.name} /> : <PatternsScreen />}
+      </BootsContext.Provider>
     </LibraryContext.Provider>
   );
 }

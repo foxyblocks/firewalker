@@ -30,7 +30,7 @@ to it too:
 - Subscribing to TX sends a status line, so a reconnecting client sees the current
   state straight away.
 - A reply can span several notifications. Join them until the newline.
-- Every valid command fits in the default 20-byte write, with or without a trailing
+- Every valid command except the `recipe` ones fits in the default 20-byte write, with or without a trailing
   newline.
 
 ### USB
@@ -53,7 +53,7 @@ aren't JSON.
 |---|---|
 | `status` | Reports the current state |
 | `patterns` | Lists the patterns this boot can show |
-| `pattern flow`, `pattern fire-trail`, `pattern off` | Selects a pattern and remembers it |
+| `pattern <name>`, `pattern off` | Selects a pattern and remembers it. `patterns` lists the names |
 | `power on`, `power off` | Off blanks the strip. On returns to the last lit pattern |
 | `brightness <n>` | Sets brightness, from 1 to `maxBrightness` |
 | `calibrate neutral`, `calibrate heel`, `calibrate toe` | Captures one pose; hold it for two seconds. A bare `calibrate` means neutral |
@@ -61,6 +61,13 @@ aren't JSON.
 | `identify` | Blinks the strip for about 1.5 seconds, to show which boot this is. Changes no settings |
 | `strip leds <n>`, `strip toe <n>`, `strip heel <n>` | Sets the pixel count, or the pixel at the toe or heel, and remembers it. See [Strip layout](#strip-layout) |
 | `strip preview on`, `strip preview off` | Shows the layout on the strip in place of the pattern, or returns to the pattern. Changes no settings |
+| `recipes` | Lists uploaded recipes, free slots, and the recipe versions this firmware can read. See [Recipes](#recipes) |
+| `recipe info <name>` | Reports one uploaded recipe's size and checksum |
+| `recipe begin <name> <bytes>` | Starts an upload |
+| `recipe data <offset> <hex>` | Sends up to 15 bytes of an upload, as up to 30 hex characters |
+| `recipe end` | Checks the whole recipe and saves it |
+| `recipe cancel` | Abandons the upload |
+| `recipe delete <name>` | Deletes an uploaded recipe |
 
 Each controller keeps its own settings, and a command only affects the controller
 that receives it. `off` blanks the pixels but doesn't disconnect their power, so the
@@ -81,13 +88,14 @@ Errors are `empty`, `too-long`, `too-many-arguments`, `expected-one-argument`,
 `unknown-command`, `unknown-pattern`, `unknown-pose`, `expected-on-or-off`,
 `expected-0-to-255`, `expected-setting-and-value`, `expected-number`, `unknown-strip-setting`,
 `out-of-range`, `same-pixel`, and `already-capturing`, plus `sensor-unavailable` for a capture
-that can't start. A command the firmware can't parse
-reports `"cmd":"unknown"`.
+that can't start, and `bad-recipe` for a pattern whose recipe won't load. [Recipes](#recipes) has
+its own. A command the firmware can't parse reports `"cmd":"unknown"`.
 
 ### `patterns`
 
 Sent in reply to `patterns`. Off isn't listed, because it's the absence of a pattern, not
-a pattern to choose. Names are at most 12 characters, so `pattern <name>` always fits in a
+a pattern to choose. The list changes as recipes come and go, and a new one goes out after each
+change. Names are at most 12 characters, so `pattern <name>` always fits in a
 default 20-byte write.
 
 ```json
@@ -100,7 +108,7 @@ Sent in reply to `status`, when a client subscribes, and after any change. Chang
 are reported at most every 250 ms, so a slider drag gets one line per interval.
 
 ```json
-{"t":"status","proto":2,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}
+{"t":"status","proto":3,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}
 ```
 
 | Field | Meaning |
@@ -204,12 +212,78 @@ with the lights off. It lasts one minute from the latest `strip` command, so a c
 by repeating `strip preview on` and can't leave a boot stuck on it by going away. When it ends,
 the pattern starts again.
 
+### Recipes
+
+A boot shows three kinds of pattern: native ones written in C++, built-in recipes compiled into the
+firmware, and recipes uploaded to that boot. `patterns` lists them all, and `pattern <name>` selects
+one. `recipes` and the `recipe` commands deal only with uploads. A recipe sent here is in the compiled
+form from [`recipe-format.md`](recipe-format.md), not its JSON.
+
+An upload goes one line at a time, and a client waits for each `ack`:
+
+```text
+> recipe begin comet 74
+< {"t":"ack","cmd":"recipe","ok":true,"next":0}
+> recipe data 0 0105636f6d6574030000027a00ffff
+< {"t":"ack","cmd":"recipe","ok":true,"next":15}
+  ...
+> recipe end
+< {"t":"ack","cmd":"recipe","ok":true}
+< {"t":"patterns","list":["flow","fire-trail","comet","fire-stomp","rainbow-pool"]}
+```
+
+- Over BLE, lines can run to 47 characters, past a default 20-byte write, so send them as writes with
+  response.
+- Over USB, keep each line to 31 characters, which means 7 bytes of data per line. USB arrives a byte at a
+  time into a 32-byte buffer that the firmware only empties between jobs, so a longer line can lose
+  characters while it's busy, such as while it's sending a frame. On a real boot, 2 to 7% of 46-character
+  lines arrived damaged, and about 0.3% of 30-character ones still do.
+- So be ready to send a line again. A damaged line gets `bad-hex`, `wrong-offset`, or `"cmd":"unknown"`, and
+  one that lost its newline gets no reply at all. The offset stops a repeat being stored twice, and if `begin`
+  arrived wrong, `too-big` or `short` means start over. The recipe's checksum catches anything else, so a
+  damaged recipe is never saved.
+- `next` says which offset to send next. A lost or repeated line gets `wrong-offset` with the right `next`.
+- Nothing reaches flash until `recipe end`, which checks the size, the recipe's own CRC-32, its contents,
+  and that its name matches `begin`. Saving is one write, so a power cut leaves the old recipe or the new
+  one. 5 seconds of silence abandons an upload.
+- The pattern keeps running throughout. Upload doesn't select a recipe, but one that's on the strip restarts
+  as the new version. Sending `pattern <name>` afterward selects it.
+- A boot has 16 slots, and uploads survive a firmware update.
+
+An upload can use a built-in's name, which replaces it on that boot until the upload is deleted. `flow`,
+`fire-trail`, and `off` can't be used. Deleting the recipe on the strip brings back its built-in if there is
+one, and otherwise the boot switches to `flow`. A saved pattern that no longer exists does the same at
+startup, keeping the boot's brightness, poses, and strip layout.
+
+```json
+{"t":"recipes","versions":[1,2],"slots":16,"free":15,"list":["comet"]}
+{"t":"recipe","name":"comet","bytes":74,"crc":"cb75d224"}
+```
+
+`versions` lists the recipe versions this firmware can read. A recipe in another version is refused, and one
+already stored stays in `recipes` so it can be deleted or replaced, but it can't be selected. `recipe info`
+lets a client see that a boot already has these exact bytes, and skip sending them.
+
+| Error | Meaning |
+|---|---|
+| `bad-name`, `name-reserved` | The name isn't spelled legally, or it's one a boot keeps for itself |
+| `name-mismatch` | The name inside the recipe isn't the one given to `begin` |
+| `too-big`, `short` | More or fewer bytes than the size given, or a size no recipe can have |
+| `no-room` | Every slot is in use |
+| `no-upload` | No upload is in progress, perhaps because it timed out |
+| `wrong-offset` | This isn't the offset that comes next. `next` says which is |
+| `bad-hex` | The data isn't an even number of hex characters, up to 30 |
+| `bad-checksum`, `bad-recipe` | The recipe was damaged, or its contents don't make sense |
+| `unsupported-version` | This firmware can't read that recipe version |
+| `save-failed` | The flash write failed |
+| `not-found`, `built-in` | No upload has that name, and if it's `built-in`, it's a recipe built into the firmware that can't be deleted |
+
 ### `motion`
 
 Sent about five times a second while debug is on.
 
 ```json
-{"t":"motion","tilt":0.05,"angleDeg":1.42,"accel":10.18,"accelPeak":10.31,"gyro":0.03,"stomp":false,"strength":0.00}
+{"t":"motion","tilt":0.05,"angleDeg":1.42,"accel":10.18,"accelPeak":10.31,"gyro":0.03,"stomp":false,"strength":0.00,"frameUs":7321}
 ```
 
 | Field | Meaning |
@@ -221,6 +295,7 @@ Sent about five times a second while debug is on.
 | `gyro` | Total rotation rate, rad/s |
 | `stomp` | A stomp fired since the previous motion line |
 | `strength` | The latest stomp's force from 0 to 1 |
+| `frameUs` | The slowest pattern update since the previous motion line, in microseconds, including sending the frame |
 
 These are the first lines dropped if BLE falls behind, so a client should treat them
 as a sampled view rather than a complete record.

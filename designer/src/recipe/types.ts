@@ -5,7 +5,13 @@
 // source of truth in code.
 
 export const RECIPE_FORMAT = "firewalker-recipe";
-export const RECIPE_VERSION = 1;
+export const MIN_RECIPE_VERSION = 1;
+export const RECIPE_VERSION = 2;
+export type RecipeVersion = 1 | typeof RECIPE_VERSION;
+
+export function isRecipeVersion(value: unknown): value is RecipeVersion {
+  return value === MIN_RECIPE_VERSION || value === RECIPE_VERSION;
+}
 
 export const MAX_LAYERS = 8;
 export const MAX_PALETTE_STOPS = 16;
@@ -131,7 +137,7 @@ export type LayerType = Layer["type"];
 
 export interface Recipe {
   format: typeof RECIPE_FORMAT;
-  version: typeof RECIPE_VERSION;
+  version: RecipeVersion;
   name: string;
   // Notes for people. Stays in the file and is never sent to a boot.
   description: string;
@@ -140,4 +146,16 @@ export interface Recipe {
 
 export function isBinding(knob: Knob): knob is Binding {
   return typeof knob === "object" && knob !== null;
+}
+
+/**
+ * The earliest firmware format that can run these layers. Old effects retain
+ * version 1 bytes, while Band or an audio binding needs version 2. JSON saving
+ * also uses this to upgrade drafts made before audio had its own version.
+ */
+export function requiredRecipeVersion(layers: readonly Layer[]): RecipeVersion {
+  const needsAudioFormat = layers.some((layer) =>
+    layer.type === "band" || Object.values(layer).some((value) => isBinding(value) && value.source === "audioLevel"),
+  );
+  return needsAudioFormat ? RECIPE_VERSION : MIN_RECIPE_VERSION;
 }

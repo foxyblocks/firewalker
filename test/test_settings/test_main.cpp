@@ -18,8 +18,8 @@ void tearDown() {}
 
 static Settings sampleSettings() {
   Settings settings = defaultSettings(32, DEFAULT_STRIP);
-  settings.pattern = PatternId::FireTrail;
-  settings.lastLitPattern = PatternId::FireTrail;
+  copyPatternName(settings.pattern, "fire-trail");
+  copyPatternName(settings.lastLitPattern, "fire-trail");
   settings.calibration.neutralSet = true;
   settings.calibration.neutralDeg = -3.5f;
   settings.calibration.heelSet = true;
@@ -37,7 +37,8 @@ static void reseal(SettingsRecord& record) {
 
 static void test_defaults_are_flow_and_uncalibrated() {
   const Settings settings = defaultSettings(16, DEFAULT_STRIP);
-  TEST_ASSERT_EQUAL(PatternId::Flow, settings.pattern);
+  TEST_ASSERT_EQUAL_STRING("flow", settings.pattern);
+  TEST_ASSERT_EQUAL_STRING("flow", settings.lastLitPattern);
   TEST_ASSERT_EQUAL(16, settings.brightness);
   TEST_ASSERT_FALSE(settings.calibration.neutralSet);
   TEST_ASSERT_FALSE(settings.calibration.heelSet);
@@ -50,8 +51,8 @@ static void test_round_trip_keeps_every_field() {
   const SettingsRecord record = encodeSettings(sampleSettings());
   Settings out = defaultSettings(16, DEFAULT_STRIP);
   TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
-  TEST_ASSERT_EQUAL(PatternId::FireTrail, out.pattern);
-  TEST_ASSERT_EQUAL(PatternId::FireTrail, out.lastLitPattern);
+  TEST_ASSERT_EQUAL_STRING("fire-trail", out.pattern);
+  TEST_ASSERT_EQUAL_STRING("fire-trail", out.lastLitPattern);
   TEST_ASSERT_EQUAL(32, out.brightness);
   TEST_ASSERT_TRUE(out.calibration.neutralSet);
   TEST_ASSERT_EQUAL_FLOAT(-3.5f, out.calibration.neutralDeg);
@@ -66,11 +67,11 @@ static void test_round_trip_keeps_every_field() {
 
 static void test_off_round_trips_and_remembers_what_to_return_to() {
   Settings settings = sampleSettings();
-  settings.pattern = PatternId::Off;
+  copyPatternName(settings.pattern, "off");
   Settings out = defaultSettings(16, DEFAULT_STRIP);
   TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(encodeSettings(settings), BOUNDS, out));
-  TEST_ASSERT_EQUAL(PatternId::Off, out.pattern);
-  TEST_ASSERT_EQUAL(PatternId::FireTrail, out.lastLitPattern);
+  TEST_ASSERT_EQUAL_STRING("off", out.pattern);
+  TEST_ASSERT_EQUAL_STRING("fire-trail", out.lastLitPattern);
 }
 
 static void test_flipped_bit_reads_as_corrupt_and_leaves_output_alone() {
@@ -79,7 +80,17 @@ static void test_flipped_bit_reads_as_corrupt_and_leaves_output_alone() {
   Settings out = defaultSettings(16, DEFAULT_STRIP);
   TEST_ASSERT_EQUAL(SettingsDecode::Corrupt, decodeSettings(record, BOUNDS, out));
   TEST_ASSERT_EQUAL(16, out.brightness);
-  TEST_ASSERT_EQUAL(PatternId::Flow, out.pattern);
+  TEST_ASSERT_EQUAL_STRING("flow", out.pattern);
+}
+
+static void test_an_uploaded_recipes_name_round_trips() {
+  Settings settings = sampleSettings();
+  copyPatternName(settings.pattern, "abcdefghijkl");
+  copyPatternName(settings.lastLitPattern, "rainbow-pool");
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(encodeSettings(settings), BOUNDS, out));
+  TEST_ASSERT_EQUAL_STRING("abcdefghijkl", out.pattern);
+  TEST_ASSERT_EQUAL_STRING("rainbow-pool", out.lastLitPattern);
 }
 
 static void test_wrong_magic_reads_as_corrupt() {
@@ -98,20 +109,28 @@ static void test_other_version_reads_as_unsupported() {
   TEST_ASSERT_EQUAL(SettingsDecode::Unsupported, decodeSettings(record, BOUNDS, out));
 }
 
-static void test_unknown_pattern_reads_as_invalid() {
+// A bad name is no reason to lose a boot's poses and strip layout.
+static void test_a_garbled_name_reads_as_the_default_and_keeps_the_rest() {
   SettingsRecord record = encodeSettings(sampleSettings());
-  record.pattern = 99;
+  strcpy(record.pattern, "NOT A NAME");
+  memset(record.lastLitPattern, 'x', sizeof(record.lastLitPattern));  // not even terminated
   reseal(record);
   Settings out = defaultSettings(16, DEFAULT_STRIP);
-  TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(record, BOUNDS, out));
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
+  TEST_ASSERT_EQUAL_STRING("flow", out.pattern);
+  TEST_ASSERT_EQUAL_STRING("flow", out.lastLitPattern);
+  TEST_ASSERT_EQUAL(32, out.brightness);
+  TEST_ASSERT_EQUAL_FLOAT(-25.0f, out.calibration.heelDeg);
+  TEST_ASSERT_EQUAL_UINT16(110, out.strip.count);
 }
 
-static void test_off_is_not_a_valid_pattern_to_return_to() {
+static void test_off_is_not_a_pattern_to_return_to() {
   SettingsRecord record = encodeSettings(sampleSettings());
-  record.lastLitPattern = (uint8_t)PatternId::Off;
+  strcpy(record.lastLitPattern, "off");
   reseal(record);
   Settings out = defaultSettings(16, DEFAULT_STRIP);
-  TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(record, BOUNDS, out));
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
+  TEST_ASSERT_EQUAL_STRING("flow", out.lastLitPattern);
 }
 
 static void test_brightness_outside_the_build_limits_reads_as_invalid() {
@@ -197,6 +216,73 @@ static void test_unusable_strip_layout_reads_as_invalid() {
   }
 }
 
+// ── Records saved when patterns were numbered ───────────────────────────
+
+static SettingsRecordV3 sampleV3Record(uint8_t pattern, uint8_t lastLit) {
+  SettingsRecordV3 record;
+  memset(&record, 0, sizeof(record));
+  record.magic = SETTINGS_MAGIC;
+  record.version = 3;
+  record.pattern = pattern;
+  record.lastLitPattern = lastLit;
+  record.brightness = 24;
+  record.calibratedPoses = SETTINGS_POSE_NEUTRAL | SETTINGS_POSE_HEEL | SETTINGS_POSE_TOE;
+  record.stripCount = 107;
+  record.stripToe = 72;
+  record.stripHeel = 19;
+  record.neutralDeg = 1.5f;
+  record.heelDeg = -18.0f;
+  record.toeDeg = 34.0f;
+  record.crc = settingsCrc(&record, offsetof(SettingsRecordV3, crc));
+  return record;
+}
+
+static void test_v3_record_keeps_everything_and_turns_numbers_into_names() {
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettingsV3(sampleV3Record(2, 2), BOUNDS, out));
+  TEST_ASSERT_EQUAL_STRING("fire-trail", out.pattern);
+  TEST_ASSERT_EQUAL_STRING("fire-trail", out.lastLitPattern);
+  TEST_ASSERT_EQUAL(24, out.brightness);
+  TEST_ASSERT_TRUE(out.calibration.neutralSet);
+  TEST_ASSERT_EQUAL_FLOAT(1.5f, out.calibration.neutralDeg);
+  TEST_ASSERT_EQUAL_FLOAT(-18.0f, out.calibration.heelDeg);
+  TEST_ASSERT_EQUAL_FLOAT(34.0f, out.calibration.toeDeg);
+  TEST_ASSERT_EQUAL_UINT16(107, out.strip.count);
+  TEST_ASSERT_EQUAL_UINT16(72, out.strip.toe);
+  TEST_ASSERT_EQUAL_UINT16(19, out.strip.heel);
+
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettingsV3(sampleV3Record(1, 1), BOUNDS, out));
+  TEST_ASSERT_EQUAL_STRING("flow", out.pattern);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettingsV3(sampleV3Record(3, 2), BOUNDS, out));
+  TEST_ASSERT_EQUAL_STRING("off", out.pattern);
+  TEST_ASSERT_EQUAL_STRING("fire-trail", out.lastLitPattern);
+}
+
+static void test_a_v3_record_rewrites_as_the_current_version() {
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettingsV3(sampleV3Record(3, 2), BOUNDS, out));
+  Settings again = defaultSettings(16, DEFAULT_STRIP);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(encodeSettings(out), BOUNDS, again));
+  TEST_ASSERT_EQUAL_STRING("off", again.pattern);
+  TEST_ASSERT_EQUAL_STRING("fire-trail", again.lastLitPattern);
+  TEST_ASSERT_EQUAL_FLOAT(34.0f, again.calibration.toeDeg);
+  TEST_ASSERT_EQUAL_UINT16(107, again.strip.count);
+}
+
+static void test_a_v3_record_with_an_impossible_pattern_number_is_invalid() {
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettingsV3(sampleV3Record(99, 1), BOUNDS, out));
+  TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettingsV3(sampleV3Record(1, 3), BOUNDS, out));
+}
+
+static void test_a_damaged_v3_record_is_corrupt_and_leaves_output_alone() {
+  SettingsRecordV3 record = sampleV3Record(2, 2);
+  record.brightness ^= 0x01;
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  TEST_ASSERT_EQUAL(SettingsDecode::Corrupt, decodeSettingsV3(record, BOUNDS, out));
+  TEST_ASSERT_EQUAL_STRING("flow", out.pattern);
+}
+
 // ── Records saved before the strip layout was a setting ─────────────────
 
 static SettingsRecordV2 sampleV2Record() {
@@ -204,8 +290,8 @@ static SettingsRecordV2 sampleV2Record() {
   memset(&record, 0, sizeof(record));
   record.magic = SETTINGS_MAGIC;
   record.version = 2;
-  record.pattern = (uint8_t)PatternId::FireTrail;
-  record.lastLitPattern = (uint8_t)PatternId::FireTrail;
+  record.pattern = LEGACY_PATTERN_FIRE_TRAIL;
+  record.lastLitPattern = LEGACY_PATTERN_FIRE_TRAIL;
   record.brightness = 40;
   record.calibratedPoses = SETTINGS_POSE_NEUTRAL | SETTINGS_POSE_HEEL | SETTINGS_POSE_TOE;
   record.neutralDeg = 1.5f;
@@ -218,7 +304,7 @@ static SettingsRecordV2 sampleV2Record() {
 static void test_v2_record_keeps_its_settings_and_takes_the_default_strip() {
   Settings out = defaultSettings(16, DEFAULT_STRIP);
   TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettingsV2(sampleV2Record(), BOUNDS, out));
-  TEST_ASSERT_EQUAL(PatternId::FireTrail, out.pattern);
+  TEST_ASSERT_EQUAL_STRING("fire-trail", out.pattern);
   TEST_ASSERT_EQUAL(40, out.brightness);
   TEST_ASSERT_TRUE(out.calibration.neutralSet);
   TEST_ASSERT_EQUAL_FLOAT(1.5f, out.calibration.neutralDeg);
@@ -306,8 +392,9 @@ int main(int, char**) {
   RUN_TEST(test_flipped_bit_reads_as_corrupt_and_leaves_output_alone);
   RUN_TEST(test_wrong_magic_reads_as_corrupt);
   RUN_TEST(test_other_version_reads_as_unsupported);
-  RUN_TEST(test_unknown_pattern_reads_as_invalid);
-  RUN_TEST(test_off_is_not_a_valid_pattern_to_return_to);
+  RUN_TEST(test_an_uploaded_recipes_name_round_trips);
+  RUN_TEST(test_a_garbled_name_reads_as_the_default_and_keeps_the_rest);
+  RUN_TEST(test_off_is_not_a_pattern_to_return_to);
   RUN_TEST(test_brightness_outside_the_build_limits_reads_as_invalid);
   RUN_TEST(test_unusable_neutral_offset_reads_as_invalid);
   RUN_TEST(test_unusable_heel_or_toe_pose_reads_as_invalid);
@@ -315,6 +402,10 @@ int main(int, char**) {
   RUN_TEST(test_a_backward_mounts_poses_round_trip);
   RUN_TEST(test_a_mirrored_strip_layout_round_trips);
   RUN_TEST(test_unusable_strip_layout_reads_as_invalid);
+  RUN_TEST(test_v3_record_keeps_everything_and_turns_numbers_into_names);
+  RUN_TEST(test_a_v3_record_rewrites_as_the_current_version);
+  RUN_TEST(test_a_v3_record_with_an_impossible_pattern_number_is_invalid);
+  RUN_TEST(test_a_damaged_v3_record_is_corrupt_and_leaves_output_alone);
   RUN_TEST(test_v2_record_keeps_its_settings_and_takes_the_default_strip);
   RUN_TEST(test_damaged_v2_record_is_corrupt_and_leaves_output_alone);
   RUN_TEST(test_v2_record_with_bad_values_is_invalid);

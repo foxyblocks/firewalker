@@ -5,7 +5,7 @@
 // A Pattern is a runtime-selectable visual behavior of the strip (flow,
 // fire-trail, ...). The app holds several and the remote switches between them
 // live. Each frame the app feeds the pattern the fused orientation, whether a
-// stomp fired this tick, and the elapsed time, and the pattern renders to the
+// stomp fired this tick, the live sound level, and elapsed time, and the pattern renders to the
 // shared strip. Brightness belongs to the caller, so patterns never set it. See
 // ADR-0002.
 
@@ -17,6 +17,7 @@ struct PatternInput {
   bool          stomp;         // true on the tick a stomp fires
   float         stompStrength; // 0..1 force of that stomp (valid when stomp is true)
   unsigned long dt;            // ms since the previous update
+  float         audioLevel = 0.0f; // normalized 0..1 sound level; silence until capture supplies it
 };
 
 class Pattern {

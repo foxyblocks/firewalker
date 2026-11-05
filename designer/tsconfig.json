@@ -19,13 +19,16 @@
     "types": [
       "vite/client",
       "vitest/globals",
-      "node"
+      "node",
+      "web-bluetooth",
+      "w3c-web-serial"
     ],
     "allowImportingTsExtensions": true
   },
   "include": [
     "src",
     "server",
+    "scripts",
     "vite.config.ts"
   ]
 }
