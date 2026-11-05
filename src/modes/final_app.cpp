@@ -35,8 +35,12 @@ using namespace Firewalker;
 static constexpr SettingsBounds SETTINGS_BOUNDS = {LED_BRIGHTNESS_MIN, LED_BRIGHTNESS_MAX,
                                                    TILT_LIMITS.maxNeutralDeg, STRIP_MAX_PIXELS,
                                                    LED_BRIGHTNESS_SOFT_CAP};
+// Every file in src/modes/ compiles into every build, and bench builds set their own brightness
+// with a build flag (up to 255, from ./cli --brightness), so this check is for the app build only.
+#if defined(FIREWALKER_MODE_FINAL_APP)
 static_assert(LED_BRIGHTNESS <= LED_BRIGHTNESS_SOFT_CAP,
               "A new boot starts with the soft cap on, so its default brightness must fit under it");
+#endif
 static constexpr PoseCaptureLimits CAPTURE_LIMITS = {
     CALIBRATION_WINDOW_MS, CALIBRATION_NO_SAMPLE_MS, CALIBRATION_MIN_SAMPLES,
     CALIBRATION_MAX_SPREAD_DEG};
