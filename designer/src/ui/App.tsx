@@ -57,6 +57,8 @@ export function App() {
   const boots = useMemo(createBootConnections, []);
   const [route, setRoute] = useState(readRoute);
 
+  useEffect(() => boots.observeActivity(), [boots]);
+
   useEffect(() => {
     void library.load();
     const onHash = () => setRoute(readRoute());

@@ -50,6 +50,12 @@ reconnect by themselves.
 Each boot holds one connection at a time, so a boot connected to the Mac is invisible to
 the iPhone until the Mac lets go.
 
+Connections pause after two minutes without input, and when the app is hidden, so
+another tool can connect. Labels and the last report stay on screen; interact or tap
+Reconnect to wake the connection. Status and motion updates don't keep it awake.
+The default lives in [`../config/control-surfaces.json`](../config/control-surfaces.json);
+see [`../config/README.md`](../config/README.md) for when edits take effect.
+
 ### In Chrome over USB
 
 Plug a boot into the computer, open <http://localhost:5173> in a Chromium desktop browser, and

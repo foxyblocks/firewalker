@@ -11,6 +11,8 @@
  *
  * Text goes through the `Transport` seam (transport/transport.ts), so everything here
  * runs the same against a real boot and against `fakeBoot.ts`.
+ * `boots.ts` owns human inactivity: a sleeping client keeps its last report and
+ * device identity, but releases its transport and stops retrying until woken.
  */
 
 import {
@@ -41,7 +43,7 @@ const PREVIEW_REFRESH_MS = 20000;
 const SLIDER_FIELDS: ReadonlySet<keyof Pending> = new Set(["brightness", "leds", "toe", "heel"]);
 
 /** "needs-access" means only a tap can bring it back, so nothing retries (AccessLostError). */
-export type LinkState = "idle" | "connecting" | "online" | "reconnecting" | "needs-access";
+export type LinkState = "idle" | "sleeping" | "connecting" | "online" | "reconnecting" | "needs-access";
 
 export interface Pending {
   pattern?: string;
@@ -95,6 +97,8 @@ export class BootClient {
   private wanted = false;
   /** True while a connection attempt is running. A boot only gets one at a time. */
   private opening = false;
+  /** A released USB port must finish closing before another attempt opens it. */
+  private closing: Promise<void> = Promise.resolve();
   private wantDebug = false;
   private dragging = false;
   private desiredBrightness = 0;
@@ -141,7 +145,7 @@ export class BootClient {
 
   // ── Connection ─────────────────────────────────────────────────────────
 
-  /** Starts connecting, and keeps the boot connected until `disconnect`. */
+  /** Starts connecting, and keeps retrying until `pause` or `disconnect`. */
   connect(): void {
     this.wanted = true;
     if (this.link || this.opening) return;
@@ -151,15 +155,57 @@ export class BootClient {
 
   /** Ends the connection on purpose. The boot keeps running what it's running. */
   async disconnect(): Promise<void> {
+    return this.endConnection("idle");
+  }
+
+  /** Lets another client use this boot without forgetting its last report. */
+  pause(): void {
+    if (this.wanted) void this.endConnection("sleeping");
+  }
+
+  /** Read-only polling doesn't block sleep; pending writes and captures do. */
+  busy(): boolean {
+    return this.capture !== null || this.inFlight?.expect === "ack" || this.queue.some((job) => job.expect === "ack");
+  }
+
+  private async endConnection(state: "idle" | "sleeping"): Promise<void> {
     this.wanted = false;
     this.generation++;
     this.clearReconnect();
     this.stopPreviewRefresh();
-    this.wantPreview = false;
     const link = this.link;
+    const clearPreview = this.wantPreview || this.state.status?.preview;
+    if (state === "idle") this.wantPreview = false;
+    if (link) {
+      this.closing = (async () => {
+        // Temporary displays and motion output belong to this active session. Clear
+        // them before releasing the link; saved patterns and settings keep running.
+        // A dead write mustn't prevent releasing the connection we're pausing.
+        let giveUp: ReturnType<typeof setTimeout> | undefined;
+        let releasing = true;
+        try {
+          if (state === "sleeping") {
+            const cleanup = async () => {
+              if (this.state.status?.debug) await link.write(commands.debug(false)).catch(() => undefined);
+              if (releasing && clearPreview) await link.write(commands.stripPreview(false)).catch(() => undefined);
+            };
+            await Promise.race([
+              cleanup(),
+              new Promise<void>((resolve) => { giveUp = setTimeout(resolve, COMMAND_TIMEOUT_MS); }),
+            ]);
+          }
+        } finally {
+          releasing = false;
+          clearTimeout(giveUp);
+          await link.close().catch(() => undefined);
+        }
+      })();
+    }
+    // Publish the closing promise before notifying subscribers. A subscriber can
+    // request a wake immediately, and its new attempt must wait for this release.
     this.teardown();
-    this.update({ link: "idle" });
-    await link?.close().catch(() => undefined);
+    this.update({ link: state });
+    await this.closing;
   }
 
   /**
@@ -190,6 +236,12 @@ export class BootClient {
     const generation = ++this.generation;
     this.splitter.reset();
     try {
+      await this.closing;
+      if (generation !== this.generation || !this.wanted) {
+        this.opening = false;
+        if (this.wanted) this.scheduleReconnect();
+        return;
+      }
       const link = await this.transport.open(this.deviceId, {
         onData: (text) => {
           if (generation === this.generation) this.onData(text);
@@ -337,8 +389,10 @@ export class BootClient {
       this.reconnectDelay = RECONNECT_MIN_MS;
       // Debug stays on after a disconnect, so clean up after an earlier session.
       if (status.debug && !this.wantDebug) this.setDebug(false);
+      if (!status.debug && this.wantDebug) this.setDebug(true);
       // Bring back a preview the connection dropped, or clear one left by an earlier session.
-      if (this.wantPreview || status.preview) this.sendPreview();
+      if (this.wantPreview) this.setStripPreview(true);
+      else if (status.preview) this.sendPreview();
     }
 
     if (this.inFlight?.expect === "status") this.finishJob();

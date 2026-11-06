@@ -211,6 +211,7 @@ dedicated 5 V supply with grounds tied together.
 ## Project conventions
 
 - Hardware knobs live in [`include/config.h`](include/config.h).
+- Settings shared by the remote, designer, and CLI live in [`config/control-surfaces.json`](config/control-surfaces.json). Connections pause after two minutes without input; see [`config/README.md`](config/README.md) to change or disable the timeout.
 - Domain language: [`CONTEXT.md`](CONTEXT.md). Decisions: [`docs/adr/`](docs/adr).
 - Agent, Linear, and triage setup: [`CLAUDE.md`](CLAUDE.md) and `docs/agents/`.
 

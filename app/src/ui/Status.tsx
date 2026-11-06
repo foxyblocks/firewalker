@@ -96,11 +96,13 @@ function BootDetails({
           <LinkDot link={state.link} />
           {state.link === "online"
             ? "Connected"
-            : state.link === "connecting"
-              ? "Connecting"
-              : state.link === "needs-access"
-                ? "Needs reconnecting"
-                : "Reconnecting"}
+            : state.link === "sleeping"
+              ? "Paused — last reported settings"
+              : state.link === "connecting"
+                ? "Connecting"
+                : state.link === "needs-access"
+                  ? "Needs reconnecting"
+                  : "Reconnecting"}
         </span>
       </div>
 

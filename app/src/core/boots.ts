@@ -14,6 +14,7 @@
 import { BootClient, type BootState } from "./boot";
 import { BOOT_NAME_PREFIX, PROTOCOL_VERSION } from "./protocol";
 import type { FoundBoot, Transport } from "../transport/transport";
+import { Inactivity, observeActivity } from "../../../shared/inactivity";
 
 export type Side = "left" | "right";
 export type Target = "both" | Side;
@@ -82,6 +83,13 @@ export class BootsStore {
   private readonly listeners = new Set<() => void>();
   private needsUpdate: RemoteView["needsUpdate"];
   private version = 0;
+  private readonly inactivity = new Inactivity({
+    busy: () => [...this.connections.values()].some(({ client }) => client.busy()) || this.blinking.size > 0,
+    pause: () => this.connections.forEach(({ client }) => client.pause()),
+    wake: () => this.connections.forEach(({ client }) => {
+      if (client.getState().link === "sleeping") client.connect();
+    }),
+  });
 
   constructor(
     readonly transport: Transport,
@@ -300,6 +308,19 @@ export class BootsStore {
     this.connections.forEach(({ client }) => client.resume());
   }
 
+  /** The app frame owns these listeners; no status or preview traffic renews them. */
+  observeActivity(): () => void {
+    return observeActivity(this.inactivity);
+  }
+
+  paused(): boolean {
+    return [...this.connections.values()].some(({ client }) => client.getState().link === "sleeping");
+  }
+
+  activity(): void {
+    this.inactivity.activity();
+  }
+
   /** The sides the current tab controls. */
   targetSides(): Side[] {
     return this.target === "both" ? this.sides() : this.sides().filter((side) => side === this.target);
@@ -381,7 +402,7 @@ export class BootsStore {
       brightness: first?.pending.brightness ?? first?.status?.brightness ?? 0,
       maxBrightness: online.length > 0 ? Math.min(...online.map(({ state }) => state.status!.maxBrightness)) : 0,
       needsUpdate: this.needsUpdate,
-      offline: sidesWhere((state) => state.link !== "online" && state.link !== "needs-access"),
+      offline: sidesWhere((state) => state.link !== "online" && state.link !== "needs-access" && state.link !== "sleeping"),
       accessLost: sidesWhere((state) => state.link === "needs-access"),
       saving: online.some(({ state }) => state.status!.saved === false && !state.status!.saveFailed),
       saveFailed: sidesWhere((state) => state.link === "online" && state.status?.saveFailed === true),

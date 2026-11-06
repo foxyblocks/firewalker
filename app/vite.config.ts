@@ -7,6 +7,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   base: "./",
   plugins: [react()],
-  server: { host: "localhost", port: 5173 },
+  // Both web tools import repo-wide control defaults and inactivity logic.
+  server: { host: "localhost", port: 5173, fs: { allow: [".."] } },
   test: { environment: "node", globals: true },
 });

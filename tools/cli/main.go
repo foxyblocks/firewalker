@@ -13,15 +13,12 @@
 package main
 
 import (
-	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -29,6 +26,7 @@ import (
 
 	"firewalker/cli/internal/bench"
 	"firewalker/cli/internal/boards"
+	"firewalker/cli/internal/controlconfig"
 	"firewalker/cli/internal/flash"
 	"firewalker/cli/internal/link"
 	"firewalker/cli/internal/protocol"
@@ -401,6 +399,14 @@ func runApp(ctx context.Context, cmd *cobra.Command, o *bench.Options) error {
 // flashAndFollow finishes every flash the same way: stop at a dry run, name the target,
 // run PlatformIO, note what's on the board now, and optionally stay attached.
 func flashAndFollow(ctx context.Context, out io.Writer, th *theme.Theme, cache *boards.Cache, o *bench.Options, job flash.Job, target *boards.Board, label string, follow bool) error {
+	var idleTimeout time.Duration
+	if follow && !o.BuildOnly && !o.DryRun {
+		var err error
+		idleTimeout, err = controlconfig.Read(o.RepoRoot)
+		if err != nil {
+			return err
+		}
+	}
 	if o.DryRun {
 		fmt.Fprintln(out, "Dry run: no compilation, upload, or firmware-source changes.")
 		return nil
@@ -422,71 +428,7 @@ func flashAndFollow(ctx context.Context, out io.Writer, th *theme.Theme, cache *
 		fmt.Fprintln(out, th.Dim.Render("Couldn't remember what's on this board: "+err.Error()))
 	}
 	if follow {
-		streamBoard(ctx, out, th, target.Serial)
+		streamBoard(ctx, out, th, target.Serial, idleTimeout)
 	}
 	return nil
-}
-
-// streamBoard stays attached to a board and prints what it says until Ctrl-C, which
-// closes the port and leaves the board running. People get the log's colors and times.
-// Anything else, such as a pipe into a script, gets the board's raw lines. In a terminal
-// a typed line goes to the board, so commands like `debug on` still work here.
-func streamBoard(ctx context.Context, out io.Writer, th *theme.Theme, serial string) {
-	fmt.Fprintf(out, "Streaming from %s. Ctrl-C stops the stream and leaves the board running.\n", serial)
-
-	var mu sync.Mutex
-	var current link.Transport
-	if term.IsTerminal(int(os.Stdin.Fd())) {
-		go func() {
-			scanner := bufio.NewScanner(os.Stdin)
-			for scanner.Scan() {
-				mu.Lock()
-				if current != nil {
-					_ = current.Send(scanner.Text())
-				}
-				mu.Unlock()
-			}
-		}()
-	}
-
-	lastProblem := ""
-	note := func(kind theme.Kind, text string) {
-		if th.Colored() {
-			fmt.Fprintln(out, th.Line(time.Now(), kind, text))
-		} else {
-			fmt.Fprintln(out, text)
-		}
-	}
-	link.Follow(ctx, link.ForBoard(serial), 500*time.Millisecond, func(e link.Event) {
-		switch e.Kind {
-		case link.EventConnected:
-			mu.Lock()
-			current = e.Link
-			mu.Unlock()
-			if lastProblem != "" {
-				note(theme.KindInfo, "Attached to "+serial)
-			}
-			lastProblem = ""
-		case link.EventLine:
-			if !th.Colored() {
-				fmt.Fprintln(out, e.Line)
-				return
-			}
-			kind, text := theme.Describe(protocol.Classify(e.Line))
-			fmt.Fprintln(out, th.Line(time.Now(), kind, text))
-		case link.EventDisconnected:
-			mu.Lock()
-			current = nil
-			mu.Unlock()
-			lastProblem = "disconnected"
-			note(theme.KindInfo, "Lost "+serial+". Waiting for it to come back.")
-		case link.EventOpenFailed:
-			// The board is usually gone for a moment after an upload, so this repeats
-			// until it returns. One line per distinct reason is enough.
-			if message := e.Err.Error(); message != lastProblem && !errors.Is(ctx.Err(), context.Canceled) {
-				lastProblem = message
-				note(theme.KindInfo, "Waiting for "+serial+": "+message)
-			}
-		}
-	})
 }

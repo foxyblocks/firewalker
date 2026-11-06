@@ -5,11 +5,15 @@
 // When a connection fails, this also works out why, because "something" holding a boot is the usual trouble.
 // Over USB it asks the dev server which program has the port (portHolders.ts), and can close our own bench
 // tools. Over Bluetooth nothing can say who's connected, so it says who it most likely is.
+// Human activity is shared with the remote (shared/inactivity.ts). Pausing keeps each
+// boot's identity and recipe list, while releasing the actual link. Waking opens a
+// fresh session and reads the boot again before a Send or Delete can change anything.
 
 import { BootSession, BYTES_PER_BLUETOOTH_LINE, BYTES_PER_USB_LINE, type SendProgress } from "./bootSession";
 import { devServerPorts, type BootPortsClient, type PortHolder } from "./portHolders";
 import { compileRecipe } from "../recipe/compile";
 import type { Recipe } from "../recipe/types";
+import { Inactivity, observeActivity } from "../../../shared/inactivity";
 
 type PickMethod = "bluetooth" | "usb";
 
@@ -33,6 +37,7 @@ export interface ConnectedBoot {
   // Whether `activity` reports a failure.
   failed: boolean;
   sending: boolean;
+  paused: boolean;
   // What's in this boot's upload slots. Null until it's known.
   uploads: string[] | null;
   slots: number | null;
@@ -57,6 +62,9 @@ interface LiveBoot {
   state: ConnectedBoot;
   session: BootSession;
   close(): Promise<void>;
+  closing: Promise<void>;
+  opening: Promise<void> | null;
+  generation: number;
 }
 
 const progressText = (progress: SendProgress): string => {
@@ -69,6 +77,15 @@ export class BootConnections {
   private transport: BootTransport | null = null;
   private live = new Map<string, LiveBoot>();
   private listeners = new Set<() => void>();
+  private readonly inactivity = new Inactivity({
+    busy: () => this.snapshot.connecting || [...this.live.values()].some((boot) => boot.state.sending || boot.opening !== null),
+    pause: () => this.pause(),
+    wake: () => {
+      for (const boot of this.live.values()) {
+        if (boot.state.paused) void this.reconnect(boot.state.deviceId);
+      }
+    },
+  });
   private snapshot: ConnectionsState = { ready: false, pickers: [], error: null, hint: null, holders: [], freeing: null, connecting: false, boots: [] };
 
   constructor(
@@ -82,6 +99,11 @@ export class BootConnections {
   };
 
   getSnapshot = (): ConnectionsState => this.snapshot;
+
+  /** Called by the app frame, so editing a recipe also counts as deliberate use. */
+  observeActivity(): () => void {
+    return observeActivity(this.inactivity);
+  }
 
   private update(changes: Partial<ConnectionsState>): void {
     this.snapshot = { ...this.snapshot, boots: [...this.live.values()].map((boot) => boot.state), ...changes };
@@ -133,19 +155,27 @@ export class BootConnections {
       if (this.live.has(found.deviceId)) return;
 
       let session: BootSession | null = null;
+      let boot: LiveBoot | null = null;
       const link = await transport.open(found.deviceId, {
         onData: (text) => session?.receive(text),
-        onClosed: () => this.forget(found.deviceId),
+        onClosed: () => {
+          if (boot && boot.generation === 0) this.forget(found.deviceId);
+        },
       });
       const bytesPerLine = found.deviceId.startsWith("usb:") ? BYTES_PER_USB_LINE : BYTES_PER_BLUETOOTH_LINE;
       session = new BootSession((line) => link.write(line), bytesPerLine);
-      const status = await session.status();
+      const status = await session.status().catch(async (error: unknown) => {
+        await link.close().catch(() => undefined);
+        throw error;
+      });
       const name = typeof status.id === "string" ? `Firewalker-${status.id}` : found.name;
-      this.live.set(found.deviceId, {
+      boot = {
         session,
         close: () => link.close(),
-        state: { deviceId: found.deviceId, name, activity: "", failed: false, sending: false, uploads: null, slots: null },
-      });
+        closing: Promise.resolve(), opening: null, generation: 0,
+        state: { deviceId: found.deviceId, name, activity: "", failed: false, sending: false, paused: false, uploads: null, slots: null },
+      };
+      this.live.set(found.deviceId, boot);
       this.update({});
       await this.refreshUploads(found.deviceId);
     } catch (error) {
@@ -190,6 +220,7 @@ export class BootConnections {
   private forget(deviceId: string): void {
     const boot = this.live.get(deviceId);
     if (!boot) return;
+    boot.generation++;
     boot.session.fail("The connection to the boot dropped.");
     this.live.delete(deviceId);
     this.update({});
@@ -200,6 +231,65 @@ export class BootConnections {
     if (!boot) return;
     this.forget(deviceId);
     await boot.close().catch(() => undefined);
+  }
+
+  private pause(): void {
+    for (const boot of this.live.values()) {
+      if (boot.state.paused) continue;
+      // Ignore the close callback from this deliberate release. The row stays here
+      // so returning to the designer doesn't require picking the same boot again.
+      boot.generation++;
+      boot.session.fail("Connection paused.");
+      boot.state = { ...boot.state, paused: true, activity: "Paused while idle. Send reconnects.", failed: false };
+      boot.closing = boot.close().catch(() => undefined);
+    }
+    this.update({});
+  }
+
+  /** One reconnect per boot; a wake and a Send share the same attempt. */
+  async reconnect(deviceId: string): Promise<void> {
+    const boot = this.live.get(deviceId);
+    if (!boot || !this.transport) return;
+    if (boot.opening) return boot.opening;
+    if (!boot.state.paused) return;
+    boot.opening = this.reopen(boot).catch((error: Error) => {
+      this.updateBoot(deviceId, { failed: true, activity: `Couldn't reconnect. ${error.message}` });
+    }).finally(() => {
+      boot.opening = null;
+      this.update({});
+    });
+    return boot.opening;
+  }
+
+  private async reopen(boot: LiveBoot): Promise<void> {
+    const deviceId = boot.state.deviceId;
+    const generation = ++boot.generation;
+    this.updateBoot(deviceId, { activity: "Reconnecting…", failed: false });
+    await boot.closing;
+    if (this.live.get(deviceId) !== boot) return;
+    let session: BootSession | null = null;
+    const link = await this.transport!.open(deviceId, {
+      onData: (text) => session?.receive(text),
+      onClosed: () => {
+        if (this.live.get(deviceId) === boot && boot.generation === generation && !boot.state.paused) this.forget(deviceId);
+      },
+    });
+    try {
+      session = new BootSession((line) => link.write(line), deviceId.startsWith("usb:") ? BYTES_PER_USB_LINE : BYTES_PER_BLUETOOTH_LINE);
+      await session.status();
+      if (this.live.get(deviceId) !== boot || boot.generation !== generation) {
+        throw new Error("This connection was replaced.");
+      }
+      boot.session = session;
+      boot.close = () => link.close();
+      this.updateBoot(deviceId, { paused: false, activity: "", failed: false });
+      await this.refreshUploads(deviceId);
+    } catch (error) {
+      // Prevent closing a failed attempt from forgetting its retained row.
+      if (boot.generation === generation) boot.generation++;
+      await link.close().catch(() => undefined);
+      throw error;
+    }
   }
 
   private async refreshUploads(deviceId: string): Promise<void> {
@@ -214,6 +304,8 @@ export class BootConnections {
   async send(deviceId: string, recipe: Recipe): Promise<void> {
     const boot = this.live.get(deviceId);
     if (!boot || boot.state.sending) return;
+    await this.reconnect(deviceId);
+    if (this.live.get(deviceId) !== boot || boot.state.paused || boot.state.sending) return;
     const compiled = compileRecipe(recipe);
     if (!compiled.ok) {
       this.updateBoot(deviceId, { activity: compiled.errors[0] ?? "This recipe can't run on a boot.", failed: true });
@@ -225,11 +317,11 @@ export class BootConnections {
     );
     if (result.ok) {
       this.updateBoot(deviceId, {
-        sending: false,
         failed: false,
         activity: result.alreadyThere ? `${recipe.name} was already on this boot, so it's selected now.` : `${recipe.name} is on the strip.`,
       });
       await this.refreshUploads(deviceId);
+      this.updateBoot(deviceId, { sending: false });
     } else {
       this.updateBoot(deviceId, { sending: false, failed: true, activity: result.error });
     }
@@ -237,9 +329,13 @@ export class BootConnections {
 
   async deleteUpload(deviceId: string, name: string): Promise<void> {
     const boot = this.live.get(deviceId);
-    if (!boot) return;
+    if (!boot || boot.state.sending) return;
+    await this.reconnect(deviceId);
+    if (this.live.get(deviceId) !== boot || boot.state.paused || boot.state.sending) return;
+    this.updateBoot(deviceId, { sending: true });
     const failure = await boot.session.deleteRecipe(name).catch((error: Error) => error.message);
     this.updateBoot(deviceId, { activity: failure ?? `Deleted ${name} from this boot.`, failed: failure !== null });
     await this.refreshUploads(deviceId);
+    this.updateBoot(deviceId, { sending: false });
   }
 }

@@ -77,7 +77,7 @@ export function Remote({
         />
         <div className="dock-row">
           <div className="dock-card">
-            <span className="card-name">Lights {view.on ? "on" : "off"}</span>
+            <span className="card-name">{view.controllable ? `Lights ${view.on ? "on" : "off"}` : "Lights —"}</span>
             <Toggle
               on={view.on}
               label="Lights"
@@ -181,6 +181,8 @@ function SaveLine({ view, names }: { view: RemoteView; names: (sides: Side[]) =>
 }
 
 function CalibrateHint({ view, names }: { view: RemoteView; names: (sides: Side[]) => string }) {
+  // Without a live report, an empty list means unknown rather than calibrated.
+  if (!view.controllable) return <span className="card-hint">Reconnect to calibrate</span>;
   if (view.uncalibrated.length === 0) return <span className="card-hint">Neutral set</span>;
   return (
     <span className="card-hint">

@@ -38,6 +38,8 @@ export function App({ store }: { store: BootsStore }) {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [store, checkRadio]);
 
+  useEffect(() => store.observeActivity(), [store]);
+
   if (radio !== "on") {
     return <RadioPrompt radio={radio} onRetry={checkRadio} onOpenSettings={() => void store.transport.openSettings()} />;
   }
@@ -45,6 +47,12 @@ export function App({ store }: { store: BootsStore }) {
   return (
     <div className="app">
       {store.transport.simulated && <div className="simulated">Simulated boots, not real ones</div>}
+      {store.paused() && (
+        <div className="banner banner-warn banner-action" role="status">
+          <span>Connections paused while idle. Your boots keep running.</span>
+          <button type="button" className="button" onClick={() => store.activity()}>Reconnect</button>
+        </div>
+      )}
       {screen === "find" && <FindBoots store={store} onDone={() => setScreen("remote")} />}
       {screen === "status" && <Status store={store} onBack={() => setScreen("remote")} />}
       {screen === "remote" && (
