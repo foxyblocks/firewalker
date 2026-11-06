@@ -23,6 +23,9 @@ const __FlashStringHelper* FlowPattern::name() const { return F("flow"); }
 
 void FlowPattern::enter() {
   buildPositions();
+  // Start at red with no stomp effects left over from the previous run.
+  hue_ = 0.0f;
+  flashRemainMs_ = 0.0f;
   for (uint8_t k = 0; k < FLOW_MAX_FRONTS; k++) fronts_[k].active = false;
 }
 

@@ -26,8 +26,8 @@ class Pattern {
 
   virtual const __FlashStringHelper* name() const = 0;
 
-  // Called when this pattern becomes active, and again when the strip's layout changes
-  // while it's active. Resets per-pattern state and picks up the current layout.
+  // Starts the pattern from the beginning, even when it is already active.
+  // Resets animation state and picks up the current strip layout.
   virtual void enter() {}
 
   // Advance one frame and render to the strip.

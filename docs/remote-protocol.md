@@ -53,7 +53,7 @@ aren't JSON.
 |---|---|
 | `status` | Reports the current state |
 | `patterns` | Lists the patterns this boot can show |
-| `pattern <name>`, `pattern off` | Selects a pattern and remembers it. `patterns` lists the names |
+| `pattern <name>`, `pattern off` | Selects and remembers a pattern, restarting it on every selection. `patterns` lists the names. `pattern off` blanks the strip |
 | `power on`, `power off` | Off blanks the strip. On returns to the last lit pattern |
 | `brightness <n>` | Sets brightness, from 1 to `maxBrightness`, which the soft cap lowers while it's on |
 | `cap on`, `cap off` | Turns the soft brightness cap on or off and remembers it. On brings a brightness over the cap down to it. See [Soft brightness cap](#soft-brightness-cap) |
