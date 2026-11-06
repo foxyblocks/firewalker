@@ -13,6 +13,7 @@
 
 #include "config.h"
 #include "firewalker_core.h"
+#include "firewalker_audio.h"
 #include "firewalker_calibration.h"
 #include "firewalker_imu.h"
 #include "firewalker_pattern_list.h"
@@ -111,6 +112,16 @@ static void sendStatus() {
 static void sendAck(CommandType type, bool ok, const char* error = nullptr) {
   char line[REMOTE_LINE_MAX];
   formatAck(line, sizeof(line), type, ok, error);
+  remoteSend(line);
+}
+
+static void sendAudioConfig() {
+  char line[REMOTE_LINE_MAX];
+  snprintf(line, sizeof(line),
+      "{\"t\":\"audio-config\",\"ready\":%s,\"noiseFloor\":%u,\"sensitivity\":%u,\"calibrating\":%s,\"saved\":%s}",
+      audioReady() ? "true" : "false", (unsigned)settings.audioNoiseFloor,
+      (unsigned)settings.audioSensitivity, audioCalibrating() ? "true" : "false",
+      !saveScheduler.dirty() && !saveFailed ? "true" : "false");
   remoteSend(line);
 }
 
@@ -327,6 +338,37 @@ static void handleCommand(const Command& command) {
       sendAck(CommandType::Invalid, false, command.error);
       return;
 
+    case CommandType::Audio:
+      sendAudioConfig();
+      return;
+
+    case CommandType::AudioSensitivity:
+      if (audioCalibrating()) {
+        sendAck(command.type, false, "calibration-in-progress");
+        return;
+      }
+      settings.audioSensitivity = (uint8_t)command.value;
+      audioConfigure(settings.audioNoiseFloor, settings.audioSensitivity);
+      saveScheduler.markChanged(millis());
+      sendAck(command.type, true);
+      sendAudioConfig();
+      return;
+
+    case CommandType::AudioCalibrate:
+      // A repeated line after a lost reply adopts the existing capture.
+      if (audioCalibrating()) {
+        sendAck(command.type, true);
+        sendAudioConfig();
+        return;
+      }
+      if (!audioStartQuietCalibration()) {
+        sendAck(command.type, false, audioReady() ? "calibration-in-progress" : "audio-unavailable");
+        return;
+      }
+      sendAck(command.type, true);
+      sendAudioConfig();
+      return;
+
     case CommandType::Status:
       sendStatus();
       return;
@@ -463,6 +505,17 @@ static void sendMotionIfDue(unsigned long now) {
   formatMotion(line, sizeof(line), imuTiltFwd(), imuRawAngleDeg(), imuLatest().mag, accelPeak,
                imuGyroMagnitude(), stompSinceReport, imuStompStrength(), slowestFrameUs);
   remoteSend(line, RemotePriority::Telemetry);
+  const AudioSample& audio = audioLatest();
+  char levelText[16], rmsText[16], meanText[16];
+  formatFixed2(levelText, sizeof(levelText), audio.level);
+  formatFixed2(rmsText, sizeof(rmsText), audio.block.rms);
+  formatFixed2(meanText, sizeof(meanText), audio.block.mean);
+  snprintf(line, sizeof(line),
+      "{\"t\":\"audio\",\"ready\":%s,\"level\":%s,\"rms\":%s,\"mean\":%s,\"low\":%u,\"high\":%u,\"blocks\":%lu,\"captureUs\":%lu}",
+      audioReady() ? "true" : "false", levelText, rmsText, meanText,
+      (unsigned)audio.block.low, (unsigned)audio.block.high,
+      (unsigned long)audio.blocks, (unsigned long)audio.captureUs);
+  remoteSend(line, RemotePriority::Telemetry);
   stompSinceReport = false;
   accelPeak = 0.0f;
   slowestFrameUs = 0;
@@ -527,6 +580,7 @@ static void renderIfDue(unsigned long now) {
   input.stomp = stompPending;
   input.stompStrength = imuStompStrength();
   input.dt = now - lastPatternUpdateMs;
+  input.audioLevel = audioLevel();
   lastPatternUpdateMs = now;
   stompPending = false;
   const uint32_t updateStart = micros();
@@ -542,6 +596,8 @@ void setup() {
   Serial.print(F("[firewalker] settings: "));
   Serial.println(loaded);
 
+  audioConfigure(settings.audioNoiseFloor, settings.audioSensitivity);
+  audioBegin();
   imuBegin();
   imuSetCalibration(settings.calibration);
 
@@ -555,6 +611,14 @@ void setup() {
 }
 
 void loop() {
+  audioUpdate();
+  uint8_t quietFloor;
+  if (audioTakeQuietCalibration(quietFloor)) {
+    settings.audioNoiseFloor = quietFloor;
+    audioConfigure(settings.audioNoiseFloor, settings.audioSensitivity);
+    saveScheduler.markChanged(millis());
+    sendAudioConfig();
+  }
   if (imuUpdate()) {
     if (imuTakeStomp()) {
       stompPending = true;

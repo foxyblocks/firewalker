@@ -407,7 +407,7 @@ export class BootsStore {
       needsUpdate: this.needsUpdate,
       offline: sidesWhere((state) => state.link !== "online" && state.link !== "needs-access"),
       accessLost: sidesWhere((state) => state.link === "needs-access"),
-      saving: online.some(({ state }) => state.status!.saved === false && !state.status!.saveFailed),
+      saving: online.some(({ state }) => (state.status!.saved === false || state.audio?.saved === false) && !state.status!.saveFailed),
       saveFailed: sidesWhere((state) => state.link === "online" && state.status?.saveFailed === true),
       sensorMissing: sidesWhere((state) => state.link === "online" && state.status?.sensor === "unavailable"),
       uncalibrated: sidesWhere((state) => state.link === "online" && state.status?.calibrated === false),

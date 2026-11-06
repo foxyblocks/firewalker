@@ -45,7 +45,7 @@ export class FakeBoot {
   constructor(options: FakeBootOptions = {}) {
     this.id = options.id ?? "FA4E";
     this.proto = options.proto ?? 3;
-    this.versions = options.versions ?? [RECIPE_VERSION];
+    this.versions = options.versions ?? [1, RECIPE_VERSION];
     this.slots = options.slots ?? 16;
     this.silent = options.silent ?? false;
     this.receiveBytes = options.receiveBytes ?? Number.POSITIVE_INFINITY;

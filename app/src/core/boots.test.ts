@@ -213,7 +213,7 @@ describe("choosing what a tap controls", () => {
     expect(left.brightness).toBe(40);
     expect(right.pattern).toBe("flow");
     expect(right.brightness).toBe(24);
-    expect(right.received.filter((line) => line !== "status" && line !== "patterns")).toEqual([]);
+    expect(right.received.filter((line) => line !== "status" && line !== "patterns" && line !== "audio")).toEqual([]);
   });
 
   it("drives whichever boot is online, and says which isn't", async () => {

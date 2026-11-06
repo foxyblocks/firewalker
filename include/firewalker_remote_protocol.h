@@ -33,8 +33,8 @@ constexpr size_t REMOTE_LINE_MAX = 520;
 // Reported in status, so an app can tell when a boot's firmware needs updating. Raise it
 // when a change would break a client written against the current protocol, or when clients
 // start relying on something earlier firmware doesn't have. 2 added the strip layout, and 3 added
-// recipes.
-constexpr uint8_t REMOTE_PROTOCOL_VERSION = 3;
+// recipes. Protocol 4 adds per-boot microphone tuning and quiet calibration.
+constexpr uint8_t REMOTE_PROTOCOL_VERSION = 4;
 
 enum class CommandType : uint8_t {
   Invalid,
@@ -56,6 +56,9 @@ enum class CommandType : uint8_t {
   RecipeEnd,
   RecipeCancel,
   RecipeDelete,
+  Audio,
+  AudioSensitivity,
+  AudioCalibrate,
 };
 
 // The most hex characters a `recipe data` line can carry. See RECIPE_DATA_MAX_HEX.
@@ -84,6 +87,9 @@ inline const char* poseName(CalibrationPose pose) {
 
 inline const char* commandName(CommandType type) {
   switch (type) {
+    case CommandType::Audio:
+    case CommandType::AudioSensitivity:
+    case CommandType::AudioCalibrate: return "audio";
     case CommandType::Status: return "status";
     case CommandType::Patterns: return "patterns";
     case CommandType::Identify: return "identify";
@@ -271,6 +277,15 @@ inline Command parseCommand(const char* line) {
   const char* verb = words[0];
   const char* arg = words[1];
 
+  if (strcmp(verb, "audio") == 0) {
+    if (count == 1) command.type = CommandType::Audio;
+    else if (count == 2 && strcmp(arg, "calibrate") == 0) command.type = CommandType::AudioCalibrate;
+    else if (count == 3 && strcmp(arg, "gain") == 0 &&
+             parseRecipeNumber(words[2], command.value) && command.value <= 100) {
+      command.type = CommandType::AudioSensitivity;
+    } else command.error = "expected-audio-setting";
+    return command;
+  }
   if (strcmp(verb, "recipe") == 0) {
     parseRecipeCommand(words, count, command);
     return command;
@@ -433,8 +448,16 @@ inline void formatRecipes(char* out, size_t size, uint8_t version, const Uploade
   for (uint8_t i = 0; i < slotCount; i++) {
     if (slots[i].used) used++;
   }
-  int written = snprintf(out, size, "{\"t\":\"recipes\",\"versions\":[%u],\"slots\":%u,\"free\":%u,\"list\":[",
-                         (unsigned)version, (unsigned)slotCount, (unsigned)(slotCount - used));
+  int written = snprintf(out, size, "{\"t\":\"recipes\",\"versions\":[");
+  // Versions are additive. Report all readable versions so older uploads remain
+  // usable and clients can check the exact version of the recipe being sent.
+  for (uint16_t supported = 1; supported <= version; supported++) {
+    if (written < 0 || (size_t)written >= size) return;
+    written += snprintf(out + written, size - written, "%s%u", supported == 1 ? "" : ",", (unsigned)supported);
+  }
+  if (written < 0 || (size_t)written >= size) return;
+  written += snprintf(out + written, size - written, "],\"slots\":%u,\"free\":%u,\"list\":[",
+                      (unsigned)slotCount, (unsigned)(slotCount - used));
   bool first = true;
   for (uint8_t i = 0; i < slotCount; i++) {
     if (!slots[i].used) continue;

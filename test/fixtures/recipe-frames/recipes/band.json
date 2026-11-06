@@ -1,0 +1,28 @@
+{
+  "format": "firewalker-recipe",
+  "version": 2,
+  "name": "band",
+  "description": "",
+  "layers": [
+    {
+      "type": "fill",
+      "enabled": true,
+      "palette": ["#ffffff"],
+      "spread": "solid",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0,
+      "brightness": { "source": "stompFade", "min": 0.7, "max": 1, "fadeMs": 200 },
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "band",
+      "enabled": true,
+      "position": { "source": "tilt", "min": 0, "max": 1 },
+      "width": { "source": "audioLevel", "min": 0, "max": 1 },
+      "blend": "multiply",
+      "opacity": 1
+    }
+  ]
+}

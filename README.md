@@ -213,7 +213,7 @@ grounds tied together.
 
 - Hardware knobs live in [`include/config.h`](include/config.h).
 - Domain language: [`CONTEXT.md`](CONTEXT.md). Decisions: [`docs/adr/`](docs/adr).
-- Agent, Linear, and triage setup: [`CLAUDE.md`](CLAUDE.md) and `docs/agents/`.
+- Agent, Linear, and triage setup: [`AGENTS.md`](AGENTS.md) and `docs/agents/`.
 
 ## iPhone remote
 

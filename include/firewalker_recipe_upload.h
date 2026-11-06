@@ -134,7 +134,7 @@ inline bool describeStoredRecipe(const uint8_t* bytes, size_t size, UploadedReci
   if (!patternNameValid(out.name)) return false;
 
   out.used = true;
-  out.readable = bytes[0] == RECIPE_VERSION;
+  out.readable = recipeVersionSupported(bytes[0]);
   out.size = (uint16_t)size;
   out.crc = crc;
   return true;

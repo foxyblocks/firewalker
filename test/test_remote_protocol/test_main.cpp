@@ -188,6 +188,8 @@ static void test_recipe_replies_are_well_formed() {
   UploadedRecipe slots[16] = {};
   formatRecipes(line, sizeof(line), 1, slots, 16);
   TEST_ASSERT_EQUAL_STRING("{\"t\":\"recipes\",\"versions\":[1],\"slots\":16,\"free\":16,\"list\":[]}", line);
+  formatRecipes(line, sizeof(line), 2, slots, 16);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"recipes\",\"versions\":[1,2],\"slots\":16,\"free\":16,\"list\":[]}", line);
   slots[3].used = true;
   copyPatternName(slots[3].name, "comet");
   slots[3].size = 74;
@@ -340,7 +342,7 @@ static void test_status_reports_the_actual_state() {
   char line[REMOTE_LINE_MAX];
   formatStatus(line, sizeof(line), sampleStatus());
   TEST_ASSERT_EQUAL_STRING(
-      "{\"t\":\"status\",\"proto\":3,\"id\":\"A1B2\",\"pattern\":\"off\",\"lit\":\"fire-trail\","
+      "{\"t\":\"status\",\"proto\":4,\"id\":\"A1B2\",\"pattern\":\"off\",\"lit\":\"fire-trail\","
       "\"brightness\":32,\"maxBrightness\":48,\"capped\":true,\"capBrightness\":48,\"sensor\":\"ok\","
       "\"tilt\":-0.25,\"calibrated\":true,"
       "\"neutralDeg\":4.50,\"heelDeg\":null,\"toeDeg\":34.00,\"calibration\":\"ok\",\"saved\":true,"
@@ -396,8 +398,21 @@ static void test_motion_line() {
       line);
 }
 
+static void test_audio_commands() {
+  TEST_ASSERT_EQUAL(CommandType::Audio, parseCommand("audio").type);
+  TEST_ASSERT_EQUAL(CommandType::AudioCalibrate, parseCommand("audio calibrate").type);
+  const Command sensitivity = parseCommand("audio gain 100");
+  TEST_ASSERT_EQUAL(CommandType::AudioSensitivity, sensitivity.type);
+  TEST_ASSERT_EQUAL_INT32(100, sensitivity.value);
+  TEST_ASSERT_LESS_OR_EQUAL(20, strlen("audio gain 100"));
+  const char* invalid[] = {"audio gain -1", "audio gain 101", "audio gain 2.5",
+                          "audio calibrate extra", "audio gain", "audio unknown"};
+  for (const char* line : invalid) TEST_ASSERT_EQUAL(CommandType::Invalid, parseCommand(line).type);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_audio_commands);
   RUN_TEST(test_commands_with_no_arguments);
   RUN_TEST(test_calibrate_takes_an_optional_pose);
   RUN_TEST(test_strip_commands_name_a_setting_and_a_value);

@@ -5,6 +5,7 @@
 // may override the strip size, layout, and brightness for test builds.
 
 #include <Arduino.h>
+#include "em_iadc.h"
 #include <stddef.h>
 
 #include "firewalker_calibration.h"
@@ -13,6 +14,26 @@
 // ── Serial ──────────────────────────────────────────────────────────────
 // Must match `monitor_speed` in platformio.ini.
 constexpr unsigned long SERIAL_BAUD = 115200;
+
+// The Sense board's analog microphone. IADC0's internal timer and a DMA block
+// keep capture independent of the app's frame rate and of SPI's LED transfers.
+constexpr PinName AUDIO_POWER_PIN = PC8;
+constexpr GPIO_Port_TypeDef AUDIO_DATA_PORT = gpioPortC;
+constexpr unsigned int AUDIO_DATA_PIN = 9;
+constexpr IADC_PosInput_t AUDIO_ADC_INPUT = iadcPosInputPortCPin9;
+constexpr uint32_t AUDIO_SAMPLE_HZ = 8000;
+constexpr uint32_t AUDIO_ADC_SOURCE_HZ = 20000000;
+constexpr uint32_t AUDIO_ADC_CLOCK_HZ = 10000000;
+constexpr uint32_t AUDIO_REFERENCE_MV = 3300;
+constexpr size_t AUDIO_BLOCK_SAMPLES = 128;
+constexpr unsigned long AUDIO_STARTUP_MS = 20;
+constexpr unsigned long AUDIO_STALE_MS = 250;
+constexpr unsigned long AUDIO_CALIBRATION_MS = 1200;
+constexpr size_t AUDIO_CALIBRATION_SAMPLES = 80;
+constexpr float AUDIO_GATE_OPEN_MULTIPLIER = 1.5f;
+constexpr uint8_t AUDIO_GATE_OPEN_BLOCKS = 2;
+constexpr float AUDIO_ATTACK_MS = 20.0f;
+constexpr float AUDIO_RELEASE_MS = 180.0f;
 
 // ── Strip ───────────────────────────────────────────────────────────────
 // BTF FCOB-5V-160L-W-IP30-SPI-5MM: a nominal 1m of 160 individually addressable

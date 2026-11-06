@@ -1,6 +1,6 @@
 #pragma once
 
-// Runs a decoded recipe: each frame it takes the fused tilt, whether a stomp fired, and the elapsed
+// Runs a decoded recipe: each frame it takes the fused tilt, whether a stomp fired, the audio level, and elapsed
 // time, and draws every layer into one frame of colors. This is a port of the designer's
 // designer/src/engine/engine.ts, which is the reference. test/test_recipe_engine checks that this
 // draws the same pixels, using frames saved from that engine. A change to what either one draws
@@ -71,6 +71,7 @@ class RecipeEngine {
   void enter() {
     timeMs_ = 0;
     tilt_ = 0.0;
+    audioLevel_ = 0.0;
     lastStrength_ = 0.0;
     sinceStompMs_ = 0;
     stompSeen_ = false;
@@ -83,13 +84,17 @@ class RecipeEngine {
   }
 
   // Advances one frame. `dtMs` is the time since the previous one, and `stompStrength` only counts
-  // when `stomp` is true. Read the result with frameByte().
-  void update(float tiltFwd, bool stomp, float stompStrength, uint32_t dtMs) {
+  // when `stomp` is true. Audio is a live 0..1 level, defaulting to silence for
+  // callers without capture. Read the result with frameByte().
+  void update(float tiltFwd, bool stomp, float stompStrength, uint32_t dtMs, float audioLevel = 0.0f) {
     if (!recipe_) return;
     const uint32_t dt = dtMs > RECIPE_MAX_DT_MS ? RECIPE_MAX_DT_MS : dtMs;
     timeMs_ += dt;
     if (stompSeen_ && sinceStompMs_ < 0xFFFF0000u) sinceStompMs_ += dt;
     tilt_ = fmax(-1.0, fmin(1.0, (double)tiltFwd));
+    // A live reading belongs to this frame. Missing or invalid input is silence,
+    // so switching away from capture cannot leave a bar stuck at its last width.
+    audioLevel_ = isfinite(audioLevel) ? recipeClamp01((double)audioLevel) : 0.0;
     if (stomp) {
       lastStrength_ = recipeClamp01((double)stompStrength);
       sinceStompMs_ = 0;
@@ -176,6 +181,8 @@ class RecipeEngine {
     switch (knob.source) {
       case RecipeSource::Tilt:
         return (tilt_ + 1.0) / 2.0;
+      case RecipeSource::AudioLevel:
+        return audioLevel_;
       case RecipeSource::TiltAmount:
         return fabs(tilt_);
       case RecipeSource::StompStrength:
@@ -250,6 +257,9 @@ class RecipeEngine {
       case RecipeLayerType::Fill:
         drawFill(layer, state, dt);
         return;
+      case RecipeLayerType::Band:
+        drawBand(layer);
+        return;
       case RecipeLayerType::Pool:
         drawPool(layer);
         return;
@@ -291,6 +301,27 @@ class RecipeEngine {
   // Flow's fill gauge. `at` is both how far the fill edge has moved and how far the survivors
   // brighten toward full, and each pixel fades across a one-pixel span as the edge passes. With
   // uneven arcs the span comes from the longer one, so one pixel still survives at full tilt.
+  // A band covers the same heel-to-toe interval on both sides. At half width,
+  // position 0.5 covers [0.25, 0.75]; position 1 covers [0.5, 1]. Dividing the
+  // unused space this way slides the bar without clipping away any of its width.
+  void drawBand(const RecipeLayer& layer) {
+    const double width = recipeClamp01(knobValue(layer.knobs[RecipeSlot::BandWidth]));
+    const double start = (1.0 - width) * recipeClamp01(knobValue(layer.knobs[RecipeSlot::BandPosition]));
+    const double end = start + width;
+    const double halfPixel = 0.5 / (double)(toeToHeel_ > heelToToe_ ? toeToHeel_ : heelToToe_);
+    for (uint16_t i = 0; i < layout_.count; i++) {
+      // Clip the endpoint cells to the foot. Silence clears every pixel, while
+      // full width fills the heel and toe completely, with one-pixel soft edges.
+      const double s = positions_[i];
+      const double pixelStart = fmax(0.0, s - halfPixel);
+      const double pixelEnd = fmin(1.0, s + halfPixel);
+      const double overlap = fmax(0.0, fmin(end, pixelEnd) - fmax(start, pixelStart));
+      const float coverage = (float)recipeClamp01(overlap / (pixelEnd - pixelStart));
+      layerColor_[i * 3] = layerColor_[i * 3 + 1] = layerColor_[i * 3 + 2] = coverage;
+      layerAlpha_[i] = 1.0f;
+    }
+  }
+
   void drawPool(const RecipeLayer& layer) {
     const float baseline = (float)recipeClamp01(knobValue(layer.knobs[RecipeSlot::PoolBaseline]));
     const float at = (float)fabs(tilt_);
@@ -537,6 +568,7 @@ class RecipeEngine {
   uint32_t timeMs_ = 0;
   uint32_t sinceStompMs_ = 0;
   bool stompSeen_ = false;
+  double audioLevel_ = 0.0;
   double tilt_ = 0.0;
   double lastStrength_ = 0.0;
   uint32_t rng_ = RECIPE_RNG_SEED;

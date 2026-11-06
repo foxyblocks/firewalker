@@ -1,0 +1,5 @@
+interface:
+  display_name: "Zoom out"
+  short_description: "Map the relevant modules and explain how they fit together"
+policy:
+  allow_implicit_invocation: false

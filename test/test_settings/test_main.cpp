@@ -477,8 +477,70 @@ static void test_turning_the_cap_off_keeps_the_brightness() {
   TEST_ASSERT_FALSE(setBrightnessCap(settings, false, BOUNDS));
 }
 
+static void test_audio_settings_round_trip_and_v4_upgrade_keeps_poses() {
+  Settings source = sampleSettings();
+  source.audioNoiseFloor = 13;
+  source.audioSensitivity = 42;
+  SettingsRecord record = encodeSettings(source);
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
+  TEST_ASSERT_EQUAL_UINT8(13, out.audioNoiseFloor);
+  TEST_ASSERT_EQUAL_UINT8(42, out.audioSensitivity);
+
+  // Version 4 used these bytes as reserved padding, so ignore them during upgrade.
+  record.version = SETTINGS_VERSION_V4;
+  record.audioNoiseFloor = 0;
+  record.audioSensitivity = 255;
+  reseal(record);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
+  TEST_ASSERT_EQUAL_UINT8(AUDIO_DEFAULT_NOISE_FLOOR, out.audioNoiseFloor);
+  TEST_ASSERT_EQUAL_UINT8(AUDIO_DEFAULT_SENSITIVITY, out.audioSensitivity);
+  TEST_ASSERT_EQUAL_FLOAT(source.calibration.neutralDeg, out.calibration.neutralDeg);
+  TEST_ASSERT_EQUAL_UINT16(source.strip.toe, out.strip.toe);
+  TEST_ASSERT_EQUAL_STRING(source.pattern, out.pattern);
+
+  record = encodeSettings(source);
+  record.audioNoiseFloor = 0;
+  reseal(record);
+  TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(record, BOUNDS, out));
+  record = encodeSettings(source);
+  record.audioSensitivity = 101;
+  reseal(record);
+  TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(record, BOUNDS, out));
+}
+
+// The cap flag and the microphone tuning each have their own spare bytes, so both survive a save,
+// and a version 5 record saved before the cap existed keeps its tuning and comes back capped.
+static void test_mic_tuning_and_the_cap_flag_keep_their_own_bytes() {
+  Settings source = sampleSettings();
+  source.capped = false;
+  source.brightness = 60;
+  source.audioNoiseFloor = 13;
+  source.audioSensitivity = 42;
+  SettingsRecord record = encodeSettings(source);
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
+  TEST_ASSERT_FALSE(out.capped);
+  TEST_ASSERT_EQUAL(60, out.brightness);
+  TEST_ASSERT_EQUAL_UINT8(13, out.audioNoiseFloor);
+  TEST_ASSERT_EQUAL_UINT8(42, out.audioSensitivity);
+
+  record.flags = 0;
+  reseal(record);
+  out = defaultSettings(16, DEFAULT_STRIP);
+  out.capped = false;
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
+  TEST_ASSERT_TRUE(out.capped);
+  TEST_ASSERT_EQUAL(48, out.brightness);
+  TEST_ASSERT_EQUAL_UINT8(13, out.audioNoiseFloor);
+  TEST_ASSERT_EQUAL_UINT8(42, out.audioSensitivity);
+  TEST_ASSERT_EQUAL_UINT16(110, out.strip.count);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_audio_settings_round_trip_and_v4_upgrade_keeps_poses);
+  RUN_TEST(test_mic_tuning_and_the_cap_flag_keep_their_own_bytes);
   RUN_TEST(test_defaults_are_flow_and_uncalibrated);
   RUN_TEST(test_round_trip_keeps_every_field);
   RUN_TEST(test_off_round_trips_and_remembers_what_to_return_to);

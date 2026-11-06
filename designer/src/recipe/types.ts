@@ -1,11 +1,17 @@
 // The recipe format: a pattern described as data, not code. A recipe is a stack of up to
-// eight layers drawn bottom first, each wired to the boot's tilt, stomps, or time. The
+// eight layers drawn bottom first, each wired to tilt, stomps, time, or audio. The
 // designer saves recipes as JSON in the repo's patterns/ folder, and later firmware will run
 // them from flash. docs/recipe-format.md is the reference; this file and spec.ts are its
 // source of truth in code.
 
 export const RECIPE_FORMAT = "firewalker-recipe";
-export const RECIPE_VERSION = 1;
+export const MIN_RECIPE_VERSION = 1;
+export const RECIPE_VERSION = 2;
+export type RecipeVersion = 1 | typeof RECIPE_VERSION;
+
+export function isRecipeVersion(value: unknown): value is RecipeVersion {
+  return value === MIN_RECIPE_VERSION || value === RECIPE_VERSION;
+}
 
 export const MAX_LAYERS = 8;
 export const MAX_PALETTE_STOPS = 16;
@@ -18,7 +24,7 @@ export const MAX_LABEL_LENGTH = 24;
 export type Color = string;
 
 // Inputs a knob can follow. Each reads 0..1, and the binding maps that onto min..max.
-export const SOURCES = ["tilt", "tiltAmount", "stompStrength", "stompFade", "wave"] as const;
+export const SOURCES = ["tilt", "tiltAmount", "stompStrength", "stompFade", "wave", "audioLevel"] as const;
 export type Source = (typeof SOURCES)[number];
 
 export interface Binding {
@@ -117,12 +123,21 @@ export interface ChaseLayer extends LayerCommon {
   brightness: Knob;
 }
 
-export type Layer = FillLayer | PoolLayer | TrailLayer | FlashLayer | SparkleLayer | ChaseLayer;
+// A gray mask over the same heel-to-toe interval on both sides of the boot.
+// Position slides the whole band between the ends, keeping its width intact.
+// Multiply it against a fill to turn that fill into a movable volume bar.
+export interface BandLayer extends LayerCommon {
+  type: "band";
+  position: Knob;
+  width: Knob;
+}
+
+export type Layer = FillLayer | PoolLayer | TrailLayer | FlashLayer | SparkleLayer | ChaseLayer | BandLayer;
 export type LayerType = Layer["type"];
 
 export interface Recipe {
   format: typeof RECIPE_FORMAT;
-  version: typeof RECIPE_VERSION;
+  version: RecipeVersion;
   name: string;
   // Notes for people. Stays in the file and is never sent to a boot.
   description: string;
@@ -131,4 +146,16 @@ export interface Recipe {
 
 export function isBinding(knob: Knob): knob is Binding {
   return typeof knob === "object" && knob !== null;
+}
+
+/**
+ * The earliest firmware format that can run these layers. Old effects retain
+ * version 1 bytes, while Band or an audio binding needs version 2. JSON saving
+ * also uses this to upgrade drafts made before audio had its own version.
+ */
+export function requiredRecipeVersion(layers: readonly Layer[]): RecipeVersion {
+  const needsAudioFormat = layers.some((layer) =>
+    layer.type === "band" || Object.values(layer).some((value) => isBinding(value) && value.source === "audioLevel"),
+  );
+  return needsAudioFormat ? RECIPE_VERSION : MIN_RECIPE_VERSION;
 }

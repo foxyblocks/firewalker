@@ -54,6 +54,13 @@ describe("parseLine", () => {
     expect(parseLine(FIRMWARE_LINES.motion)).toMatchObject({ t: "motion", accel: 10.18, accelPeak: 10.31 });
   });
 
+  it("reads microphone settings and rejects an incomplete audio reply", () => {
+    expect(parseLine('{"t":"audio-config","ready":true,"noiseFloor":9,"sensitivity":65,"calibrating":false,"saved":true}'))
+      .toMatchObject({ t: "audio-config", sensitivity: 65, saved: true });
+    expect(parseLine('{"t":"audio-config","ready":true}')).toBeNull();
+    expect(parseLine('{"t":"audio-config","ready":true,"noiseFloor":9,"sensitivity":101,"calibrating":false,"saved":true}')).toBeNull();
+  });
+
   it("keeps working when the firmware adds fields it doesn't know yet", () => {
     expect(parseLine('{"t":"ack","cmd":"debug","ok":true,"newField":7}')).toMatchObject({ cmd: "debug" });
   });
@@ -119,6 +126,9 @@ describe("commands", () => {
 
   it("keeps every command inside the 20-byte write the firmware promises", () => {
     for (const line of [
+      commands.audio(),
+      commands.audioGain(100),
+      commands.audioCalibrate(),
       commands.pattern("fire-trail"),
       commands.calibrate("neutral"),
       commands.brightness(255),

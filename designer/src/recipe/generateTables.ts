@@ -11,7 +11,7 @@
 
 import { MAX_COMPILED_BYTES, LAYER_CODES } from "./compile.ts";
 import { fieldsFor, STOMP_FADE, WAVE_PERIOD, type Field } from "./spec.ts";
-import { BLENDS, CHASE_PATHS, MAX_LAYERS, MAX_NAME_LENGTH, MAX_PALETTE_STOPS, RECIPE_VERSION, SOURCES, SPREADS, TRAIL_ORIGINS, TRIGGERS, type LayerType } from "./types.ts";
+import { BLENDS, CHASE_PATHS, MAX_LAYERS, MAX_NAME_LENGTH, MAX_PALETTE_STOPS, MIN_RECIPE_VERSION, RECIPE_VERSION, SOURCES, SPREADS, TRAIL_ORIGINS, TRIGGERS, type LayerType } from "./types.ts";
 import { RESERVED_NAMES } from "./validate.ts";
 
 const pascal = (words: string): string =>
@@ -109,6 +109,7 @@ export function recipeTablesHeader(): string {
     "",
     "namespace Firewalker {",
     "",
+    `constexpr uint8_t RECIPE_MIN_VERSION = ${MIN_RECIPE_VERSION};`,
     `constexpr uint8_t RECIPE_VERSION = ${RECIPE_VERSION};`,
     `constexpr size_t RECIPE_MAX_BYTES = ${MAX_COMPILED_BYTES};`,
     `constexpr uint8_t RECIPE_MAX_LAYERS = ${MAX_LAYERS};`,

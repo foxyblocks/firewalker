@@ -80,7 +80,8 @@ static void checkCase(const std::string& file, const std::vector<uint8_t>& input
   size_t at = 16;
   for (uint16_t f = 0; f < frameCount; f++) {
     const size_t record = 8 + (size_t)f * 12;
-    engine.update(readF32(inputs, record), inputs[record + 10] != 0, readF32(inputs, record + 4), readU16(inputs, record + 8));
+    engine.update(readF32(inputs, record), inputs[record + 10] != 0, readF32(inputs, record + 4), readU16(inputs, record + 8),
+                  readU16(inputs, 4) >= 2 ? (float)inputs[record + 11] / 255.0f : 0.0f);
     if ((f + 1) % checkEvery != 0) continue;
 
     for (uint16_t pixel = 0; pixel < layout.count; pixel++) {
@@ -154,9 +155,30 @@ static void test_rounds_halves_the_way_javascript_does() {
 void setUp() {}
 void tearDown() {}
 
+static void test_audio_is_limited_and_missing_input_clears_it() {
+  const std::vector<uint8_t> bytes = compiledRecipe("band");
+  TEST_ASSERT_EQUAL(RecipeDecodeResult::Ok, decodeRecipe(bytes.data(), bytes.size(), recipe));
+  const StripLayout layout = {107, 72, 19};
+  engine.start(&recipe, layout);
+  const float levels[] = {1.0f, 2.0f, -1.0f, NAN, INFINITY, 0.0f};
+  for (float level : levels) {
+    engine.update(0.0f, false, 0.0f, 16, level);
+    uint16_t lit = 0;
+    for (uint16_t i = 0; i < layout.count; i++) {
+      if (engine.frameByte(i, 0) > 0) lit++;
+    }
+    TEST_ASSERT_EQUAL_UINT16(level == 1.0f || level == 2.0f ? layout.count : 0, lit);
+  }
+
+  engine.update(0.0f, false, 0.0f, 16, 1.0f);
+  engine.update(0.0f, false, 0.0f, 16);
+  for (uint16_t i = 0; i < layout.count; i++) TEST_ASSERT_EQUAL_UINT8(0, engine.frameByte(i, 0));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_matches_every_reference_frame);
+  RUN_TEST(test_audio_is_limited_and_missing_input_clears_it);
   RUN_TEST(test_is_repeatable_after_enter);
   RUN_TEST(test_a_stall_counts_as_the_longest_step);
   RUN_TEST(test_rounds_halves_the_way_javascript_does);

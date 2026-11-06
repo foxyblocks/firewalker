@@ -212,6 +212,19 @@ describe("sending a recipe", () => {
     expect(await connect(other).sendRecipe("spark", compiled())).toEqual({ ok: false, error: NEEDS_FIRMWARE });
   });
 
+  it("uploads old recipes to version 1 boots and asks for an update for audio recipes", async () => {
+    const old = new FakeBoot({ versions: [1] });
+    expect(await connect(old).sendRecipe("spark", compiled())).toMatchObject({ ok: true });
+
+    const audio: Recipe = { ...RECIPE, name: "sound", version: 2, layers: [newLayer("band")] };
+    const oldAudio = new FakeBoot({ versions: [1] });
+    expect(await connect(oldAudio).sendRecipe("sound", compiled(audio))).toEqual({ ok: false, error: NEEDS_FIRMWARE });
+    expect(oldAudio.linesSeen.some((line) => line.startsWith("recipe begin"))).toBe(false);
+
+    const current = new FakeBoot({ versions: [1, 2] });
+    expect(await connect(current).sendRecipe("sound", compiled(audio))).toMatchObject({ ok: true });
+  });
+
   it("says when the boot is full, and sends nothing", async () => {
     const full = new FakeBoot({ slots: 0 });
     const result = await connect(full).sendRecipe("spark", compiled());

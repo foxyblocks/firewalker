@@ -120,7 +120,7 @@ without reconstructing the prototype's history.
 - `docs/wiring-mpu6050.md` and `.html`, and FeatherWing protoboard guides.
 - Rewrite `docs/wiring.md`, replace the old extra-effort wiring reference with
   relevant MG24 guidance, and update `docs/power-budget.md` and open questions.
-- Refresh `README.md`, `CONTEXT.md`, and agent orientation in `CLAUDE.md`.
+- Refresh `README.md`, `CONTEXT.md`, and agent orientation in `AGENTS.md`.
 - Consolidate the prototype into the main source tree; remove prototype wrapper
   translation units and the Arduino CLI workflow once the retained app,
   diagnostics, and `cli` tool work under the chosen PlatformIO toolchain. The CLI

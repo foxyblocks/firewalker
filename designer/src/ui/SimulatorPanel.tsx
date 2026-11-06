@@ -1,9 +1,11 @@
 // The boot from above and from the outer side, the strip in index order, and the motion
 // controls: a tilt slider, a stomp button (or the space bar), a stomp on every beat, and a
-// walking gait. The boot brightness setting shows what a boot's brightness does to the colors.
+// walking gait. AudioMonitor feeds its live level into Simulation for audio-bound knobs.
+// The boot brightness setting shows what a boot's brightness does to the colors.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AudioMonitor } from "./AudioMonitor";
 import { Segmented, Slider } from "./controls";
 import { BOOT_BRIGHTNESS, brightnessPercent, channelSteps, overCap } from "../engine/output";
 import { STRIP_PRESETS } from "../engine/strip";
@@ -76,6 +78,7 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
   useEffect(() => simRef.current?.setBootBrightness(brightness), [brightness]);
 
   const stomp = () => simRef.current?.stomp(strength);
+  const setAudioLevel = useCallback((level: number) => simRef.current?.setAudioLevel(level), []);
 
   // The button lights when a stomp lands, whatever started it.
   useEffect(() => {
@@ -102,6 +105,7 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
 
   return (
     <section className="simulator">
+      <AudioMonitor onLevel={setAudioLevel} />
       <div className="views">
         <figure className="view view-top">
           <canvas ref={topRef} aria-label="The boot from above" />

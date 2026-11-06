@@ -138,6 +138,27 @@ static void test_refuses_another_version() {
   TEST_ASSERT_EQUAL(RecipeDecodeResult::BadVersion, decode(bytes));
 }
 
+static void test_reads_both_versions_and_refuses_mislabeled_extensions() {
+  std::vector<uint8_t> old = readCompiled("pool");
+  TEST_ASSERT_EQUAL_UINT8(1, old[0]);
+  TEST_ASSERT_EQUAL(RecipeDecodeResult::Ok, decode(old));
+
+  std::vector<uint8_t> band = readCompiled("band");
+  TEST_ASSERT_EQUAL_UINT8(2, band[0]);
+  TEST_ASSERT_EQUAL(RecipeDecodeResult::Ok, decode(band));
+  band[0] = 1;
+  fixChecksum(band);
+  TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(band));
+
+  // A pool bound to audio exercises the source check independently of Band.
+  std::vector<uint8_t> audio = recipeNamedAb({(uint8_t)RecipeLayerType::Pool, 1,
+      (uint8_t)RecipeSource::AudioLevel, 0, 0, 0xFF, 0x7F, 3, 0xFF, 0x7F});
+  TEST_ASSERT_EQUAL(RecipeDecodeResult::Ok, decode(audio));
+  audio[0] = 1;
+  fixChecksum(audio);
+  TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(audio));
+}
+
 static void test_refuses_a_recipe_cut_short_even_with_a_good_checksum() {
   const std::vector<uint8_t> bytes = readCompiled("flash");
   for (size_t body = 4; body + 4 < bytes.size(); body++) {
@@ -173,9 +194,9 @@ static void test_refuses_unknown_types_options_and_sources() {
   const uint8_t fill = (uint8_t)RecipeLayerType::Fill;
   // A valid pool is: type, mask, baseline, blend, opacity.
   TEST_ASSERT_EQUAL(RecipeDecodeResult::Ok, decode(recipeNamedAb({pool, 0, 0, 0, 3, 0, 0})));
-  TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(recipeNamedAb({(uint8_t)RecipeLayerType::Chase + 1, 0})));
+  TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(recipeNamedAb({(uint8_t)RecipeLayerType::Band + 1, 0})));
   TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(recipeNamedAb({pool, 0, 0, 0, 4, 0, 0})));
-  TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(recipeNamedAb({pool, 1, 5, 0, 0, 0, 0, 0, 0, 0})));
+  TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(recipeNamedAb({pool, 1, 6, 0, 0, 0, 0, 0, 0, 0})));
   TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(recipeNamedAb({fill, 0, 0})));
   TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(recipeNamedAb({fill, 0, RECIPE_MAX_PALETTE_STOPS + 1})));
 }
@@ -198,7 +219,7 @@ static void assertRecipeIsSafe() {
   TEST_ASSERT_TRUE(recipe.layerCount >= 1 && recipe.layerCount <= RECIPE_MAX_LAYERS);
   for (uint8_t l = 0; l < recipe.layerCount; l++) {
     const RecipeLayer& layer = recipe.layers[l];
-    TEST_ASSERT_TRUE((uint8_t)layer.type <= (uint8_t)RecipeLayerType::Chase);
+    TEST_ASSERT_TRUE((uint8_t)layer.type <= (uint8_t)RecipeLayerType::Band);
     const RecipeLayerInfo& info = RECIPE_LAYERS[(uint8_t)layer.type];
     for (uint8_t f = 0; f < info.count; f++) {
       const RecipeFieldInfo& field = info.fields[f];
@@ -217,7 +238,7 @@ static void assertRecipeIsSafe() {
           const RecipeKnob& knob = layer.knobs[field.slot];
           TEST_ASSERT_TRUE(knob.min >= field.min && knob.min <= field.max);
           TEST_ASSERT_TRUE(knob.max >= field.min && knob.max <= field.max);
-          TEST_ASSERT_TRUE((uint8_t)knob.source <= (uint8_t)RecipeSource::Wave);
+          TEST_ASSERT_TRUE((uint8_t)knob.source <= (uint8_t)RecipeSource::AudioLevel);
           if (knob.bound && knob.source == RecipeSource::Wave) TEST_ASSERT_TRUE(knob.ms >= RECIPE_WAVE_PERIOD_MIN);
           if (knob.bound && knob.source == RecipeSource::StompFade) TEST_ASSERT_TRUE(knob.ms >= RECIPE_STOMP_FADE_MIN);
           break;
@@ -285,6 +306,7 @@ int main() {
   RUN_TEST(test_refuses_the_wrong_size);
   RUN_TEST(test_refuses_a_damaged_byte);
   RUN_TEST(test_refuses_another_version);
+  RUN_TEST(test_reads_both_versions_and_refuses_mislabeled_extensions);
   RUN_TEST(test_refuses_a_recipe_cut_short_even_with_a_good_checksum);
   RUN_TEST(test_refuses_extra_bytes);
   RUN_TEST(test_refuses_bad_names);

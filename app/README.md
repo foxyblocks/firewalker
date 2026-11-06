@@ -8,6 +8,16 @@ where it can also reach a boot plugged in over USB.
 It talks to each boot through the text protocol in
 [`docs/remote-protocol.md`](../docs/remote-protocol.md).
 
+## Microphone calibration
+
+Open **Calibrate → Audio** in the remote and choose Left or Right. Pause the music and keep
+that boot still, then tap **Calibrate quiet**. After it finishes, resume music and adjust
+**Sensitivity** to set how easily the bar starts and fills. The boot saves both settings,
+shared by all its audio-reactive patterns. Each boot is tuned separately.
+
+This needs protocol 4 firmware. The Audio tab explains when a boot needs an update or is
+out of range, while pose and strip controls continue to work with their supported firmware.
+
 ## Run it
 
 Use `bun run`, because a globally installed `bunx` can pick up an older Node than Capacitor
