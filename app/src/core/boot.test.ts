@@ -223,6 +223,33 @@ describe("commands", () => {
   });
 });
 
+describe("the soft brightness cap", () => {
+  it("turns the cap off, showing it right away, and the boot then accepts more", async () => {
+    const { boot, client } = setup({ capBrightness: 96, maxBrightness: 255 });
+    client.connect();
+    await settle();
+    expect(state(client).status).toMatchObject({ capped: true, maxBrightness: 96 });
+
+    client.setCap(false);
+    expect(state(client).pending.capped).toBe(false);
+    await settle();
+    expect(boot.capped).toBe(false);
+    expect(state(client).pending.capped).toBeUndefined();
+    expect(state(client).status).toMatchObject({ capped: false, maxBrightness: 255 });
+  });
+
+  it("brings the brightness down to the cap when it goes back on", async () => {
+    const { boot, client } = setup({ capBrightness: 96, maxBrightness: 255, capped: false, brightness: 200 });
+    client.connect();
+    await settle();
+
+    client.setCap(true);
+    await settle();
+    expect(boot.brightness).toBe(96);
+    expect(state(client).status).toMatchObject({ capped: true, brightness: 96, maxBrightness: 96 });
+  });
+});
+
 describe("the brightness slider", () => {
   it("sends only the newest value after a burst, as one flash write", async () => {
     const { boot, client } = setup();

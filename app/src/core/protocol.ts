@@ -35,7 +35,9 @@ export interface StatusReply {
   id: string;
   pattern: string;
   brightness: number;
-  maxBrightness: number;
+  maxBrightness: number; // the highest brightness it accepts right now, which the soft cap lowers
+  capped?: boolean; // the soft cap is on. Missing on firmware from before the cap
+  capBrightness?: number; // the soft cap's level, whether or not it's on
   sensor: "ok" | "unavailable";
   tilt: number;
   calibrated: boolean;
@@ -109,6 +111,7 @@ export const commands = {
   patterns: () => "patterns",
   pattern: (id: string) => `pattern ${id}`,
   power: (on: boolean) => `power ${on ? "on" : "off"}`,
+  cap: (on: boolean) => `cap ${on ? "on" : "off"}`,
   brightness: (level: number) => `brightness ${Math.round(level)}`,
   calibrate: (pose: Pose) => `calibrate ${pose}`,
   debug: (on: boolean) => `debug ${on ? "on" : "off"}`,

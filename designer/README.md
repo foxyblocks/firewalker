@@ -39,8 +39,10 @@ It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
   to start capture and see its level and spectrum. Set a knob to **Follows → Audio level**
   and choose its Min and Max to make it react. Stopping capture returns the source to zero.
 - **Boot brightness** shows what a boot's brightness setting does to a pattern, using the
-  firmware's own math. At the default of 16 each color channel has only 17 steps, so fades
-  move in jumps and very dim colors can shift or go black. It keeps full white at full on
+  firmware's own math. It runs from 1 to 255 and starts at a new boot's default, its soft cap
+  of 96, which the phone app shows as 100%. The readout gives the app's percent, and says
+  "cap off" past 96, where a boot needs its cap turned off. Each color channel has 97 steps at
+  96, and only 17 at 16, so fades move in jumps and very dim colors can shift or go black. It keeps full white at full on
   your screen, so it shows those lost steps rather than how dim the boot really is. Pattern
   list thumbnails don't use it.
 - **Send to boot** connects to boots over USB or Bluetooth, and sends the pattern as it is right

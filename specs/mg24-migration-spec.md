@@ -261,7 +261,7 @@ Proposed approach:
   only an array index whose meaning changes if the pattern list is reordered.
 - Validate saved values and fall back to documented conservative defaults if
   settings are absent, invalid, or unsupported. Recommended first-use defaults
-  are flow, brightness 16/255, and zero neutral offset with an uncalibrated status.
+  are flow, brightness 96/255 (the soft cap, which starts on), and zero neutral offset with an uncalibrated status.
 - Debug status exposes active pattern, brightness, connection/sensor readiness,
   tilt and stomp information, calibration state, and whether settings saved.
 - Document phone commands and status/debug responses in `docs/remote-protocol.md`.

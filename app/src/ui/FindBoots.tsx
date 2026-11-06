@@ -9,11 +9,16 @@
  *
  * The same boot can be listed twice with the same name, once per way of reaching it, so a row
  * says when it's the USB one. Labeling that row moves the boot to USB (`BootsStore.assign`).
+ *
+ * Calibrate sits under the labeled boots. It opens the Calibrate sheet for the boots chosen on
+ * the Remote screen's tabs, as Both, Left, or Right, and its hint says which still need a
+ * neutral pose.
  */
 
 import { useEffect, useState } from "react";
-import { SIDE_NAMES, type BootsStore, type Side } from "../core/boots";
+import { SIDE_NAMES, type BootsStore, type RemoteView, type Side } from "../core/boots";
 import { isUsbBoot, type FoundBoot, type PickMethod } from "../transport/transport";
+import { joinNames } from "./parts";
 
 const PICK_LABELS: Record<PickMethod | "only", string> = {
   only: "Add a boot",
@@ -31,7 +36,15 @@ const signalWord = (rssi?: number) => {
   return "Weak signal";
 };
 
-export function FindBoots({ store, onDone }: { store: BootsStore; onDone: () => void }) {
+export function FindBoots({
+  store,
+  onDone,
+  onCalibrate,
+}: {
+  store: BootsStore;
+  onDone: () => void;
+  onCalibrate: () => void;
+}) {
   const [found, setFound] = useState<FoundBoot[]>([]);
   const [picking, setPicking] = useState(false);
   const [pickProblem, setPickProblem] = useState<string | null>(null);
@@ -73,6 +86,8 @@ export function FindBoots({ store, onDone }: { store: BootsStore; onDone: () => 
     return { deviceId: store.known(side)!.deviceId, name: store.bootName(side) };
   });
   const rows = [...labeled, ...found.filter((boot) => !labeled.some((known) => known.deviceId === boot.deviceId))];
+  const view = store.view();
+  const names = (sides: Side[]) => joinNames(sides.map((side) => store.displayName(side)));
 
   return (
     <>
@@ -85,6 +100,18 @@ export function FindBoots({ store, onDone }: { store: BootsStore; onDone: () => 
         {rows.map((boot) => (
           <BootRow key={boot.deviceId} store={store} boot={boot} />
         ))}
+
+        {labeled.length > 0 && (
+          <button
+            type="button"
+            className="dock-card dock-button calibrate-card"
+            disabled={!view.controllable}
+            onClick={onCalibrate}
+          >
+            <span className="card-name">Calibrate</span>
+            <CalibrateHint view={view} names={names} />
+          </button>
+        )}
 
         {rows.length === 0 && finding === "scan" && (
           <p className="empty">Looking for boots. Make sure they're powered on and nearby.</p>
@@ -120,6 +147,16 @@ export function FindBoots({ store, onDone }: { store: BootsStore; onDone: () => 
         </button>
       </footer>
     </>
+  );
+}
+
+function CalibrateHint({ view, names }: { view: RemoteView; names: (sides: Side[]) => string }) {
+  if (view.uncalibrated.length === 0) return <span className="card-hint">Neutral set</span>;
+  return (
+    <span className="card-hint">
+      <span className="dot dot-wait" aria-hidden="true" />
+      {names(view.uncalibrated)} not set
+    </span>
   );
 }
 

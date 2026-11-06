@@ -193,11 +193,12 @@ verify the signal.
 ## ⚠️ Power safety
 
 Brightness scales requested color. It isn't a current limit. By its rating, the strip can
-pull about 1.1 A at full white once cut to a boot's 69 cm, or 1.6 A uncut. The firmware caps
-the remote at brightness 64 so a USB-fed strip stays inside the 500 mA the board's 5V pad
-should supply. Before raising the cap or
-running brighter, read [`docs/power-budget.md`](docs/power-budget.md) and use a
-dedicated 5 V supply with grounds tied together.
+pull about 1.1 A at full white once cut to a boot's 69 cm, or 1.6 A uncut. Each boot's soft
+cap holds brightness at 96, so a USB-fed boot strip of up to 107 pixels stays near 400 mA at
+full white, under a USB 2.0 port's 500 mA. The remote's Cap toggle turns it off, and then
+brightness goes to 255, about 1.07 A at full white on 107 pixels. Before turning the cap off,
+read [`docs/power-budget.md`](docs/power-budget.md) and use a dedicated 5 V supply with
+grounds tied together.
 
 ## Known limits
 

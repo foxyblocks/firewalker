@@ -47,8 +47,12 @@ code, issues, and docs rather than drifting to synonyms.
 - **Bring-up** — the initial phase (now complete): prove build → upload → data
   line → lit pixels → serial status. "Boring and verifiable."
 - **Brightness** — the global 0–255 scale applied to every channel when a frame is
-  sent. Each controller saves its own, up to `LED_BRIGHTNESS_MAX`. Trades visibility
-  against current draw, and isn't a current limit; see the power budget.
+  sent. Each controller saves its own, up to its soft cap while that's on, or 255 with it
+  off. Trades visibility against current draw, and isn't a current limit; see the power budget.
+- **Soft cap** — the brightness each boot holds to unless a remote turns it off,
+  `LED_BRIGHTNESS_SOFT_CAP` (96), so a USB-fed strip stays inside what USB supplies. A new boot
+  starts at it. Each boot saves whether its cap is on, and turning it back on brings brightness
+  down to it. Off is for a dedicated 5 V supply.
 - **Trail** — the bands of fire one stomp spawns, each `FIRE_TRAIL_LEN` pixels long.
   Toe down runs one band per side from the toe to the heel, heel down runs them from the
   heel to the toe, and flat runs four outward from the middle of each side. Bands **wipe

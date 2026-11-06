@@ -2,7 +2,14 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { applyBootBrightness, BOOT_BRIGHTNESS, channelSteps, scaleChannel, toChannelByte } from "./output";
+import {
+  applyBootBrightness,
+  BOOT_BRIGHTNESS,
+  brightnessPercent,
+  channelSteps,
+  scaleChannel,
+  toChannelByte,
+} from "./output";
 
 function shown(colors: number[], brightness: number): number[] {
   const out = new Float32Array(colors.length);
@@ -25,6 +32,15 @@ describe("boot brightness", () => {
     expect(channelSteps(64)).toBe(65);
   });
 
+  it("shows a brightness as the phone app's percent", () => {
+    // Up to the soft cap, as a share of the cap, which is what the app shows with the cap on.
+    expect(brightnessPercent(BOOT_BRIGHTNESS.default)).toBe(100);
+    expect(brightnessPercent(48)).toBe(50);
+    // Past it, as a share of 255, which is what the app shows with the cap off.
+    expect(brightnessPercent(128)).toBe(50);
+    expect(brightnessPercent(BOOT_BRIGHTNESS.max)).toBe(100);
+  });
+
   it("rounds and limits a color to a whole channel value", () => {
     expect(toChannelByte(0)).toBe(0);
     expect(toChannelByte(1)).toBe(255);
@@ -37,7 +53,7 @@ describe("boot brightness", () => {
     for (const brightness of [1, 16, 64]) expect(shown([1, 1, 1], brightness)).toEqual([1, 1, 1]);
   });
 
-  it("turns a dim purple blue at the default brightness, and keeps it purple higher up", () => {
+  it("turns a dim purple blue at brightness 16, and keeps it purple higher up", () => {
     const purple = [(0x7a / 255) * 0.12, 0, 0.12];
     expect(shown(purple, 16)).toEqual([0, 0, 2 / 16]);
     const [red, , blue] = shown(purple, 64);
@@ -52,8 +68,11 @@ describe("boot brightness", () => {
   it("matches the firmware's settings", () => {
     const config = readFileSync(new URL("../../../include/config.h", import.meta.url), "utf8");
     const value = (pattern: RegExp) => Number(pattern.exec(config)?.[1]);
-    expect(BOOT_BRIGHTNESS.default).toBe(value(/#define FIREWALKER_LED_BRIGHTNESS (\d+)/));
-    expect(BOOT_BRIGHTNESS.max).toBe(value(/#define FIREWALKER_LED_BRIGHTNESS_MAX (\d+)/));
+    expect(BOOT_BRIGHTNESS.cap).toBe(value(/#define FIREWALKER_LED_BRIGHTNESS_SOFT_CAP (\d+)/));
+    // A new boot starts at the soft cap, so config.h defines its default as the cap.
+    expect(config).toMatch(/#define FIREWALKER_LED_BRIGHTNESS FIREWALKER_LED_BRIGHTNESS_SOFT_CAP\b/);
+    expect(BOOT_BRIGHTNESS.default).toBe(BOOT_BRIGHTNESS.cap);
+    expect(BOOT_BRIGHTNESS.max).toBe(value(/LED_BRIGHTNESS_MAX = (\d+)/));
     expect(BOOT_BRIGHTNESS.min).toBe(value(/LED_BRIGHTNESS_MIN = (\d+)/));
   });
 });

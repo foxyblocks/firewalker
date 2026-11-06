@@ -80,7 +80,7 @@ static void test_strip_commands_ack_as_strip() {
 
 static void test_every_command_fits_a_default_ble_write() {
   const char* longest[] = {"calibrate neutral", "pattern fire-trail", "brightness 255",
-                           "strip preview off", "strip leds 160"};
+                           "strip preview off", "strip leds 160", "cap off"};
   for (const char* command : longest) {
     TEST_ASSERT_TRUE(strlen(command) <= 20);
   }
@@ -223,6 +223,22 @@ static void test_power_and_debug_take_on_or_off() {
   TEST_ASSERT_EQUAL_STRING("expected-on-or-off", parseCommand("power maybe").error);
 }
 
+static void test_cap_turns_the_soft_cap_on_or_off() {
+  const Command on = parseCommand("cap on");
+  TEST_ASSERT_EQUAL(CommandType::Cap, on.type);
+  TEST_ASSERT_TRUE(on.on);
+  const Command off = parseCommand("cap off");
+  TEST_ASSERT_EQUAL(CommandType::Cap, off.type);
+  TEST_ASSERT_FALSE(off.on);
+
+  TEST_ASSERT_EQUAL_STRING("expected-on-or-off", parseCommand("cap 96").error);
+  TEST_ASSERT_EQUAL_STRING("expected-one-argument", parseCommand("cap").error);
+
+  char line[REMOTE_LINE_MAX];
+  formatAck(line, sizeof(line), CommandType::Cap, true);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"ack\",\"cmd\":\"cap\",\"ok\":true}", line);
+}
+
 static void test_brightness_parses_a_whole_byte_value() {
   const Command command = parseCommand("brightness 32");
   TEST_ASSERT_EQUAL(CommandType::Brightness, command.type);
@@ -301,7 +317,9 @@ static StatusReport sampleStatus() {
   report.pattern = "off";
   report.lit = "fire-trail";
   report.brightness = 32;
-  report.maxBrightness = 64;
+  report.maxBrightness = 48;
+  report.capped = true;
+  report.capBrightness = 48;
   report.sensorReady = true;
   report.tilt = -0.25f;
   report.calibration.neutralSet = true;
@@ -325,7 +343,8 @@ static void test_status_reports_the_actual_state() {
   formatStatus(line, sizeof(line), sampleStatus());
   TEST_ASSERT_EQUAL_STRING(
       "{\"t\":\"status\",\"proto\":4,\"id\":\"A1B2\",\"pattern\":\"off\",\"lit\":\"fire-trail\","
-      "\"brightness\":32,\"maxBrightness\":64,\"sensor\":\"ok\",\"tilt\":-0.25,\"calibrated\":true,"
+      "\"brightness\":32,\"maxBrightness\":48,\"capped\":true,\"capBrightness\":48,\"sensor\":\"ok\","
+      "\"tilt\":-0.25,\"calibrated\":true,"
       "\"neutralDeg\":4.50,\"heelDeg\":null,\"toeDeg\":34.00,\"calibration\":\"ok\",\"saved\":true,"
       "\"saveFailed\":false,\"saves\":3,\"debug\":false,\"ble\":true,\"leds\":110,\"maxLeds\":160,"
       "\"toe\":40,\"heel\":90,\"preview\":true}",
@@ -339,6 +358,8 @@ static void test_largest_status_fits_the_line_buffer() {
   report.lit = "abcdefghijkl";
   report.brightness = 255;
   report.maxBrightness = 255;
+  report.capped = false;
+  report.capBrightness = 255;
   report.sensorReady = false;
   report.tilt = -1.0f;
   report.calibration.neutralDeg = -180.0f;
@@ -418,6 +439,7 @@ int main(int, char**) {
   RUN_TEST(test_acks_report_success_and_failure);
   RUN_TEST(test_calibration_lines_cover_every_outcome);
   RUN_TEST(test_capture_failures_have_reasons);
+  RUN_TEST(test_cap_turns_the_soft_cap_on_or_off);
   RUN_TEST(test_status_reports_the_actual_state);
   RUN_TEST(test_largest_status_fits_the_line_buffer);
   RUN_TEST(test_formatters_truncate_instead_of_overflowing);

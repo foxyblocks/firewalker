@@ -55,7 +55,8 @@ aren't JSON.
 | `patterns` | Lists the patterns this boot can show |
 | `pattern <name>`, `pattern off` | Selects a pattern and remembers it. `patterns` lists the names |
 | `power on`, `power off` | Off blanks the strip. On returns to the last lit pattern |
-| `brightness <n>` | Sets brightness, from 1 to `maxBrightness` |
+| `brightness <n>` | Sets brightness, from 1 to `maxBrightness`, which the soft cap lowers while it's on |
+| `cap on`, `cap off` | Turns the soft brightness cap on or off and remembers it. On brings a brightness over the cap down to it. See [Soft brightness cap](#soft-brightness-cap) |
 | `calibrate neutral`, `calibrate heel`, `calibrate toe` | Captures one pose; hold it for two seconds. A bare `calibrate` means neutral |
 | `debug on`, `debug off` | Starts or stops live motion lines |
 | `identify` | Blinks the strip for about 1.5 seconds, to show which boot this is. Changes no settings |
@@ -108,7 +109,7 @@ Sent in reply to `status`, when a client subscribes, and after any change. Chang
 are reported at most every 250 ms, so a slider drag gets one line per interval.
 
 ```json
-{"t":"status","proto":4,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}
+{"t":"status","proto":4,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":96,"capped":true,"capBrightness":96,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}
 ```
 
 | Field | Meaning |
@@ -117,7 +118,8 @@ are reported at most every 250 ms, so a slider drag gets one line per interval.
 | `id` | Four hex digits identifying this controller |
 | `pattern` | The current pattern, or `off` |
 | `lit` | The pattern `power on` returns to, even while the strip is off |
-| `brightness`, `maxBrightness` | The current level and the highest this build accepts |
+| `brightness`, `maxBrightness` | The current level, and the highest `brightness` accepts right now: `capBrightness` with the cap on, 255 with it off |
+| `capped`, `capBrightness` | Whether the soft cap is on, and its level. Firmware from before the cap leaves both out |
 | `sensor` | `ok` or `unavailable` |
 | `tilt` | Fused fore-aft tilt: -1 at the heel pose, 0 at neutral, +1 at the toe pose |
 | `calibrated`, `neutralDeg` | Whether a neutral has been captured, and its angle in degrees |
@@ -182,6 +184,23 @@ half of the samples. Tremor, a slow sag, a brief stumble, or settling in late al
 It only fails with `motion` if that middle half is spread too wide, such as a foot rocking
 from heel to toe. The window and limits are in [`config.h`](../include/config.h)
 (`CALIBRATION_*` and `TILT_LIMITS`).
+
+### Soft brightness cap
+
+Each boot holds its brightness at or under its soft cap, `capBrightness` (96), unless the cap is
+turned off. At 96, a full-white frame on a 107-pixel strip draws about 400 mA by the strip's rating,
+which fits a USB 2.0 port's 500 mA. With the cap off, `brightness` goes up to 255: about 1.07 A at
+full white on 107 pixels, more than a USB 2.0 port gives and possibly more than the 1 A diode
+Seeed's schematic puts in front of the 5V pad. So turn it off only on a dedicated 5 V supply
+([`power-budget.md`](power-budget.md)).
+
+- A new boot starts with the cap on and its brightness at the cap.
+- Each boot saves whether its cap is on, so a power cycle doesn't change it. A boot updated from
+  firmware before the cap starts with it on and keeps its other settings.
+- `cap on` brings a brightness over the cap down to it, and saves. `cap off` leaves the level alone.
+- `maxBrightness` always means what `brightness` accepts right now, so an app written before the
+  cap stays inside it. An app finds out whether a boot has the cap from `capped` in its status line,
+  so the cap needed no new protocol version.
 
 ### Strip layout
 

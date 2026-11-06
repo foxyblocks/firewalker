@@ -10,7 +10,8 @@
 
 using namespace Firewalker;
 
-static const SettingsBounds BOUNDS = {1, 64, 45.0f, 160};
+// A hard maximum of 64 and a soft cap of 48, so a test can place a brightness between them.
+static const SettingsBounds BOUNDS = {1, 64, 45.0f, 160, 48};
 static const StripLayout DEFAULT_STRIP = {160, 52, 132};
 
 void setUp() {}
@@ -384,6 +385,98 @@ static void test_endless_changes_still_save_by_the_longest_delay() {
   TEST_ASSERT_EQUAL(5000, savedAt);
 }
 
+// ── The soft brightness cap ─────────────────────────────────────────────
+
+static void test_a_new_boot_starts_with_the_soft_cap_on() {
+  TEST_ASSERT_TRUE(defaultSettings(16, DEFAULT_STRIP).capped);
+}
+
+static void test_turning_the_cap_off_survives_a_save() {
+  Settings uncapped = sampleSettings();
+  uncapped.capped = false;
+  uncapped.brightness = 60;  // over the soft cap of 48, under the hard maximum of 64
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(encodeSettings(uncapped), BOUNDS, out));
+  TEST_ASSERT_FALSE(out.capped);
+  TEST_ASSERT_EQUAL(60, out.brightness);
+}
+
+// Version 4 records saved before the cap existed hold zero where its flag now sits. They have to
+// come back capped, with their poses and strip layout intact.
+static void test_a_record_saved_before_the_cap_existed_loads_capped() {
+  Settings uncapped = sampleSettings();
+  uncapped.capped = false;
+  SettingsRecord record = encodeSettings(uncapped);
+  record.flags = 0;
+  reseal(record);
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  out.capped = false;
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
+  TEST_ASSERT_TRUE(out.capped);
+  TEST_ASSERT_TRUE(out.calibration.toeSet);
+  TEST_ASSERT_EQUAL_FLOAT(60.0f, out.calibration.toeDeg);
+  TEST_ASSERT_EQUAL_UINT16(110, out.strip.count);
+}
+
+static void test_a_capped_boot_writes_no_flag() {
+  TEST_ASSERT_EQUAL_UINT8(0, encodeSettings(sampleSettings()).flags);
+}
+
+static void test_flags_a_newer_firmware_might_add_are_ignored() {
+  SettingsRecord record = encodeSettings(sampleSettings());
+  record.flags |= 0x80;
+  reseal(record);
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
+  TEST_ASSERT_TRUE(out.capped);
+}
+
+static void test_a_capped_record_over_the_cap_loads_at_the_cap() {
+  Settings bright = sampleSettings();
+  bright.brightness = 60;
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(encodeSettings(bright), BOUNDS, out));
+  TEST_ASSERT_TRUE(out.capped);
+  TEST_ASSERT_EQUAL(48, out.brightness);
+}
+
+// Firmware before the soft cap had a fixed maximum, so whatever it saved was capped.
+static void test_older_records_load_capped() {
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  out.capped = false;
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettingsV3(sampleV3Record(2, 2), BOUNDS, out));
+  TEST_ASSERT_TRUE(out.capped);
+
+  out.capped = false;
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettingsV2(sampleV2Record(), BOUNDS, out));
+  TEST_ASSERT_TRUE(out.capped);
+}
+
+static void test_the_ceiling_follows_the_cap() {
+  Settings settings = sampleSettings();
+  TEST_ASSERT_EQUAL(48, brightnessCeiling(settings, BOUNDS));
+  settings.capped = false;
+  TEST_ASSERT_EQUAL(64, brightnessCeiling(settings, BOUNDS));
+}
+
+static void test_turning_the_cap_on_pulls_brightness_down_to_it() {
+  Settings settings = sampleSettings();
+  settings.capped = false;
+  settings.brightness = 60;
+  TEST_ASSERT_TRUE(setBrightnessCap(settings, true, BOUNDS));
+  TEST_ASSERT_TRUE(settings.capped);
+  TEST_ASSERT_EQUAL(48, settings.brightness);
+}
+
+static void test_turning_the_cap_off_keeps_the_brightness() {
+  Settings settings = sampleSettings();
+  TEST_ASSERT_TRUE(setBrightnessCap(settings, false, BOUNDS));
+  TEST_ASSERT_FALSE(settings.capped);
+  TEST_ASSERT_EQUAL(32, settings.brightness);
+  // Asking for the state it's already in changes nothing, so there's nothing to save.
+  TEST_ASSERT_FALSE(setBrightnessCap(settings, false, BOUNDS));
+}
+
 static void test_audio_settings_round_trip_and_v4_upgrade_keeps_poses() {
   Settings source = sampleSettings();
   source.audioNoiseFloor = 13;
@@ -416,9 +509,38 @@ static void test_audio_settings_round_trip_and_v4_upgrade_keeps_poses() {
   TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(record, BOUNDS, out));
 }
 
+// The cap flag and the microphone tuning each have their own spare bytes, so both survive a save,
+// and a version 5 record saved before the cap existed keeps its tuning and comes back capped.
+static void test_mic_tuning_and_the_cap_flag_keep_their_own_bytes() {
+  Settings source = sampleSettings();
+  source.capped = false;
+  source.brightness = 60;
+  source.audioNoiseFloor = 13;
+  source.audioSensitivity = 42;
+  SettingsRecord record = encodeSettings(source);
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
+  TEST_ASSERT_FALSE(out.capped);
+  TEST_ASSERT_EQUAL(60, out.brightness);
+  TEST_ASSERT_EQUAL_UINT8(13, out.audioNoiseFloor);
+  TEST_ASSERT_EQUAL_UINT8(42, out.audioSensitivity);
+
+  record.flags = 0;
+  reseal(record);
+  out = defaultSettings(16, DEFAULT_STRIP);
+  out.capped = false;
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
+  TEST_ASSERT_TRUE(out.capped);
+  TEST_ASSERT_EQUAL(48, out.brightness);
+  TEST_ASSERT_EQUAL_UINT8(13, out.audioNoiseFloor);
+  TEST_ASSERT_EQUAL_UINT8(42, out.audioSensitivity);
+  TEST_ASSERT_EQUAL_UINT16(110, out.strip.count);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_audio_settings_round_trip_and_v4_upgrade_keeps_poses);
+  RUN_TEST(test_mic_tuning_and_the_cap_flag_keep_their_own_bytes);
   RUN_TEST(test_defaults_are_flow_and_uncalibrated);
   RUN_TEST(test_round_trip_keeps_every_field);
   RUN_TEST(test_off_round_trips_and_remembers_what_to_return_to);
@@ -448,5 +570,15 @@ int main(int, char**) {
   RUN_TEST(test_scheduler_is_not_due_when_now_predates_the_change);
   RUN_TEST(test_slider_burst_becomes_one_save);
   RUN_TEST(test_endless_changes_still_save_by_the_longest_delay);
+  RUN_TEST(test_a_new_boot_starts_with_the_soft_cap_on);
+  RUN_TEST(test_turning_the_cap_off_survives_a_save);
+  RUN_TEST(test_a_record_saved_before_the_cap_existed_loads_capped);
+  RUN_TEST(test_a_capped_boot_writes_no_flag);
+  RUN_TEST(test_flags_a_newer_firmware_might_add_are_ignored);
+  RUN_TEST(test_a_capped_record_over_the_cap_loads_at_the_cap);
+  RUN_TEST(test_older_records_load_capped);
+  RUN_TEST(test_the_ceiling_follows_the_cap);
+  RUN_TEST(test_turning_the_cap_on_pulls_brightness_down_to_it);
+  RUN_TEST(test_turning_the_cap_off_keeps_the_brightness);
   return UNITY_END();
 }

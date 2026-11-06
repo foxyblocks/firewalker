@@ -19,6 +19,8 @@
  *   &capture=moving                Left moves during every capture
  *   &usb=1                         offer Add over USB beside Bluetooth, as a desktop browser does
  *   &usb=busy                      the same, but another program has the boot's USB port
+ *   &cap=off                       Left's soft brightness cap is off
+ *   &cap=none                      firmware from before the soft cap, with a fixed maximum
  */
 
 import { Capacitor } from "@capacitor/core";
@@ -55,9 +57,14 @@ function fakeSetup(params: URLSearchParams): { transport: Transport; storage: Ke
   const proto = params.get("proto") === null ? undefined : Number(params.get("proto"));
   const extraPatterns = Math.max(0, Number(params.get("patterns") ?? 2) - 2);
   const patterns = ["flow", "fire-trail", ...Array.from({ length: extraPatterns }, (_, index) => `pattern-${index + 3}`)];
+  // Current firmware: a new boot starts at its soft cap of 96, with the cap on.
+  const brightness =
+    params.get("cap") === "none" ? {} : { brightness: 96, maxBrightness: 255, capBrightness: 96 };
   const left = new FakeBoot({
     id: "3ED1",
     proto,
+    ...brightness,
+    capped: params.get("cap") !== "off",
     patterns,
     wander: true,
     calibrated: true,
@@ -67,6 +74,7 @@ function fakeSetup(params: URLSearchParams): { transport: Transport; storage: Ke
   const right = new FakeBoot({
     id: "7B20",
     proto,
+    ...brightness,
     leds: 110,
     toe: 40,
     heel: 90,

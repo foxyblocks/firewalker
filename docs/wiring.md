@@ -22,15 +22,18 @@ unconnected.
 There are two supported setups. [`power-budget.md`](power-budget.md) has the current
 math behind them.
 
-**USB bench.** Feed the strip from the board's 5V pad, which exposes USB power. Seeed
-recommends keeping peripheral load on that pad under 500 mA. The firmware's brightness
-cap keeps a full-white frame on the uncut strip near 400 mA by its rating, and lower once
-it's cut.
+**USB.** Feed the strip from the board's 5V pad, which carries USB power. Seeed's wiring
+sheet puts a 1 A diode between USB and the pad, though its block diagram doesn't, so the
+strip may get a little less than the USB voltage. The firmware's soft brightness cap, which
+is on unless someone turns it off from the remote, keeps a full-white frame on a 107-pixel
+boot strip near 400 mA by its rating, which fits a USB 2.0 port's 500 mA either way. The
+uncut strip needs a lower brightness.
 
 **External 5 V.** Feed the strip directly from a 5 V supply rated at least 1.5 A per cut
 strip, or 2 A for the uncut strip. Keep the board on USB or its own supply, and tie the
 grounds together. Leave the board's 5V
-pad disconnected from that supply. Use this for anything brighter than the cap.
+pad disconnected from that supply. Use this for anything brighter than the soft cap, and turn
+the cap off from the remote only once the strip is on this supply.
 
 The 5V pad is not a boosted battery output, and the final battery design is still open.
 
