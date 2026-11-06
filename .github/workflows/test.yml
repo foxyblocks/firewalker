@@ -16,10 +16,13 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
-      # The designer reuses the iPhone app's connection code, so it needs the app's packages too.
-      - name: App packages
+      # Both clients share transport code; check the remote's controls as well as the designer.
+      - name: Boot remote
         working-directory: app
-        run: bun install --frozen-lockfile
+        run: |
+          bun install --frozen-lockfile
+          bun run typecheck
+          bun run test
 
       - name: Designer
         working-directory: designer

@@ -1,7 +1,7 @@
-# Pattern recipe format, version 1
+# Pattern recipe format, versions 1 and 2
 
 A **recipe** describes a pattern as data: a stack of layers that each paint the strip, with
-knobs that can follow the boot's tilt and stomps. The designer (`designer/`) makes and
+knobs that can follow tilt, stomps, time, and audio. The designer (`designer/`) makes and
 previews recipes, and `patterns/` keeps the ones worth keeping. A boot runs them in a compiled
 form, [below](#compiled-form), either built into its firmware or uploaded (see
 [ADR-0005](adr/0005-pattern-recipes.md)).
@@ -28,7 +28,7 @@ and `designer/src/engine/engine.ts` shows what each layer draws.
 | Field | Rule |
 | --- | --- |
 | `format` | Always `firewalker-recipe` |
-| `version` | `1`. A reader refuses versions it doesn't know |
+| `version` | `1` for the original layers and sources, `2` for Band or audio. New firmware reads both |
 | `name` | 1 to 12 characters: a lowercase letter, then `a-z`, `0-9`, or `-`. Not `off`, `flow`, or `fire-trail`, which the boot already uses. The boot lists patterns by this name, and the file is `patterns/<name>.json` |
 | `description` | Up to 200 characters, for people. The boot never sees it |
 | `layers` | 1 to 8 layers, drawn first to last, so the last one is on top |
@@ -45,7 +45,7 @@ binding on one line, so they diff cleanly.
 
 | Field | Values | Default |
 | --- | --- | --- |
-| `type` | `fill`, `pool`, `trail`, `flash`, `sparkle`, `chase` | |
+| `type` | `fill`, `pool`, `trail`, `flash`, `sparkle`, `chase`, `band` | |
 | `label` | Optional, up to 24 characters, for the layer list | |
 | `enabled` | `true` or `false`. A disabled layer draws nothing | `true` |
 | `blend` | `over`, `add`, `max`, `multiply` | per type |
@@ -67,6 +67,16 @@ between `min` and `max`.
 | `stompStrength` | A threshold stomp, held until the next one | A full-force stomp |
 | `stompFade` | `fadeMs` (50 to 10000, default 1000) after a stomp | At the stomp |
 | `wave` | Low point of a smooth loop | High point, every `periodMs` (100 to 60000, default 2000) |
+| `audioLevel` | Silence, or audio capture stopped | Full level on the simulator's audio meter |
+
+In the simulator, choose Microphone or Computer audio above the boot and click Listen.
+Every audio-bound knob follows the same live level shown by the meter. Its `min` and `max`
+set the output range, so brightness from 0 to 1 fades with sound, or speed from 20 to 200
+speeds up with sound. Stopping capture returns to `min`. The boot samples its onboard microphone through a timed ADC and DMA block. It removes the
+resting voltage, measures RMS, applies a noise floor and logarithmic level mapping, and uses a
+fast attack and slower release. A short noise gate rejects isolated clicks. `PatternInput.audioLevel` carries that 0..1 level to the engine.
+A stalled capture reads silence. Hardware sensitivity lives in `config.h` under `AUDIO_*`,
+independent of the browser's input gain.
 
 `min` and `max` stay inside the knob's own range. `min` can be larger than `max`, which runs
 the binding backward. `periodMs` is only allowed on `wave`, and `fadeMs` only on `stompFade`.
@@ -101,6 +111,24 @@ at full tilt. It paints gray, so use it with `multiply` to shape the layers belo
 | Field | Values | Default |
 | --- | --- | --- |
 | `baseline` | 0 to 1, knob | 0.8 |
+
+### `band`
+
+A gray mask over the same heel-to-toe interval on both sides of the boot. Use `multiply`
+above a fill to turn it into a bar. Its edges fade across one pixel as they move.
+
+| Field | Values | Default |
+| --- | --- | --- |
+| `position` | 0 to 1, knob. Heel at 0, centered at 0.5, toe at 1 | 0.5 |
+| `width` | 0 to 1, knob. Fraction of each side covered by the bar | 0.5 |
+
+Position slides the whole band while preserving its width. At width 0.5, flat lights the
+middle half of both sides, heel-down lights heel to midpoint, and toe-down lights midpoint
+to toe. Width 0 clears the ring, and width 1 lights every pixel, at any tilt.
+
+`bass-ripple` binds position to `tilt` and width to `audioLevel`, over a rainbow fill whose
+brightness follows `stompFade` from 0.7 to 1 with a 200 ms fade. Stomps brighten the current
+bar. At zero volume the ring stays dark, including during a stomp.
 
 ### `trail`
 
@@ -192,9 +220,14 @@ and one entry saves all at once. The designer shows the size, and won't save or 
 Compiling drops what a boot has no use for: the description, labels, and disabled layers. A recipe needs at
 least one enabled layer.
 
-Numbers are little-endian. The first byte is the same `version` as the file. Version 1 is frozen, since
-boots run it and uploads outlive firmware updates, so changing a field, its order, an option, or a limit means
-a new version.
+Numbers are little-endian. The compiler uses the earliest version needed by the enabled layers.
+Version 1 recipes keep their existing bytes. Version 2 appends Band (type 6) and audioLevel
+(source 5), preserving every version 1 field and code. New firmware decodes and lists both versions.
+An older boot that only lists version 1 gets a firmware-update message before an audio recipe is sent.
+
+Saving JSON upgrades earlier audio drafts to version 2. If an audio layer is disabled, it is
+omitted from the compiled recipe, so an otherwise version 1 effect can still go to an older boot.
+Both decoders reject a version 1 binary that tries to use a version 2 layer or source.
 
 | Bytes | Recipe |
 |---|---|
@@ -207,7 +240,7 @@ a new version.
 
 | Bytes | Layer |
 |---|---|
-| 1 | Type: fill 0, pool 1, trail 2, flash 3, sparkle 4, chase 5 |
+| 1 | Type: fill 0, pool 1, trail 2, flash 3, sparkle 4, chase 5, band 6 (version 2) |
 | 1 | Bound-knob mask. Bit k set means the layer's k-th knob is a binding |
 | varies | Its fields, in the order below |
 
@@ -219,6 +252,7 @@ a new version.
 | flash | trigger, palette, fadeMs, brightness\*, blend, opacity\* |
 | sparkle | palette, density\*, fadeMs, brightness\*, blend, opacity\* |
 | chase | path, palette, count, speed\*, length, brightness\*, blend, opacity\* |
+| band | position\*, width\*, blend, opacity\* |
 
 | Field | Bytes | Encoding |
 |---|---|---|
@@ -227,7 +261,7 @@ a new version.
 | `flatZone` | 2 | Scaled |
 | Palette | 1 + 3n | Color count, then R, G, B per color |
 | Fixed knob | 2 | Scaled |
-| Bound knob | 5 or 7 | Source (tilt 0, tiltAmount 1, stompStrength 2, stompFade 3, wave 4), scaled `min`, scaled `max`, and for `wave` or `stompFade`, a `uint16` for `periodMs` or `fadeMs` |
+| Bound knob | 5 or 7 | Source (tilt 0, tiltAmount 1, stompStrength 2, stompFade 3, wave 4, audioLevel 5 in version 2), scaled `min`, scaled `max`, and for `wave` or `stompFade`, a `uint16` for `periodMs` or `fadeMs` |
 
 A **scaled** number is an `int16` across the field's range. With `range` as the larger of the field's `|min|`
 and `|max|`, it's stored as `round(value / range × 32767)` and read as `raw / 32767 × range` in single

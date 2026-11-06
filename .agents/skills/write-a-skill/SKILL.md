@@ -14,9 +14,10 @@ description: Create new agent skills with proper structure, progressive disclosu
    - Any reference materials to include?
 
 2. **Draft the skill** - create:
-   - SKILL.md with concise instructions
+   - `.agents/skills/<skill-name>/SKILL.md` with concise, platform-agnostic instructions that work with both Claude and Codex
    - Additional reference files if content exceeds 500 lines
    - Utility scripts if deterministic operations needed
+   - Thin platform-specific metadata only when needed; `.claude/skills` stays a symlink to `../.agents/skills`
 
 3. **Review with user** - present draft and ask:
    - Does this cover your use cases?
@@ -115,3 +116,4 @@ After drafting, verify:
 - [ ] Consistent terminology
 - [ ] Concrete examples included
 - [ ] References one level deep
+- [ ] Shared instructions and scripts work with both Claude and Codex

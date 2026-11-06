@@ -21,7 +21,7 @@ import {
   type Transport,
 } from "./transport";
 import { USB_PORT_BUSY_MESSAGE } from "./usb";
-import type { Pose, StripSetting } from "../core/protocol";
+import { AUDIO_PROTOCOL_VERSION, type Pose, type StripSetting } from "../core/protocol";
 
 const STATUS_MIN_MS = 250;
 const MOTION_MS = 200;
@@ -45,7 +45,12 @@ export interface FakeBootOptions {
   pattern?: string;
   lastLit?: string;
   brightness?: number;
+  /** The most it accepts with no cap holding it back, which is all older firmware has. */
   maxBrightness?: number;
+  /** The soft cap's level, as current firmware has. Leave it out for firmware from before the cap. */
+  capBrightness?: number;
+  /** Whether the soft cap starts on, when there is one. */
+  capped?: boolean;
   sensor?: "ok" | "unavailable";
   calibrated?: boolean;
   neutralDeg?: number;
@@ -92,6 +97,7 @@ export class FakeBoot {
   moving = false;
   /** The next capture ends with no `calibrate` line, leaving only the status field. */
   silentCaptureResult = false;
+  silentAudioCaptureResult = false;
   /** Sends a status holding the previous capture's result right after the ack. */
   staleStatusAfterAck = false;
   /** Commands it drops without answering, by first word. */
@@ -100,7 +106,11 @@ export class FakeBoot {
   pattern: string;
   lastLit: string;
   brightness: number;
-  readonly maxBrightness: number;
+  /** The most it accepts with no cap holding it back. */
+  readonly hardMaxBrightness: number;
+  /** The soft cap's level, or undefined for firmware that has no cap. */
+  readonly capBrightness: number | undefined;
+  capped: boolean;
   sensor: "ok" | "unavailable";
   calibrated: boolean;
   neutralDeg: number;
@@ -115,6 +125,10 @@ export class FakeBoot {
   heel: number;
   /** Whether the strip is showing its layout in place of its pattern. */
   preview = false;
+  audioSensitivity = 65;
+  audioNoiseFloor = 8;
+  audioReady = true;
+  private audioCalibrating = false;
 
   private events: LinkEvents | null = null;
   private readonly notificationBytes: number;
@@ -135,12 +149,14 @@ export class FakeBoot {
     this.id = options.id ?? "3ED1";
     this.deviceId = `fake-${this.id}`;
     this.name = `Firewalker-${this.id}`;
-    this.proto = options.proto ?? 2;
+    this.proto = options.proto ?? AUDIO_PROTOCOL_VERSION;
     this.availablePatterns = options.patterns ?? ["flow", "fire-trail"];
     this.pattern = options.pattern ?? "flow";
     this.lastLit = options.lastLit ?? (this.pattern === "off" ? "flow" : this.pattern);
     this.brightness = options.brightness ?? 24;
-    this.maxBrightness = options.maxBrightness ?? 64;
+    this.hardMaxBrightness = options.maxBrightness ?? 64;
+    this.capBrightness = options.capBrightness;
+    this.capped = options.capped ?? true;
     this.sensor = options.sensor ?? "ok";
     this.calibrated = options.calibrated ?? false;
     this.neutralDeg = options.neutralDeg ?? 0;
@@ -195,6 +211,30 @@ export class FakeBoot {
     const arg = words[1];
 
     switch (verb) {
+      case "audio":
+        if (this.proto < AUDIO_PROTOCOL_VERSION) return this.ackInvalid("unknown-command");
+        if (arg === "gain") {
+          const value = Number(words[2]);
+          if (!Number.isInteger(value) || value < 0 || value > 100 || this.audioCalibrating) {
+            return this.send(JSON.stringify({ t: "ack", cmd: "audio", ok: false, error: "out-of-range" }));
+          }
+          this.audioSensitivity = value;
+          this.markChanged();
+          this.send(JSON.stringify({ t: "ack", cmd: "audio", ok: true }));
+        } else if (arg === "calibrate") {
+          if (!this.audioReady) return this.send(JSON.stringify({ t: "ack", cmd: "audio", ok: false, error: "audio-unavailable" }));
+          this.send(JSON.stringify({ t: "ack", cmd: "audio", ok: true }));
+          if (!this.audioCalibrating) {
+            this.audioCalibrating = true;
+            setTimeout(() => {
+              this.audioCalibrating = false;
+              this.audioNoiseFloor = 9;
+              this.markChanged();
+              if (!this.silentAudioCaptureResult) this.sendAudioConfig();
+            }, 1200);
+          }
+        }
+        return this.sendAudioConfig();
       case "status":
         return this.sendStatus();
       case "patterns":
@@ -222,6 +262,14 @@ export class FakeBoot {
         this.markChanged();
         return this.ackThenStatus("brightness");
       }
+      case "cap":
+        // Firmware from before the cap doesn't know the command.
+        if (this.capBrightness === undefined) return this.ackInvalid("unknown-command");
+        if (arg !== "on" && arg !== "off") return this.ackInvalid("expected-on-or-off");
+        this.capped = arg === "on";
+        if (this.capped) this.brightness = Math.min(this.brightness, this.capBrightness);
+        this.markChanged();
+        return this.ackThenStatus("cap");
       case "calibrate":
         if (arg && arg !== "neutral" && arg !== "heel" && arg !== "toe") {
           return this.ackInvalid("unknown-pose");
@@ -241,6 +289,11 @@ export class FakeBoot {
       default:
         return this.ackInvalid("unknown-command");
     }
+  }
+
+  /** The most `brightness` accepts right now: the soft cap while it's on. */
+  get maxBrightness(): number {
+    return this.capBrightness !== undefined && this.capped ? this.capBrightness : this.hardMaxBrightness;
   }
 
   /** Keeps a preview going for another minute, the way each strip command does on a boot. */
@@ -292,6 +345,12 @@ export class FakeBoot {
     if (setting === "toe") this.toe = pixel;
     else this.heel = pixel;
     return null;
+  }
+
+  private sendAudioConfig(): void {
+    this.send(JSON.stringify({ t: "audio-config", ready: this.audioReady,
+      sensitivity: this.audioSensitivity, noiseFloor: this.audioNoiseFloor,
+      calibrating: this.audioCalibrating, saved: this.saved }));
   }
 
   private select(pattern: string): void {
@@ -459,6 +518,7 @@ export class FakeBoot {
         pattern: this.pattern,
         brightness: this.brightness,
         maxBrightness: this.maxBrightness,
+        ...(this.capBrightness === undefined ? {} : { capped: this.capped, capBrightness: this.capBrightness }),
         sensor: this.sensor,
         tilt: round2(this.sensor === "ok" ? this.tiltAt(this.liveAngle()) : 0),
         calibrated: this.calibrated,

@@ -114,3 +114,21 @@ it("finishes closing before a subscriber immediately wakes the remote", async ()
   unsubscribe();
   await client.disconnect();
 });
+
+it("lets microphone calibration finish before releasing an idle connection", async () => {
+  const boot = new FakeBoot();
+  const client = new BootClient(new FakeTransport([boot]), boot.deviceId);
+  client.connect();
+  await vi.advanceTimersByTimeAsync(400);
+  const captured = client.calibrateAudio();
+  const idle = new Inactivity({ busy: () => client.busy(), pause: () => client.pause(), wake: () => client.connect() }, 500);
+  idle.start();
+  await vi.advanceTimersByTimeAsync(700);
+  expect(client.getState().link).toBe("online");
+  expect(client.getState().audioCalibrating).toBe(true);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(await captured).toEqual({ ok: true });
+  expect(client.getState().link).toBe("sleeping");
+  idle.stop();
+  await client.disconnect();
+});

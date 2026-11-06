@@ -1,6 +1,6 @@
 // Runs a recipe in the browser like a boot runs a pattern: a frame every 16 ms (APP_FRAME_MS
 // in include/config.h), fed by the tilt slider, the stomp button, a stomp on every beat, or a
-// walking gait, and drawn to the simulator's canvases.
+// walking gait, plus the live level from AudioMonitor, and drawn to the simulator's canvases.
 //
 // A stomp is animated in the side view: the boot lifts and drops, and the pattern gets the
 // stomp on the frame it lands, the way the boot's motion sensor feels it.
@@ -76,6 +76,7 @@ export class Simulation {
 
   private tilt = 0;
   private manualTilt = 0;
+  private audioLevel = 0;
   private walking = false;
   private paused = false;
   private speed = 1;
@@ -141,6 +142,12 @@ export class Simulation {
 
   setBootBrightness(brightness: number): void {
     this.bootBrightness = brightness;
+  }
+
+  // AudioMonitor sends the same 0..1 level it displays. Keep it across recipe
+  // edits and layout changes, and reuse it until the next audio reading arrives.
+  setAudioLevel(level: number): void {
+    this.audioLevel = level;
   }
 
   // The slider's tilt. Walking drives the tilt itself, and stopping goes back to this.
@@ -273,7 +280,13 @@ export class Simulation {
       this.impactMs = Math.max(0, this.impactMs - FRAME_MS);
     }
     this.timeMs += FRAME_MS;
-    this.engine.update({ tiltFwd: this.tilt, stomp: stomp !== null, stompStrength: stomp ?? 0, dt: FRAME_MS });
+    this.engine.update({
+      tiltFwd: this.tilt,
+      stomp: stomp !== null,
+      stompStrength: stomp ?? 0,
+      audioLevel: this.audioLevel,
+      dt: FRAME_MS,
+    });
   }
 
   // How long a stomp's lift and drop take, shortened to fit a fast beat.

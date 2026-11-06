@@ -33,8 +33,8 @@ constexpr size_t REMOTE_LINE_MAX = 520;
 // Reported in status, so an app can tell when a boot's firmware needs updating. Raise it
 // when a change would break a client written against the current protocol, or when clients
 // start relying on something earlier firmware doesn't have. 2 added the strip layout, and 3 added
-// recipes.
-constexpr uint8_t REMOTE_PROTOCOL_VERSION = 3;
+// recipes. Protocol 4 adds per-boot microphone tuning and quiet calibration.
+constexpr uint8_t REMOTE_PROTOCOL_VERSION = 4;
 
 enum class CommandType : uint8_t {
   Invalid,
@@ -43,6 +43,7 @@ enum class CommandType : uint8_t {
   Pattern,
   Power,
   Brightness,
+  Cap,
   Calibrate,
   Debug,
   Identify,
@@ -55,6 +56,9 @@ enum class CommandType : uint8_t {
   RecipeEnd,
   RecipeCancel,
   RecipeDelete,
+  Audio,
+  AudioSensitivity,
+  AudioCalibrate,
 };
 
 // The most hex characters a `recipe data` line can carry. See RECIPE_DATA_MAX_HEX.
@@ -66,7 +70,7 @@ struct Command {
   char pattern[PATTERN_NAME_SIZE] = "";
   char hex[REMOTE_RECIPE_HEX_MAX + 1] = "";  // for RecipeData
   CalibrationPose pose = CalibrationPose::Neutral;  // for Calibrate
-  bool on = false;                      // for Power, Debug, and StripPreview
+  bool on = false;                      // for Power, Debug, Cap, and StripPreview
   int32_t value = 0;                    // for Brightness, StripSet, RecipeBegin (size), and RecipeData (offset)
   StripField stripField = StripField::Count;   // for StripSet
   const char* error = nullptr;          // for Invalid: why it was rejected
@@ -83,12 +87,16 @@ inline const char* poseName(CalibrationPose pose) {
 
 inline const char* commandName(CommandType type) {
   switch (type) {
+    case CommandType::Audio:
+    case CommandType::AudioSensitivity:
+    case CommandType::AudioCalibrate: return "audio";
     case CommandType::Status: return "status";
     case CommandType::Patterns: return "patterns";
     case CommandType::Identify: return "identify";
     case CommandType::Pattern: return "pattern";
     case CommandType::Power: return "power";
     case CommandType::Brightness: return "brightness";
+    case CommandType::Cap: return "cap";
     case CommandType::Calibrate: return "calibrate";
     case CommandType::Debug: return "debug";
     case CommandType::StripSet: return "strip";
@@ -269,6 +277,15 @@ inline Command parseCommand(const char* line) {
   const char* verb = words[0];
   const char* arg = words[1];
 
+  if (strcmp(verb, "audio") == 0) {
+    if (count == 1) command.type = CommandType::Audio;
+    else if (count == 2 && strcmp(arg, "calibrate") == 0) command.type = CommandType::AudioCalibrate;
+    else if (count == 3 && strcmp(arg, "gain") == 0 &&
+             parseRecipeNumber(words[2], command.value) && command.value <= 100) {
+      command.type = CommandType::AudioSensitivity;
+    } else command.error = "expected-audio-setting";
+    return command;
+  }
   if (strcmp(verb, "recipe") == 0) {
     parseRecipeCommand(words, count, command);
     return command;
@@ -324,7 +341,8 @@ inline Command parseCommand(const char* line) {
   }
 
   const bool isPattern = strcmp(verb, "pattern") == 0;
-  const bool isOnOff = strcmp(verb, "power") == 0 || strcmp(verb, "debug") == 0;
+  const bool isOnOff =
+      strcmp(verb, "power") == 0 || strcmp(verb, "debug") == 0 || strcmp(verb, "cap") == 0;
   const bool isBrightness = strcmp(verb, "brightness") == 0;
   if (!isPattern && !isOnOff && !isBrightness) {
     command.error = "unknown-command";
@@ -352,7 +370,9 @@ inline Command parseCommand(const char* line) {
       command.error = "expected-on-or-off";
       return command;
     }
-    command.type = (verb[0] == 'p') ? CommandType::Power : CommandType::Debug;
+    command.type = verb[0] == 'p'   ? CommandType::Power
+                   : verb[0] == 'd' ? CommandType::Debug
+                                    : CommandType::Cap;
     return command;
   }
 
@@ -428,8 +448,16 @@ inline void formatRecipes(char* out, size_t size, uint8_t version, const Uploade
   for (uint8_t i = 0; i < slotCount; i++) {
     if (slots[i].used) used++;
   }
-  int written = snprintf(out, size, "{\"t\":\"recipes\",\"versions\":[%u],\"slots\":%u,\"free\":%u,\"list\":[",
-                         (unsigned)version, (unsigned)slotCount, (unsigned)(slotCount - used));
+  int written = snprintf(out, size, "{\"t\":\"recipes\",\"versions\":[");
+  // Versions are additive. Report all readable versions so older uploads remain
+  // usable and clients can check the exact version of the recipe being sent.
+  for (uint16_t supported = 1; supported <= version; supported++) {
+    if (written < 0 || (size_t)written >= size) return;
+    written += snprintf(out + written, size - written, "%s%u", supported == 1 ? "" : ",", (unsigned)supported);
+  }
+  if (written < 0 || (size_t)written >= size) return;
+  written += snprintf(out + written, size - written, "],\"slots\":%u,\"free\":%u,\"list\":[",
+                      (unsigned)slotCount, (unsigned)(slotCount - used));
   bool first = true;
   for (uint8_t i = 0; i < slotCount; i++) {
     if (!slots[i].used) continue;
@@ -466,7 +494,9 @@ struct StatusReport {
   const char* pattern;
   const char* lit;  // the pattern turning on returns to, even while the strip is off
   uint8_t brightness;
-  uint8_t maxBrightness;
+  uint8_t maxBrightness;  // the highest `brightness` accepts right now, which the cap lowers
+  bool capped;            // the soft cap is on
+  uint8_t capBrightness;  // the soft cap's level, whether or not it's on
   bool sensorReady;
   float tilt;
   TiltCalibration calibration;
@@ -502,13 +532,15 @@ inline void formatStatus(char* out, size_t size, const StatusReport& report) {
   formatOptionalAngle(toeText, sizeof(toeText), report.calibration.toeSet, report.calibration.toeDeg);
   snprintf(out, size,
            "{\"t\":\"status\",\"proto\":%u,\"id\":\"%s\",\"pattern\":\"%s\",\"lit\":\"%s\","
-           "\"brightness\":%u,\"maxBrightness\":%u,\"sensor\":\"%s\",\"tilt\":%s,"
+           "\"brightness\":%u,\"maxBrightness\":%u,\"capped\":%s,\"capBrightness\":%u,"
+           "\"sensor\":\"%s\",\"tilt\":%s,"
            "\"calibrated\":%s,\"neutralDeg\":%s,\"heelDeg\":%s,\"toeDeg\":%s,"
            "\"calibration\":\"%s\",\"saved\":%s,\"saveFailed\":%s,\"saves\":%lu,"
            "\"debug\":%s,\"ble\":%s,\"leds\":%u,\"maxLeds\":%u,\"toe\":%u,\"heel\":%u,"
            "\"preview\":%s}",
            (unsigned)REMOTE_PROTOCOL_VERSION, report.id, report.pattern,
            report.lit, (unsigned)report.brightness, (unsigned)report.maxBrightness,
+           report.capped ? "true" : "false", (unsigned)report.capBrightness,
            report.sensorReady ? "ok" : "unavailable", tiltText,
            report.calibration.neutralSet ? "true" : "false", neutralText, heelText, toeText,
            report.calibrationState, report.saved ? "true" : "false",

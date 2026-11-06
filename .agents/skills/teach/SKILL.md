@@ -5,6 +5,8 @@ disable-model-invocation: true
 argument-hint: "What would you like to learn about?"
 ---
 
+Use this skill only when the user explicitly requests it.
+
 The user has asked you to teach them something. This is a stateful request - they intend to learn the topic over multiple sessions.
 
 ## Teaching Workspace

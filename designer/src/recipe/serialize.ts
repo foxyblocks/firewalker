@@ -3,12 +3,12 @@
 // read easily and diff cleanly in a pull request.
 
 import { fieldsFor } from "./spec.ts";
-import { isBinding, RECIPE_FORMAT, RECIPE_VERSION, type Knob, type Layer, type Recipe } from "./types.ts";
+import { isBinding, RECIPE_FORMAT, requiredRecipeVersion, type Knob, type Layer, type Recipe } from "./types.ts";
 
 export function orderRecipe(recipe: Recipe): Recipe {
   return {
     format: RECIPE_FORMAT,
-    version: RECIPE_VERSION,
+    version: requiredRecipeVersion(recipe.layers),
     name: recipe.name,
     description: recipe.description,
     layers: recipe.layers.map(orderLayer),

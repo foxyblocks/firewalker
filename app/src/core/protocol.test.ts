@@ -4,7 +4,7 @@ import { commands, LineSplitter, parseLine } from "./protocol";
 // change there that the app doesn't understand fails here first.
 const FIRMWARE_LINES = {
   status:
-    '{"t":"status","proto":2,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}',
+    '{"t":"status","proto":2,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":96,"capped":true,"capBrightness":96,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}',
   ackOk: '{"t":"ack","cmd":"brightness","ok":true}',
   ackFail: '{"t":"ack","cmd":"brightness","ok":false,"error":"out-of-range"}',
   patterns: '{"t":"patterns","list":["flow","fire-trail"]}',
@@ -16,6 +16,12 @@ const FIRMWARE_LINES = {
 };
 
 describe("parseLine", () => {
+  it("reads the soft cap, and leaves it out for firmware that has none", () => {
+    expect(parseLine(FIRMWARE_LINES.status)).toMatchObject({ maxBrightness: 96, capped: true, capBrightness: 96 });
+    const beforeTheCap = FIRMWARE_LINES.status.replace('"capped":true,"capBrightness":96,', "");
+    expect(parseLine(beforeTheCap)).not.toHaveProperty("capped");
+  });
+
   it("reads a status line into the boot's real settings", () => {
     expect(parseLine(FIRMWARE_LINES.status)).toMatchObject({
       t: "status",
@@ -29,7 +35,7 @@ describe("parseLine", () => {
       pattern: "off",
       lit: "flow",
       brightness: 24,
-      maxBrightness: 64,
+      maxBrightness: 96,
       sensor: "ok",
       calibrated: true,
       neutralDeg: 1.56,
@@ -46,6 +52,13 @@ describe("parseLine", () => {
     expect(parseLine(FIRMWARE_LINES.captured)).toMatchObject({ state: "ok", pose: "heel", angleDeg: -18.4 });
     expect(parseLine(FIRMWARE_LINES.captureFailed)).toMatchObject({ state: "failed", reason: "motion" });
     expect(parseLine(FIRMWARE_LINES.motion)).toMatchObject({ t: "motion", accel: 10.18, accelPeak: 10.31 });
+  });
+
+  it("reads microphone settings and rejects an incomplete audio reply", () => {
+    expect(parseLine('{"t":"audio-config","ready":true,"noiseFloor":9,"sensitivity":65,"calibrating":false,"saved":true}'))
+      .toMatchObject({ t: "audio-config", sensitivity: 65, saved: true });
+    expect(parseLine('{"t":"audio-config","ready":true}')).toBeNull();
+    expect(parseLine('{"t":"audio-config","ready":true,"noiseFloor":9,"sensitivity":101,"calibrating":false,"saved":true}')).toBeNull();
   });
 
   it("keeps working when the firmware adds fields it doesn't know yet", () => {
@@ -89,6 +102,8 @@ describe("commands", () => {
     expect(commands.pattern("fire-trail")).toBe("pattern fire-trail");
     expect(commands.power(true)).toBe("power on");
     expect(commands.power(false)).toBe("power off");
+    expect(commands.cap(true)).toBe("cap on");
+    expect(commands.cap(false)).toBe("cap off");
     expect(commands.brightness(32)).toBe("brightness 32");
     expect(commands.debug(true)).toBe("debug on");
     expect(commands.patterns()).toBe("patterns");
@@ -111,6 +126,9 @@ describe("commands", () => {
 
   it("keeps every command inside the 20-byte write the firmware promises", () => {
     for (const line of [
+      commands.audio(),
+      commands.audioGain(100),
+      commands.audioCalibrate(),
       commands.pattern("fire-trail"),
       commands.calibrate("neutral"),
       commands.brightness(255),

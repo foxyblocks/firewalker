@@ -179,6 +179,32 @@ dd {
   font-variant-numeric: tabular-nums;
 }
 
+.brightness-head,
+.cap-control {
+  display: inline-flex;
+  align-items: center;
+}
+
+.brightness-head {
+  gap: 14px;
+}
+
+.cap-control {
+  gap: 6px;
+}
+
+.cap-label {
+  color: var(--ink-quiet);
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.link-dot {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 .empty {
   padding: 24px 4px;
   color: var(--ink-quiet);
@@ -417,6 +443,112 @@ dd {
   --pixel-glow: rgb(166 77 255 / 75%);
 }
 
+/* ── Slider warnings ─────────────────────────────────────────────────────
+   A slider can mark the levels past a warning, such as brightness over the soft cap while
+   the cap is off (PixelSlider's `warning`). Everything here is the warning yellow. */
+
+/* The outline's line is a whole pixel, because browsers round a fractional border to the
+   screen's pixels and the spacers that make room for it wouldn't match. */
+.slider-wrap {
+  --zone-line: 1px;
+  position: relative;
+}
+
+/* Room in the strip for the outline's left and right edges. Each is as wide as the line, and
+   the strip spaces it from its neighbors like any pixel. */
+.strip-edge {
+  flex: none;
+  width: var(--zone-line);
+  height: 1px;
+}
+
+/* The outline around the pixels past the warning. Its corners curve with the pixels' own
+   3-pixel corners, offset by the space it keeps from them, so the two run parallel. Taps pass
+   through it to the slider. */
+.slider-zone {
+  position: absolute;
+  border: var(--zone-line) solid var(--wait);
+  border-radius: calc(3px + var(--zone-gap) + var(--zone-line));
+  box-shadow: 0 0 5px color-mix(in srgb, var(--wait) 45%, transparent);
+  pointer-events: none;
+}
+
+/* The sign sits just above the outline's left edge, at the bottom of a 44-pixel tap area that reaches up into
+   the space beside the slider's label rather than down over its pixels. It stacks over the tip,
+   whose bottom edge overlaps that area, so a second tap anywhere on it still closes the tip. */
+.slider-mark-button {
+  position: absolute;
+  top: -32px;
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  transform: translateX(-50%);
+}
+
+.slider-mark-icon {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+/* The tap area is mostly empty space, so the keyboard focus ring goes around the sign itself. */
+.slider-mark-button:focus-visible {
+  outline: none;
+}
+
+.slider-mark-button:focus-visible .slider-mark-icon {
+  border-radius: 2px;
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+
+.slider-mark-sign {
+  fill: var(--wait);
+}
+
+.slider-mark-glyph {
+  fill: none;
+  stroke: var(--night);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+.slider-mark-dot {
+  fill: var(--night);
+}
+
+/* As wide as the slider, so it stays on screen wherever the mark is, with a caret at the mark. */
+.slider-tip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 2;
+  padding: 10px 12px;
+  border: 1px solid var(--wait);
+  border-radius: 10px;
+  background: var(--surface-raised);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 50%);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.slider-tip::after {
+  position: absolute;
+  top: 100%;
+  left: var(--mark-x);
+  border: 6px solid transparent;
+  border-top-color: var(--wait);
+  content: "";
+  transform: translateX(-50%);
+}
+
 .strip-tilt {
   height: 28px;
 }
@@ -432,7 +564,7 @@ dd {
 
 .dock-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
   margin-top: 6px;
 }
@@ -501,6 +633,17 @@ dd {
   transition: transform 140ms ease;
 }
 
+.toggle-small {
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
+}
+
+.toggle-small .toggle-knob {
+  width: 16px;
+  height: 16px;
+}
+
 .toggle-on {
   border-color: var(--ember);
   background: var(--ember-soft);
@@ -510,6 +653,10 @@ dd {
   background: var(--ember);
   box-shadow: 0 0 10px rgb(255 106 31 / 70%);
   transform: translateX(24px);
+}
+
+.toggle-small.toggle-on .toggle-knob {
+  transform: translateX(16px);
 }
 
 /* ── Banners ───────────────────────────────────────────────────────────── */
@@ -684,6 +831,11 @@ dd {
 }
 
 /* ── Find boots ────────────────────────────────────────────────────────── */
+
+.calibrate-card {
+  width: 100%;
+  margin-bottom: 10px;
+}
 
 .boot-card {
   margin-bottom: 10px;

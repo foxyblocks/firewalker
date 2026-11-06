@@ -561,15 +561,15 @@ Version 1 is frozen, so a recipe that turns out too slow gets fixed in this orde
 - **Two engines drifting.** Reference frames, and the rule that behavior changes go into both at once.
 - **Anyone nearby can upload.** There's no pairing today, so anyone in range can already change a boot's
   pattern or calibration. Uploading adds a nuisance: filling slots. The decoder keeps bad data from
-  crashing a boot, and the brightness cap still limits current on any recipe.
+  crashing a boot, and the soft brightness cap, while it's on, still limits current on any recipe.
 - **Flash shared with BLE.** Test all 16 slots full, repeated uploads, and a power cut during a save.
   Measure any frame hiccup when NVM3 compacts.
 - **A status or list line getting too long.** The longest status line with 12-character names is about
   400 characters, under the limit. A native test builds the longest possible `patterns` line.
 - **Web Serial's buffer.** PR #8 found a status line already passes Web Serial's default 255 bytes. Check
   that its buffer also fits a 520-byte `patterns` line.
-- **Recipes that look different on a boot.** Expected at low brightness, where the default of 16 gives
-  only 17 steps per channel. The simulator's Boot brightness setting shows that.
+- **Recipes that look different on a boot.** Expected at low brightness, where steps run out: 16 gives
+  only 17 per channel, and even the default of 96 gives just 97. The simulator's Boot brightness setting shows that.
 - **Flashing boots other people are using.** Check the board is free and ask foxy first. A boot's settings
   can be lost by a flash during a check.
 
@@ -591,7 +591,7 @@ Each step lands on its own, building and passing its tests.
    - `docs/recipe-format.md`: the binary layout.
    - `docs/remote-protocol.md`: the new commands, and protocol 3.
    - `docs/adr/0005-pattern-recipes.md`: close the open question on built-ins.
-   - `CONTEXT.md`, `CLAUDE.md`, `designer/README.md`, and `patterns/README.md`, which should say which
+   - `CONTEXT.md`, `AGENTS.md`, `designer/README.md`, and `patterns/README.md`, which should say which
      recipes are built in and point to `built-ins.txt`.
    - `docs/open-questions.md`: its scope list still names only flow and fire-trail.
 

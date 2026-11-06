@@ -1,7 +1,8 @@
 #pragma once
 
 // Pure settings logic: what each controller remembers across power cycles (its
-// pattern, brightness, calibrated poses, and strip layout), how
+// pattern, brightness, soft brightness cap, calibrated poses, strip layout, and microphone
+// tuning), how
 // that is checked when read back from flash, and when a change is worth writing.
 // Arduino-free so test/test_settings can exercise it off-hardware. The flash
 // reads and writes themselves live in firewalker_settings_store.h.
@@ -46,32 +47,64 @@ inline void copyPatternName(char* out, const char* name) {
   out[PATTERN_NAME_SIZE - 1] = '\0';
 }
 
+constexpr uint8_t AUDIO_DEFAULT_NOISE_FLOOR = 8;
+constexpr uint8_t AUDIO_DEFAULT_SENSITIVITY = 65;
+
 struct Settings {
   char pattern[PATTERN_NAME_SIZE];
   // The pattern turning back on returns to. Never off.
   char lastLitPattern[PATTERN_NAME_SIZE];
   uint8_t brightness;
+  // Whether the soft cap is on, holding brightness at or under SettingsBounds::softCapBrightness.
+  // It keeps a USB-fed strip inside what a USB port can supply, and someone turns it off from
+  // the remote to go brighter on a dedicated supply.
+  bool capped;
+  uint8_t audioNoiseFloor;
+  uint8_t audioSensitivity;
   TiltCalibration calibration;
   StripLayout strip;
 };
 
 struct SettingsBounds {
   uint8_t minBrightness;
-  uint8_t maxBrightness;
+  uint8_t maxBrightness;      // the most a boot accepts with its soft cap off
   float maxNeutralDeg;
   uint16_t maxStripPixels;
+  uint8_t softCapBrightness;  // the most a boot accepts with its soft cap on
 };
 
-// First-boot settings: flow at the given brightness, with no calibrated poses, on the
-// strip layout this build starts from.
+// First-boot settings: flow at the given brightness with the soft cap on, no calibrated poses,
+// and the strip layout this build starts from.
 inline Settings defaultSettings(uint8_t brightness, const StripLayout& strip) {
   Settings settings{};
   copyPatternName(settings.pattern, PATTERN_DEFAULT);
   copyPatternName(settings.lastLitPattern, PATTERN_DEFAULT);
   settings.brightness = brightness;
+  settings.capped = true;
+  settings.audioNoiseFloor = AUDIO_DEFAULT_NOISE_FLOOR;
+  settings.audioSensitivity = AUDIO_DEFAULT_SENSITIVITY;
   settings.calibration = TiltCalibration{};
   settings.strip = strip;
   return settings;
+}
+
+// The highest brightness a boot accepts right now: the soft cap while it's on, and the hard
+// maximum while it's off. With a soft cap of 96 that's 96, or 255 with the cap off.
+inline uint8_t brightnessCeiling(const Settings& settings, const SettingsBounds& bounds) {
+  return settings.capped ? bounds.softCapBrightness : bounds.maxBrightness;
+}
+
+// Turns the soft cap on or off. Turning it on brings a brightness over the cap down to it, so the
+// cap holds from that moment: 200 becomes 96. Turning it off leaves the brightness where it is.
+// Returns whether anything changed, which is whether there's anything to save.
+inline bool setBrightnessCap(Settings& settings, bool capped, const SettingsBounds& bounds) {
+  const uint8_t before = settings.brightness;
+  const bool wasCapped = settings.capped;
+  settings.capped = capped;
+  if (capped && settings.brightness > bounds.softCapBrightness) {
+    settings.brightness = bounds.softCapBrightness;
+  }
+  return settings.capped != wasCapped || settings.brightness != before;
 }
 
 // The fixed-size record stored in flash. The magic number and version let a future
@@ -84,13 +117,15 @@ struct SettingsRecord {
   uint16_t stripCount;
   uint16_t stripToe;
   uint16_t stripHeel;
-  uint8_t reserved[2];
+  uint8_t flags;  // the SETTINGS_FLAG_* bits
+  uint8_t reserved;
   float neutralDeg;
   float heelDeg;
   float toeDeg;
   char pattern[PATTERN_NAME_SIZE];
   char lastLitPattern[PATTERN_NAME_SIZE];
-  uint8_t reservedEnd[2];
+  uint8_t audioNoiseFloor;  // version 5; these two bytes are reserved in version 4
+  uint8_t audioSensitivity;
   uint32_t crc;
 };
 
@@ -131,13 +166,15 @@ struct SettingsRecordV2 {
 };
 
 // The store tells the versions apart by size, and a V2 record's size is fixed by what's
-// already in flash.
+// already in flash. Version 5 uses version 4's two reserved end bytes for audio
+// tuning; the overall record size and the stored pose/layout offsets stay fixed.
 static_assert(sizeof(SettingsRecordV2) == 28, "SettingsRecordV2 must match saved records");
 static_assert(sizeof(SettingsRecordV3) == 32, "SettingsRecordV3 must match saved records");
 static_assert(sizeof(SettingsRecord) == 60, "A new record layout needs a new version");
 
 constexpr uint32_t SETTINGS_MAGIC = 0x46574C4B;  // "FWLK"
-constexpr uint16_t SETTINGS_VERSION = 4;
+constexpr uint16_t SETTINGS_VERSION = 5;
+constexpr uint16_t SETTINGS_VERSION_V4 = 4;
 constexpr uint16_t SETTINGS_VERSION_V3 = 3;
 constexpr uint16_t SETTINGS_VERSION_V2 = 2;
 // How version 2 and 3 records stored a pattern.
@@ -147,6 +184,10 @@ constexpr uint8_t LEGACY_PATTERN_OFF = 3;
 constexpr uint8_t SETTINGS_POSE_NEUTRAL = 1 << 0;
 constexpr uint8_t SETTINGS_POSE_HEEL = 1 << 1;
 constexpr uint8_t SETTINGS_POSE_TOE = 1 << 2;
+// Set when the soft cap is off. A clear bit means capped because records saved before the cap
+// existed, version 4 or 5, hold zero here, so they load with it on. Bits this firmware doesn't
+// know are ignored, so a record from a newer firmware still loads.
+constexpr uint8_t SETTINGS_FLAG_UNCAPPED = 1 << 0;
 
 enum class SettingsDecode : uint8_t {
   Ok,
@@ -177,9 +218,12 @@ inline SettingsRecord encodeSettings(const Settings& settings) {
   copyPatternName(record.pattern, settings.pattern);
   copyPatternName(record.lastLitPattern, settings.lastLitPattern);
   record.brightness = settings.brightness;
+  record.audioNoiseFloor = settings.audioNoiseFloor;
+  record.audioSensitivity = settings.audioSensitivity;
   record.stripCount = settings.strip.count;
   record.stripToe = settings.strip.toe;
   record.stripHeel = settings.strip.heel;
+  record.flags = settings.capped ? 0 : SETTINGS_FLAG_UNCAPPED;
   const TiltCalibration& calibration = settings.calibration;
   record.calibratedPoses = (calibration.neutralSet ? SETTINGS_POSE_NEUTRAL : 0) |
                            (calibration.heelSet ? SETTINGS_POSE_HEEL : 0) |
@@ -243,6 +287,12 @@ inline void readLegacyPatterns(const Record& record, Settings& out) {
   copyPatternName(out.lastLitPattern, legacyPatternName(record.lastLitPattern));
 }
 
+// Holds a loaded brightness under the soft cap. A capped record can only hold a brightness over
+// the cap if the cap was lowered after it was saved, and the cap still holds then.
+inline void holdUnderSoftCap(Settings& out, const SettingsBounds& bounds) {
+  if (out.capped && out.brightness > bounds.softCapBrightness) out.brightness = bounds.softCapBrightness;
+}
+
 // Reads a saved pattern name. A garbled one reads as the default, because a bad name is no reason to
 // lose this boot's brightness, poses, and strip layout. Whether a pattern by that name still exists
 // is for the caller to check: it can't be known from settings alone.
@@ -260,22 +310,30 @@ inline SettingsDecode decodeSettings(const SettingsRecord& record,
       record.crc != settingsCrc(&record, offsetof(SettingsRecord, crc))) {
     return SettingsDecode::Corrupt;
   }
-  if (record.version != SETTINGS_VERSION) return SettingsDecode::Unsupported;
+  if (record.version != SETTINGS_VERSION && record.version != SETTINGS_VERSION_V4) return SettingsDecode::Unsupported;
 
   const StripLayout strip = {record.stripCount, record.stripToe, record.stripHeel};
   if (!sharedFieldsValid(record, bounds) || !stripLayoutValid(strip, bounds.maxStripPixels)) {
     return SettingsDecode::Invalid;
   }
 
+  if (record.version == SETTINGS_VERSION && (record.audioNoiseFloor == 0 || record.audioSensitivity > 100)) {
+    return SettingsDecode::Invalid;
+  }
+  out.audioNoiseFloor = record.version == SETTINGS_VERSION ? record.audioNoiseFloor : AUDIO_DEFAULT_NOISE_FLOOR;
+  out.audioSensitivity = record.version == SETTINGS_VERSION ? record.audioSensitivity : AUDIO_DEFAULT_SENSITIVITY;
   readSharedFields(record, out);
   readSavedPatternName(record.pattern, true, out.pattern);
   readSavedPatternName(record.lastLitPattern, false, out.lastLitPattern);
   out.strip = strip;
+  out.capped = (record.flags & SETTINGS_FLAG_UNCAPPED) == 0;
+  holdUnderSoftCap(out, bounds);
   return SettingsDecode::Ok;
 }
 
 // Checks a record from when patterns were numbered. It maps each number to its name and keeps
-// everything else, and the next save rewrites flash in the current format.
+// everything else, and the next save rewrites flash in the current format. That firmware had a
+// fixed brightness maximum, so the record loads with the soft cap on.
 inline SettingsDecode decodeSettingsV3(const SettingsRecordV3& record,
                                        const SettingsBounds& bounds, Settings& out) {
   if (record.magic != SETTINGS_MAGIC ||
@@ -292,12 +350,17 @@ inline SettingsDecode decodeSettingsV3(const SettingsRecordV3& record,
 
   readSharedFields(record, out);
   readLegacyPatterns(record, out);
+  out.audioNoiseFloor = AUDIO_DEFAULT_NOISE_FLOOR;
+  out.audioSensitivity = AUDIO_DEFAULT_SENSITIVITY;
   out.strip = strip;
+  out.capped = true;
+  holdUnderSoftCap(out, bounds);
   return SettingsDecode::Ok;
 }
 
 // Checks an older record the same way. It has no layout, so `out.strip` keeps the default
-// it holds on entry, and the next save rewrites flash in the current format.
+// it holds on entry, and the next save rewrites flash in the current format. Like version 3,
+// it loads with the soft cap on.
 inline SettingsDecode decodeSettingsV2(const SettingsRecordV2& record,
                                        const SettingsBounds& bounds, Settings& out) {
   if (record.magic != SETTINGS_MAGIC ||
@@ -309,6 +372,10 @@ inline SettingsDecode decodeSettingsV2(const SettingsRecordV2& record,
 
   readSharedFields(record, out);
   readLegacyPatterns(record, out);
+  out.capped = true;
+  holdUnderSoftCap(out, bounds);
+  out.audioNoiseFloor = AUDIO_DEFAULT_NOISE_FLOOR;
+  out.audioSensitivity = AUDIO_DEFAULT_SENSITIVITY;
   return SettingsDecode::Ok;
 }
 

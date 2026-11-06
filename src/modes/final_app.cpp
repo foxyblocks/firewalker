@@ -1,6 +1,6 @@
 // final_app is the shoe app, and the same binary runs on both shoes. The onboard
 // sensor drives the active pattern, the remote (BLE or the USB console) changes
-// settings, and each controller keeps its own pattern, brightness, calibrated
+// settings, and each controller keeps its own pattern, brightness, soft cap, calibrated
 // poses, and strip layout in flash. Losing the phone never matters: whatever is
 // running keeps running, and a reconnecting client is told the current state.
 //
@@ -13,6 +13,7 @@
 
 #include "config.h"
 #include "firewalker_core.h"
+#include "firewalker_audio.h"
 #include "firewalker_calibration.h"
 #include "firewalker_imu.h"
 #include "firewalker_pattern_list.h"
@@ -33,7 +34,14 @@ namespace FinalAppMode {
 using namespace Firewalker;
 
 static constexpr SettingsBounds SETTINGS_BOUNDS = {LED_BRIGHTNESS_MIN, LED_BRIGHTNESS_MAX,
-                                                   TILT_LIMITS.maxNeutralDeg, STRIP_MAX_PIXELS};
+                                                   TILT_LIMITS.maxNeutralDeg, STRIP_MAX_PIXELS,
+                                                   LED_BRIGHTNESS_SOFT_CAP};
+// Every file in src/modes/ compiles into every build, and bench builds set their own brightness
+// with a build flag (up to 255, from ./cli --brightness), so this check is for the app build only.
+#if defined(FIREWALKER_MODE_FINAL_APP)
+static_assert(LED_BRIGHTNESS <= LED_BRIGHTNESS_SOFT_CAP,
+              "A new boot starts with the soft cap on, so its default brightness must fit under it");
+#endif
 static constexpr PoseCaptureLimits CAPTURE_LIMITS = {
     CALIBRATION_WINDOW_MS, CALIBRATION_NO_SAMPLE_MS, CALIBRATION_MIN_SAMPLES,
     CALIBRATION_MAX_SPREAD_DEG};
@@ -78,7 +86,9 @@ static void sendStatus() {
   report.pattern = settings.pattern;
   report.lit = settings.lastLitPattern;
   report.brightness = settings.brightness;
-  report.maxBrightness = LED_BRIGHTNESS_MAX;
+  report.maxBrightness = brightnessCeiling(settings, SETTINGS_BOUNDS);
+  report.capped = settings.capped;
+  report.capBrightness = LED_BRIGHTNESS_SOFT_CAP;
   report.sensorReady = imuReady();
   report.tilt = imuTiltFwd();
   report.calibration = settings.calibration;
@@ -102,6 +112,16 @@ static void sendStatus() {
 static void sendAck(CommandType type, bool ok, const char* error = nullptr) {
   char line[REMOTE_LINE_MAX];
   formatAck(line, sizeof(line), type, ok, error);
+  remoteSend(line);
+}
+
+static void sendAudioConfig() {
+  char line[REMOTE_LINE_MAX];
+  snprintf(line, sizeof(line),
+      "{\"t\":\"audio-config\",\"ready\":%s,\"noiseFloor\":%u,\"sensitivity\":%u,\"calibrating\":%s,\"saved\":%s}",
+      audioReady() ? "true" : "false", (unsigned)settings.audioNoiseFloor,
+      (unsigned)settings.audioSensitivity, audioCalibrating() ? "true" : "false",
+      !saveScheduler.dirty() && !saveFailed ? "true" : "false");
   remoteSend(line);
 }
 
@@ -318,6 +338,37 @@ static void handleCommand(const Command& command) {
       sendAck(CommandType::Invalid, false, command.error);
       return;
 
+    case CommandType::Audio:
+      sendAudioConfig();
+      return;
+
+    case CommandType::AudioSensitivity:
+      if (audioCalibrating()) {
+        sendAck(command.type, false, "calibration-in-progress");
+        return;
+      }
+      settings.audioSensitivity = (uint8_t)command.value;
+      audioConfigure(settings.audioNoiseFloor, settings.audioSensitivity);
+      saveScheduler.markChanged(millis());
+      sendAck(command.type, true);
+      sendAudioConfig();
+      return;
+
+    case CommandType::AudioCalibrate:
+      // A repeated line after a lost reply adopts the existing capture.
+      if (audioCalibrating()) {
+        sendAck(command.type, true);
+        sendAudioConfig();
+        return;
+      }
+      if (!audioStartQuietCalibration()) {
+        sendAck(command.type, false, audioReady() ? "calibration-in-progress" : "audio-unavailable");
+        return;
+      }
+      sendAck(command.type, true);
+      sendAudioConfig();
+      return;
+
     case CommandType::Status:
       sendStatus();
       return;
@@ -365,13 +416,25 @@ static void handleCommand(const Command& command) {
     }
 
     case CommandType::Brightness:
-      if (command.value < LED_BRIGHTNESS_MIN || command.value > LED_BRIGHTNESS_MAX) {
+      if (command.value < LED_BRIGHTNESS_MIN ||
+          command.value > brightnessCeiling(settings, SETTINGS_BOUNDS)) {
         sendAck(command.type, false, "out-of-range");
         return;
       }
       settings.brightness = (uint8_t)command.value;
       strip.setBrightness(settings.brightness);
       saveScheduler.markChanged(millis());
+      sendAck(command.type, true);
+      break;
+
+    // Turning the cap on can lower the brightness, so the strip takes the new level right away,
+    // unless a layout preview has it at its own fixed brightness for now. Either way the change
+    // is saved, so the boot powers up the same way.
+    case CommandType::Cap:
+      if (setBrightnessCap(settings, command.on, SETTINGS_BOUNDS)) {
+        if (!stripPreview) strip.setBrightness(settings.brightness);
+        saveScheduler.markChanged(millis());
+      }
       sendAck(command.type, true);
       break;
 
@@ -442,6 +505,17 @@ static void sendMotionIfDue(unsigned long now) {
   formatMotion(line, sizeof(line), imuTiltFwd(), imuRawAngleDeg(), imuLatest().mag, accelPeak,
                imuGyroMagnitude(), stompSinceReport, imuStompStrength(), slowestFrameUs);
   remoteSend(line, RemotePriority::Telemetry);
+  const AudioSample& audio = audioLatest();
+  char levelText[16], rmsText[16], meanText[16];
+  formatFixed2(levelText, sizeof(levelText), audio.level);
+  formatFixed2(rmsText, sizeof(rmsText), audio.block.rms);
+  formatFixed2(meanText, sizeof(meanText), audio.block.mean);
+  snprintf(line, sizeof(line),
+      "{\"t\":\"audio\",\"ready\":%s,\"level\":%s,\"rms\":%s,\"mean\":%s,\"low\":%u,\"high\":%u,\"blocks\":%lu,\"captureUs\":%lu}",
+      audioReady() ? "true" : "false", levelText, rmsText, meanText,
+      (unsigned)audio.block.low, (unsigned)audio.block.high,
+      (unsigned long)audio.blocks, (unsigned long)audio.captureUs);
+  remoteSend(line, RemotePriority::Telemetry);
   stompSinceReport = false;
   accelPeak = 0.0f;
   slowestFrameUs = 0;
@@ -506,6 +580,7 @@ static void renderIfDue(unsigned long now) {
   input.stomp = stompPending;
   input.stompStrength = imuStompStrength();
   input.dt = now - lastPatternUpdateMs;
+  input.audioLevel = audioLevel();
   lastPatternUpdateMs = now;
   stompPending = false;
   const uint32_t updateStart = micros();
@@ -521,6 +596,8 @@ void setup() {
   Serial.print(F("[firewalker] settings: "));
   Serial.println(loaded);
 
+  audioConfigure(settings.audioNoiseFloor, settings.audioSensitivity);
+  audioBegin();
   imuBegin();
   imuSetCalibration(settings.calibration);
 
@@ -534,6 +611,14 @@ void setup() {
 }
 
 void loop() {
+  audioUpdate();
+  uint8_t quietFloor;
+  if (audioTakeQuietCalibration(quietFloor)) {
+    settings.audioNoiseFloor = quietFloor;
+    audioConfigure(settings.audioNoiseFloor, settings.audioSensitivity);
+    saveScheduler.markChanged(millis());
+    sendAudioConfig();
+  }
   if (imuUpdate()) {
     if (imuTakeStomp()) {
       stompPending = true;

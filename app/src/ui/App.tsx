@@ -53,17 +53,14 @@ export function App({ store }: { store: BootsStore }) {
           <button type="button" className="button" onClick={() => store.activity()}>Reconnect</button>
         </div>
       )}
-      {screen === "find" && <FindBoots store={store} onDone={() => setScreen("remote")} />}
+      {screen === "find" && (
+        <FindBoots store={store} onDone={() => setScreen("remote")} onCalibrate={() => setCalibrating(true)} />
+      )}
       {screen === "status" && <Status store={store} onBack={() => setScreen("remote")} />}
       {screen === "remote" && (
-        <Remote
-          store={store}
-          onStatus={() => setScreen("status")}
-          onBoots={() => setScreen("find")}
-          onCalibrate={() => setCalibrating(true)}
-        />
+        <Remote store={store} onStatus={() => setScreen("status")} onBoots={() => setScreen("find")} />
       )}
-      {calibrating && screen === "remote" && (
+      {calibrating && screen === "find" && (
         <CalibrateSheet store={store} onClose={() => setCalibrating(false)} />
       )}
     </div>

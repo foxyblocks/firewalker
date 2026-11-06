@@ -1,4 +1,4 @@
-// Reference frames: what this TypeScript engine draws for a fixed script of motion, saved so the
+// Reference frames: what this TypeScript engine draws for a fixed script of motion and audio, saved so the
 // firmware's C++ engine can be checked against it without a boot. A native test can run the
 // same inputs through C++ and compare the pixels.
 //
@@ -20,6 +20,7 @@ import { compileRecipe, decodeRecipe } from "../recipe/compile";
 import type { Recipe } from "../recipe/types";
 
 const FILE_FORMAT = 1;
+const INPUT_FORMAT = 2;
 export const REFERENCE_FRAMES = 400;
 // Frames saved, as "after every this many". The engine still runs every frame in between, so
 // a difference in how state builds up shows at the next saved frame.
@@ -71,6 +72,9 @@ export function referenceInputs(): EngineInput[] {
       tiltFwd: Math.fround(scriptTilt(frame)),
       stomp: strength !== undefined,
       stompStrength: Math.fround(strength ?? 0),
+      // Silence, a rise to full volume, a hold, then a fall to silence. The last
+      // input byte stores 0..255, so round before rendering to match its replay.
+      audioLevel: Math.fround(Math.round(Math.max(0, Math.min(1, (frame - 40) / 100, (320 - frame) / 100)) * 255) / 255),
       dt: frame === STALL_FRAME ? STALL_MS : FRAME_TIMES[frame % FRAME_TIMES.length]!,
     };
   });
@@ -134,7 +138,7 @@ function encodeInputs(inputs: EngineInput[]): Uint8Array {
   const out = new Uint8Array(headerSize + inputs.length * recordSize);
   const view = new DataView(out.buffer);
   out.set(new TextEncoder().encode("FWRI"));
-  view.setUint16(4, FILE_FORMAT, true);
+  view.setUint16(4, INPUT_FORMAT, true);
   view.setUint16(6, inputs.length, true);
   inputs.forEach((input, i) => {
     const at = headerSize + i * recordSize;
@@ -142,6 +146,7 @@ function encodeInputs(inputs: EngineInput[]): Uint8Array {
     view.setFloat32(at + 4, input.stompStrength, true);
     view.setUint16(at + 8, input.dt, true);
     view.setUint8(at + 10, input.stomp ? 1 : 0);
+    view.setUint8(at + 11, Math.round((input.audioLevel ?? 0) * 255));
   });
   return out;
 }
@@ -175,6 +180,7 @@ export function buildReferenceFiles(recipes: Recipe[]): Map<string, Uint8Array> 
   for (const recipe of recipes) files.set(`compiled/${recipe.name}.bin`, compiledBytes(recipe));
   const manifest = {
     format: FILE_FORMAT,
+    inputFormat: INPUT_FORMAT,
     frames: REFERENCE_FRAMES,
     checkEvery: CHECK_EVERY,
     cases: cases.map(({ file, recipe, layoutName, layout }) => ({

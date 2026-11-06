@@ -80,7 +80,7 @@ static void test_strip_commands_ack_as_strip() {
 
 static void test_every_command_fits_a_default_ble_write() {
   const char* longest[] = {"calibrate neutral", "pattern fire-trail", "brightness 255",
-                           "strip preview off", "strip leds 160"};
+                           "strip preview off", "strip leds 160", "cap off"};
   for (const char* command : longest) {
     TEST_ASSERT_TRUE(strlen(command) <= 20);
   }
@@ -188,6 +188,8 @@ static void test_recipe_replies_are_well_formed() {
   UploadedRecipe slots[16] = {};
   formatRecipes(line, sizeof(line), 1, slots, 16);
   TEST_ASSERT_EQUAL_STRING("{\"t\":\"recipes\",\"versions\":[1],\"slots\":16,\"free\":16,\"list\":[]}", line);
+  formatRecipes(line, sizeof(line), 2, slots, 16);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"recipes\",\"versions\":[1,2],\"slots\":16,\"free\":16,\"list\":[]}", line);
   slots[3].used = true;
   copyPatternName(slots[3].name, "comet");
   slots[3].size = 74;
@@ -219,6 +221,22 @@ static void test_power_and_debug_take_on_or_off() {
   TEST_ASSERT_TRUE(debug.on);
 
   TEST_ASSERT_EQUAL_STRING("expected-on-or-off", parseCommand("power maybe").error);
+}
+
+static void test_cap_turns_the_soft_cap_on_or_off() {
+  const Command on = parseCommand("cap on");
+  TEST_ASSERT_EQUAL(CommandType::Cap, on.type);
+  TEST_ASSERT_TRUE(on.on);
+  const Command off = parseCommand("cap off");
+  TEST_ASSERT_EQUAL(CommandType::Cap, off.type);
+  TEST_ASSERT_FALSE(off.on);
+
+  TEST_ASSERT_EQUAL_STRING("expected-on-or-off", parseCommand("cap 96").error);
+  TEST_ASSERT_EQUAL_STRING("expected-one-argument", parseCommand("cap").error);
+
+  char line[REMOTE_LINE_MAX];
+  formatAck(line, sizeof(line), CommandType::Cap, true);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"ack\",\"cmd\":\"cap\",\"ok\":true}", line);
 }
 
 static void test_brightness_parses_a_whole_byte_value() {
@@ -299,7 +317,9 @@ static StatusReport sampleStatus() {
   report.pattern = "off";
   report.lit = "fire-trail";
   report.brightness = 32;
-  report.maxBrightness = 64;
+  report.maxBrightness = 48;
+  report.capped = true;
+  report.capBrightness = 48;
   report.sensorReady = true;
   report.tilt = -0.25f;
   report.calibration.neutralSet = true;
@@ -322,8 +342,9 @@ static void test_status_reports_the_actual_state() {
   char line[REMOTE_LINE_MAX];
   formatStatus(line, sizeof(line), sampleStatus());
   TEST_ASSERT_EQUAL_STRING(
-      "{\"t\":\"status\",\"proto\":3,\"id\":\"A1B2\",\"pattern\":\"off\",\"lit\":\"fire-trail\","
-      "\"brightness\":32,\"maxBrightness\":64,\"sensor\":\"ok\",\"tilt\":-0.25,\"calibrated\":true,"
+      "{\"t\":\"status\",\"proto\":4,\"id\":\"A1B2\",\"pattern\":\"off\",\"lit\":\"fire-trail\","
+      "\"brightness\":32,\"maxBrightness\":48,\"capped\":true,\"capBrightness\":48,\"sensor\":\"ok\","
+      "\"tilt\":-0.25,\"calibrated\":true,"
       "\"neutralDeg\":4.50,\"heelDeg\":null,\"toeDeg\":34.00,\"calibration\":\"ok\",\"saved\":true,"
       "\"saveFailed\":false,\"saves\":3,\"debug\":false,\"ble\":true,\"leds\":110,\"maxLeds\":160,"
       "\"toe\":40,\"heel\":90,\"preview\":true}",
@@ -337,6 +358,8 @@ static void test_largest_status_fits_the_line_buffer() {
   report.lit = "abcdefghijkl";
   report.brightness = 255;
   report.maxBrightness = 255;
+  report.capped = false;
+  report.capBrightness = 255;
   report.sensorReady = false;
   report.tilt = -1.0f;
   report.calibration.neutralDeg = -180.0f;
@@ -375,8 +398,21 @@ static void test_motion_line() {
       line);
 }
 
+static void test_audio_commands() {
+  TEST_ASSERT_EQUAL(CommandType::Audio, parseCommand("audio").type);
+  TEST_ASSERT_EQUAL(CommandType::AudioCalibrate, parseCommand("audio calibrate").type);
+  const Command sensitivity = parseCommand("audio gain 100");
+  TEST_ASSERT_EQUAL(CommandType::AudioSensitivity, sensitivity.type);
+  TEST_ASSERT_EQUAL_INT32(100, sensitivity.value);
+  TEST_ASSERT_LESS_OR_EQUAL(20, strlen("audio gain 100"));
+  const char* invalid[] = {"audio gain -1", "audio gain 101", "audio gain 2.5",
+                          "audio calibrate extra", "audio gain", "audio unknown"};
+  for (const char* line : invalid) TEST_ASSERT_EQUAL(CommandType::Invalid, parseCommand(line).type);
+}
+
 int main(int, char**) {
   UNITY_BEGIN();
+  RUN_TEST(test_audio_commands);
   RUN_TEST(test_commands_with_no_arguments);
   RUN_TEST(test_calibrate_takes_an_optional_pose);
   RUN_TEST(test_strip_commands_name_a_setting_and_a_value);
@@ -403,6 +439,7 @@ int main(int, char**) {
   RUN_TEST(test_acks_report_success_and_failure);
   RUN_TEST(test_calibration_lines_cover_every_outcome);
   RUN_TEST(test_capture_failures_have_reasons);
+  RUN_TEST(test_cap_turns_the_soft_cap_on_or_off);
   RUN_TEST(test_status_reports_the_actual_state);
   RUN_TEST(test_largest_status_fits_the_line_buffer);
   RUN_TEST(test_formatters_truncate_instead_of_overflowing);

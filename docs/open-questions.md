@@ -9,7 +9,8 @@ decided deliberately. Once one is resolved, move the decision into `wiring.md`,
 - Where exactly does the strip get cut? A boot measures about **69 cm, which is about 110
   pixels** at 160 per meter, but the cut point isn't settled. Once it is, set each boot's
   count, toe, and heel from the iPhone remote's Calibrate sheet, then update the figures in
-  `power-budget.md`, and decide whether to raise `FIREWALKER_LED_BRIGHTNESS_MAX`. Until then a
+  `power-budget.md`. The soft cap of 96 assumes no boot strip is longer than 107 pixels
+  (3EB5's count), so lower `FIREWALKER_LED_BRIGHTNESS_SOFT_CAP` for a longer one. Until then a
   boot starts from the uncut bench strip in `include/config.h` (160 pixels, toe 52, heel 132),
   which the `cli` tool also reads.
 - Do the animation speeds still look right? `FLOW_TRAIL_SPEED_PXPS`, `FLOW_TRAIL_LEN`,
@@ -42,6 +43,9 @@ so check each mounted shoe:
   the current firmware work, and the answer sets the real brightness ceiling.
 - What are the strip's actual idle and peak currents? `power-budget.md` scales the
   manufacturer's rating to the measured 69 cm.
+- Is the 5V pad really behind diode D1? Seeed's wiring sheet puts it there, but its block
+  diagram and the wiki's pin map put the pad straight on VBUS. Meter the pad against the USB
+  supply with the strip lit: a drop of a few tenths of a volt means D1 is in the path.
 
 ## Signal
 

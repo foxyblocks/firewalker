@@ -1,0 +1,42 @@
+{
+  "format": "firewalker-recipe",
+  "version": 2,
+  "name": "bass-ripple",
+  "description": "A rainbow volume bar on both sides of the boot. Tilt slides it downhill, and stomps flash its brightness from 70% to 100%.",
+  "layers": [
+    {
+      "type": "fill",
+      "label": "Rainbow",
+      "enabled": true,
+      "palette": ["#ff0000", "#ffff00", "#00ff00", "#00ffff", "#0000ff", "#ff00ff"],
+      "spread": "ring",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0.98,
+      "brightness": { "source": "stompFade", "min": 0.7, "max": 1, "fadeMs": 200 },
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "band",
+      "label": "Volume bar",
+      "enabled": true,
+      "position": { "source": "tilt", "min": 0, "max": 1 },
+      "width": { "source": "audioLevel", "min": 0, "max": 1 },
+      "blend": "multiply",
+      "opacity": 1
+    },
+    {
+      "type": "fill",
+      "enabled": true,
+      "palette": ["#ffffff"],
+      "spread": "solid",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0.0667,
+      "brightness": { "source": "stompFade", "min": 0, "max": 0.78, "fadeMs": 300 },
+      "blend": "max",
+      "opacity": 0.7
+    }
+  ]
+}

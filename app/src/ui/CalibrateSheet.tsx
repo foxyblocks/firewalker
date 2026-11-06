@@ -1,6 +1,7 @@
 /**
- * The Calibrate sheet, with two jobs on two tabs. Poses teaches a boot how your foot moves,
- * and it's the flow below. Strip tells a boot where its pixels are (StripSetup.tsx).
+ * The Calibrate sheet, with pose, strip, and audio calibration tabs. Poses teaches a boot how your foot moves,
+ * and it's the flow below. StripSetup maps its pixels, and AudioSetup handles saved
+ * microphone tuning.
  *
  * The poses flow is meant to be done wearing the boots: neutral, then heel down, then toe
  * down. The firmware does the capture and keeps the results, so this only walks you through
@@ -22,6 +23,7 @@ import type { Pose, StatusReply } from "../core/protocol";
 import { buzz } from "./haptics";
 import { joinNames, TiltStrip } from "./parts";
 import { StripSetup } from "./StripSetup";
+import { AudioSetup } from "./AudioSetup";
 
 const COUNTDOWN_SECONDS = 3;
 const TILT_REFRESH_MS = 500;
@@ -30,10 +32,11 @@ type Phase = { kind: "ready" } | { kind: "countdown"; seconds: number } | { kind
 
 const resultKey = (side: Side, pose: Pose) => `${side}:${pose}`;
 
-type Tab = "poses" | "strip";
+type Tab = "poses" | "strip" | "audio";
 const TABS: { id: Tab; name: string }[] = [
   { id: "poses", name: "Poses" },
   { id: "strip", name: "Strip" },
+  { id: "audio", name: "Audio" },
 ];
 
 export function CalibrateSheet({ store, onClose }: { store: BootsStore; onClose: () => void }) {
@@ -68,6 +71,8 @@ export function CalibrateSheet({ store, onClose }: { store: BootsStore; onClose:
         </div>
         {tab === "poses" ? (
           <PoseSteps store={store} sides={poseSides} onBusy={setCapturing} onClose={onClose} />
+        ) : tab === "audio" ? (
+          <AudioSetup store={store} onBusy={setCapturing} onClose={onClose} />
         ) : (
           <StripSetup store={store} onClose={onClose} />
         )}

@@ -55,7 +55,8 @@ aren't JSON.
 | `patterns` | Lists the patterns this boot can show |
 | `pattern <name>`, `pattern off` | Selects a pattern and remembers it. `patterns` lists the names |
 | `power on`, `power off` | Off blanks the strip. On returns to the last lit pattern |
-| `brightness <n>` | Sets brightness, from 1 to `maxBrightness` |
+| `brightness <n>` | Sets brightness, from 1 to `maxBrightness`, which the soft cap lowers while it's on |
+| `cap on`, `cap off` | Turns the soft brightness cap on or off and remembers it. On brings a brightness over the cap down to it. See [Soft brightness cap](#soft-brightness-cap) |
 | `calibrate neutral`, `calibrate heel`, `calibrate toe` | Captures one pose; hold it for two seconds. A bare `calibrate` means neutral |
 | `debug on`, `debug off` | Starts or stops live motion lines |
 | `identify` | Blinks the strip for about 1.5 seconds, to show which boot this is. Changes no settings |
@@ -108,7 +109,7 @@ Sent in reply to `status`, when a client subscribes, and after any change. Chang
 are reported at most every 250 ms, so a slider drag gets one line per interval.
 
 ```json
-{"t":"status","proto":3,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}
+{"t":"status","proto":4,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":96,"capped":true,"capBrightness":96,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}
 ```
 
 | Field | Meaning |
@@ -117,7 +118,8 @@ are reported at most every 250 ms, so a slider drag gets one line per interval.
 | `id` | Four hex digits identifying this controller |
 | `pattern` | The current pattern, or `off` |
 | `lit` | The pattern `power on` returns to, even while the strip is off |
-| `brightness`, `maxBrightness` | The current level and the highest this build accepts |
+| `brightness`, `maxBrightness` | The current level, and the highest `brightness` accepts right now: `capBrightness` with the cap on, 255 with it off |
+| `capped`, `capBrightness` | Whether the soft cap is on, and its level. Firmware from before the cap leaves both out |
 | `sensor` | `ok` or `unavailable` |
 | `tilt` | Fused fore-aft tilt: -1 at the heel pose, 0 at neutral, +1 at the toe pose |
 | `calibrated`, `neutralDeg` | Whether a neutral has been captured, and its angle in degrees |
@@ -182,6 +184,23 @@ half of the samples. Tremor, a slow sag, a brief stumble, or settling in late al
 It only fails with `motion` if that middle half is spread too wide, such as a foot rocking
 from heel to toe. The window and limits are in [`config.h`](../include/config.h)
 (`CALIBRATION_*` and `TILT_LIMITS`).
+
+### Soft brightness cap
+
+Each boot holds its brightness at or under its soft cap, `capBrightness` (96), unless the cap is
+turned off. At 96, a full-white frame on a 107-pixel strip draws about 400 mA by the strip's rating,
+which fits a USB 2.0 port's 500 mA. With the cap off, `brightness` goes up to 255: about 1.07 A at
+full white on 107 pixels, more than a USB 2.0 port gives and possibly more than the 1 A diode
+Seeed's schematic puts in front of the 5V pad. So turn it off only on a dedicated 5 V supply
+([`power-budget.md`](power-budget.md)).
+
+- A new boot starts with the cap on and its brightness at the cap.
+- Each boot saves whether its cap is on, so a power cycle doesn't change it. A boot updated from
+  firmware before the cap starts with it on and keeps its other settings.
+- `cap on` brings a brightness over the cap down to it, and saves. `cap off` leaves the level alone.
+- `maxBrightness` always means what `brightness` accepts right now, so an app written before the
+  cap stays inside it. An app finds out whether a boot has the cap from `capped` in its status line,
+  so the cap needed no new protocol version.
 
 ### Strip layout
 
@@ -256,7 +275,7 @@ one, and otherwise the boot switches to `flow`. A saved pattern that no longer e
 startup, keeping the boot's brightness, poses, and strip layout.
 
 ```json
-{"t":"recipes","versions":[1],"slots":16,"free":15,"list":["comet"]}
+{"t":"recipes","versions":[1,2],"slots":16,"free":15,"list":["comet"]}
 {"t":"recipe","name":"comet","bytes":74,"crc":"cb75d224"}
 ```
 
@@ -305,3 +324,48 @@ as a sampled view rather than a complete record.
 Disconnecting never changes anything on the shoe. The pattern, brightness, and motion
 processing keep running, and the shoe starts advertising again. Settings saved before
 the disconnect stay saved. A strip preview runs out its minute and then ends.
+
+### `audio`
+
+While `debug on` is active, the firmware also sends one audio sample alongside each motion
+report. These lines are best-effort telemetry, so clients may skip them while a reply is pending.
+
+```json
+{"t":"audio","ready":true,"level":0.52,"rms":5.25,"mean":703.11,"low":691,"high":716,"blocks":42,"captureUs":15687}
+```
+
+- `ready` reports whether ADC/DMA capture is running.
+- `level` is the smoothed 0..1 value used by recipe bindings.
+- `rms` is the changing part of the sound, in ADC counts, after removing its DC bias.
+- `mean`, `low`, and `high` show raw 12-bit ADC readings for checking signal and clipping.
+- `blocks` counts processed sample blocks; a growing count confirms fresh capture.
+- `captureUs` measures the most recent block's sampling time, excluding processing between blocks.
+
+### Microphone tuning
+
+The boot remote exposes these controls under **Calibrate → Audio**, one boot at a time.
+Protocol 4 adds per-boot settings shared by every audio-reactive recipe. USB and BLE use the
+same commands. Sensitivity and quiet calibration are saved with the boot's other settings,
+using the same delayed save that combines slider changes into one flash write.
+
+| Command | Result |
+|---|---|
+| `audio` | Reports microphone settings and capture availability |
+| `audio gain 65` | Sets sensitivity from 0 to 100; higher values respond to quieter sound |
+| `audio calibrate` | Measures about 1.2 seconds of quiet background and sets the noise floor |
+
+Pause music and keep the boot still before quiet calibration. It takes the 90th percentile
+of the captured RMS values, adds headroom, and stores the result. The noise gate requires two
+consecutive louder blocks to open and closes below the quiet threshold. Attack/release
+smoothing then drives the bar. Raising sensitivity lowers the opening threshold and the
+sound level needed to fill it.
+
+```json
+{"t":"audio-config","ready":true,"noiseFloor":9,"sensitivity":65,"calibrating":false,"saved":true}
+```
+
+`audio calibrate` and `audio gain` acknowledge as `audio`. A calibration already in progress
+can be adopted by a retry, while a gain change during calibration is refused. Config replies
+also arrive when calibration finishes; `saved` becomes true after the quiet save delay.
+Settings version 5 reads version 4 records with default audio tuning and preserves their
+pattern, brightness, poses, and layout.

@@ -2,7 +2,8 @@
  * The app's connection to one boot: keeping the link up, sending commands, and holding
  * the last thing the boot reported. There's one BootClient per boot, and each has its
  * own queue and timers, so one boot can never affect the other. `boots.ts` owns the
- * pair and decides which of them a tap goes to.
+ * pair and decides which of them a tap goes to. Microphone tuning uses audio-config
+ * replies alongside status, through the same queue as pattern and strip controls.
  *
  * The boot is the source of truth. A tap sets a `pending` value, which the UI shows
  * until a status line settles it, so a control can never claim something the boot
@@ -17,6 +18,8 @@
 
 import {
   commands,
+  AUDIO_PROTOCOL_VERSION,
+  type AudioConfigReply,
   LineSplitter,
   parseLine,
   type BootReply,
@@ -40,7 +43,7 @@ const CAPTURE_RESULT_WAIT_MS = 4000;
 // that keeps it up, and a phone that goes away can't leave a boot stuck on it.
 const PREVIEW_REFRESH_MS = 20000;
 // These follow a finger, so a status line mustn't move them mid-drag.
-const SLIDER_FIELDS: ReadonlySet<keyof Pending> = new Set(["brightness", "leds", "toe", "heel"]);
+const SLIDER_FIELDS: ReadonlySet<keyof Pending> = new Set(["brightness", "leds", "toe", "heel", "audioSensitivity"]);
 
 /** "needs-access" means only a tap can bring it back, so nothing retries (AccessLostError). */
 export type LinkState = "idle" | "sleeping" | "connecting" | "online" | "reconnecting" | "needs-access";
@@ -49,6 +52,8 @@ export interface Pending {
   pattern?: string;
   power?: boolean;
   brightness?: number;
+  capped?: boolean;
+  audioSensitivity?: number;
   debug?: boolean;
   leds?: number;
   toe?: number;
@@ -66,6 +71,9 @@ export interface BootState {
   status?: StatusReply;
   /** The latest motion line, while debug is on. */
   motion?: MotionReply;
+  /** Saved microphone tuning, reported by protocol 4+ boots. */
+  audio?: AudioConfigReply;
+  audioCalibrating?: boolean;
   /** The patterns this boot can run. */
   patterns: string[];
   /** The values tapped but not yet confirmed. */
@@ -81,7 +89,7 @@ export interface BootState {
 interface Job {
   line: () => string;
   field?: keyof Pending;
-  expect: "ack" | "status" | "patterns";
+  expect: "ack" | "status" | "patterns" | "audio-config";
   /** Quiet jobs fail without showing the person a notice. */
   quiet?: boolean;
   onFail?: (reason: string) => void;
@@ -102,6 +110,12 @@ export class BootClient {
   private wantDebug = false;
   private dragging = false;
   private desiredBrightness = 0;
+  private desiredAudioSensitivity = 65;
+  private audioCapture: {
+    acked: boolean; started: boolean; fallback: boolean;
+    resolve: (result: { ok: boolean; reason?: string }) => void;
+    timer: ReturnType<typeof setTimeout> | null;
+  } | null = null;
   private readonly desiredStrip: Record<StripSetting, number> = { leds: 0, toe: 0, heel: 0 };
   private wantPreview = false;
   private reconnectDelay = RECONNECT_MIN_MS;
@@ -165,7 +179,9 @@ export class BootClient {
 
   /** Read-only polling doesn't block sleep; pending writes and captures do. */
   busy(): boolean {
-    return this.capture !== null || this.inFlight?.expect === "ack" || this.queue.some((job) => job.expect === "ack");
+    // Pose and microphone calibration both continue after their initial ack. Keep
+    // the link until the result arrives or their existing recovery timers finish.
+    return this.capture !== null || this.audioCapture !== null || this.inFlight?.expect === "ack" || this.queue.some((job) => job.expect === "ack");
   }
 
   private async endConnection(state: "idle" | "sleeping"): Promise<void> {
@@ -217,6 +233,7 @@ export class BootClient {
     if (!this.wanted) return;
     if (this.state.link === "online") {
       this.requestStatus();
+      this.requestAudio();
     } else if (!this.link && !this.opening) {
       this.clearReconnect();
       this.reconnectDelay = RECONNECT_MIN_MS;
@@ -323,6 +340,7 @@ export class BootClient {
     this.dragging = false;
     this.firstStatusAsks = 0;
     this.finishCapture({ reason: "offline" });
+    this.finishAudioCapture("offline");
     this.update({ pending: {}, motion: undefined });
   }
 
@@ -337,6 +355,15 @@ export class BootClient {
 
   private onReply(reply: BootReply): void {
     switch (reply.t) {
+      case "audio-config":
+        this.update({ audio: reply, pending: this.settlePending(true) });
+        if (this.inFlight?.expect === "audio-config") this.finishJob();
+        if (this.audioCapture?.acked) {
+          if (!reply.ready) this.finishAudioCapture("audio-unavailable");
+          else if (reply.calibrating) this.audioCapture.started = true;
+          else if (this.audioCapture.started || this.audioCapture.fallback) this.finishAudioCapture();
+        }
+        return;
       case "status":
         return this.onStatus(reply);
       case "motion":
@@ -378,6 +405,9 @@ export class BootClient {
       link: "online",
       notice: this.state.notice === "no-answer" ? undefined : this.state.notice,
       motion: status.debug ? this.state.motion : undefined,
+      // Audio tuning shares the same saved record, so this also settles its
+      // save indicator after the Audio tab stops polling.
+      audio: this.state.audio ? { ...this.state.audio, saved: status.saved } : undefined,
       pending: this.settlePending(),
     });
 
@@ -385,6 +415,7 @@ export class BootClient {
     // list means the last request went unanswered, so this also retries that. A boot whose
     // request goes unanswered keeps the list it has.
     if (firstSinceConnecting || this.state.patterns.length === 0) this.askForPatterns();
+    if (firstSinceConnecting || !this.state.audio) this.requestAudio();
     if (firstSinceConnecting) {
       this.reconnectDelay = RECONNECT_MIN_MS;
       // Debug stays on after a disconnect, so clean up after an earlier session.
@@ -400,15 +431,18 @@ export class BootClient {
   }
 
   /**
-   * Drops pending values a status line has answered. Status follows the ack, so once a
-   * field has no command queued or in flight, the boot's report is final. A slider
-   * mid-drag is the exception, so the thumb doesn't jump back under your finger.
+   * Drops pending values the current reply can confirm. Status confirms ordinary
+   * controls, while audio-config confirms sensitivity. Once no matching command is
+   * queued or in flight, that report is final. Mid-drag values stay pending so an
+   * older echo cannot move the thumb under the person's finger.
    */
-  private settlePending(): Pending {
+  private settlePending(audioReply = false): Pending {
     const pending = { ...this.state.pending };
     const busy = (field: keyof Pending) =>
       this.inFlight?.field === field || this.queue.some((job) => job.field === field);
     for (const field of Object.keys(pending) as (keyof Pending)[]) {
+      // A status line cannot confirm microphone settings; only audio-config can.
+      if (field === "audioSensitivity" && !audioReply) continue;
       if (!busy(field) && !(this.dragging && SLIDER_FIELDS.has(field))) delete pending[field];
     }
     return pending;
@@ -476,6 +510,67 @@ export class BootClient {
 
   // ── Controls ───────────────────────────────────────────────────────────
 
+  /** Refreshes tuning only on firmware that supports it. A single queued query
+   * is shared by the Audio tab, reconnects, and the end of a slider drag. */
+  requestAudio(): void {
+    if (!this.online || (this.state.status?.proto ?? 0) < AUDIO_PROTOCOL_VERSION) return;
+    const asked = this.inFlight?.expect === "audio-config" || this.queue.some((job) => job.expect === "audio-config");
+    if (!asked) this.enqueue({ line: commands.audio, expect: "audio-config", quiet: true });
+  }
+
+  watchAudio(everyMs: number): () => void {
+    this.requestAudio();
+    const timer = setInterval(() => this.requestAudio(), everyMs);
+    return () => clearInterval(timer);
+  }
+
+  setAudioSensitivity(value: number): void {
+    if (!this.online || !this.state.audio?.ready || this.state.audio.calibrating || this.audioCapture) return;
+    this.desiredAudioSensitivity = Math.max(0, Math.min(100, Math.round(value)));
+    this.setPending({ audioSensitivity: this.desiredAudioSensitivity });
+    if (!this.queue.some((job) => job.field === "audioSensitivity")) {
+      this.enqueue({ line: () => commands.audioGain(this.desiredAudioSensitivity),
+        field: "audioSensitivity", expect: "ack", onAck: () => this.requestAudio() });
+    }
+  }
+
+  /** The boot measures room noise and saves it. Waiting for a measuring reply
+   * prevents an old config from completing a new capture. A timed query recovers
+   * a lost final reply; disconnect always resolves the operation as a failure. */
+  calibrateAudio(): Promise<{ ok: boolean; reason?: string }> {
+    if (!this.online) return Promise.resolve({ ok: false, reason: "offline" });
+    if ((this.state.status?.proto ?? 0) < AUDIO_PROTOCOL_VERSION) return Promise.resolve({ ok: false, reason: "firmware-update" });
+    if (this.audioCapture) return Promise.resolve({ ok: false, reason: "already-capturing" });
+    return new Promise((resolve) => {
+      this.audioCapture = { acked: false, started: false, fallback: false, resolve, timer: null };
+      this.update({ audioCalibrating: true, notice: undefined });
+      this.enqueue({ line: commands.audioCalibrate, expect: "ack", quiet: true,
+        onFail: (reason) => this.finishAudioCapture(reason),
+        onAck: () => {
+          const capture = this.audioCapture;
+          if (!capture) return;
+          capture.acked = true;
+          this.requestAudio();
+          capture.timer = setTimeout(() => {
+            if (this.audioCapture !== capture) return;
+            capture.fallback = true;
+            this.requestAudio();
+            capture.timer = setTimeout(() => this.finishAudioCapture("no-answer"), COMMAND_TIMEOUT_MS);
+          }, CAPTURE_RESULT_WAIT_MS);
+        },
+      });
+    });
+  }
+
+  private finishAudioCapture(reason?: string): void {
+    const capture = this.audioCapture;
+    if (!capture) return;
+    if (capture.timer) clearTimeout(capture.timer);
+    this.audioCapture = null;
+    this.update({ audioCalibrating: false });
+    capture.resolve(reason ? { ok: false, reason } : { ok: true });
+  }
+
   setPattern(pattern: string): void {
     if (!this.online) return;
     this.setPending({ pattern, power: undefined });
@@ -486,6 +581,16 @@ export class BootClient {
     if (!this.online) return;
     this.setPending({ power: on, pattern: undefined });
     this.enqueue({ line: () => commands.power(on), field: "power", expect: "ack" });
+  }
+
+  /**
+   * Turns the boot's soft brightness cap on or off. Turning it on can lower the boot's
+   * brightness, which its status line then reports.
+   */
+  setCap(on: boolean): void {
+    if (!this.online) return;
+    this.setPending({ capped: on });
+    this.enqueue({ line: () => commands.cap(on), field: "capped", expect: "ack" });
   }
 
   /**
@@ -565,6 +670,7 @@ export class BootClient {
     // The drag's last value may already have been confirmed, with its status line gone
     // by. Asking again lets the pending value settle instead of sticking.
     this.requestStatus();
+    if (this.state.pending.audioSensitivity !== undefined) this.requestAudio();
   }
 
   setDebug(on: boolean): void {
