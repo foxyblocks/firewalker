@@ -74,8 +74,8 @@ static bool statusPending = false;
 static bool stompPending = false;         // fired since the last frame
 static bool stompSinceReport = false;     // fired since the last motion line
 static float accelPeak = 0.0f;            // highest acceleration since the last motion line
+static bool patternStarting = false;     // the next pattern frame starts at elapsed time zero
 static unsigned long lastFrameMs = 0;
-static unsigned long lastPatternUpdateMs = 0;
 static unsigned long lastStatusMs = 0;
 static unsigned long lastMotionMs = 0;
 static uint32_t slowestFrameUs = 0;       // slowest pattern update since the last motion line
@@ -175,8 +175,8 @@ static bool tryShowPattern(const char* name) {
     strip.clear();
     strip.show();
   }
+  patternStarting = activePattern != nullptr;
   stompPending = false;
-  lastPatternUpdateMs = millis();
   return true;
 }
 
@@ -195,9 +195,11 @@ static void showSavedPattern() {
   tryShowPattern(settings.pattern);
 }
 
-// Returns false if the pattern can't be shown, which leaves the settings and the strip alone.
-static bool selectPattern(const char* name) {
-  if (strcmp(name, settings.pattern) != 0) {
+// Restart on every explicit pattern selection so both boots can start from the same point.
+// Power commands only switch patterns when the requested power state changes. Returns false
+// if the pattern can't be shown, which leaves the settings and the strip alone.
+static bool selectPattern(const char* name, bool restartIfActive) {
+  if (restartIfActive || strcmp(name, settings.pattern) != 0) {
     if (!tryShowPattern(name)) return false;
     copyPatternName(settings.pattern, name);
   } else if (findPattern(CATALOG, name).source == PatternSource::Unknown) {
@@ -400,7 +402,7 @@ static void handleCommand(const Command& command) {
         sendAck(command.type, false, "unknown-pattern");
         return;
       }
-      if (!selectPattern(command.pattern)) {
+      if (!selectPattern(command.pattern, /*restartIfActive=*/true)) {
         sendAck(command.type, false, "bad-recipe");
         return;
       }
@@ -410,7 +412,7 @@ static void handleCommand(const Command& command) {
     case CommandType::Power: {
       char target[PATTERN_NAME_SIZE];
       copyPatternName(target, command.on ? settings.lastLitPattern : PATTERN_OFF);
-      if (!selectPattern(target)) showSavedPattern();
+      if (!selectPattern(target, /*restartIfActive=*/false)) showSavedPattern();
       sendAck(command.type, true);
       break;
     }
@@ -571,7 +573,8 @@ static void renderIfDue(unsigned long now) {
     stompPending = false;
     return;
   }
-  if ((now - lastFrameMs) < APP_FRAME_MS) return;
+  const unsigned long elapsed = now - lastFrameMs;
+  if (elapsed < APP_FRAME_MS) return;
   lastFrameMs = now;
 
   PatternInput input;
@@ -579,9 +582,9 @@ static void renderIfDue(unsigned long now) {
   input.tiltDeg = imuTiltDeg();
   input.stomp = stompPending;
   input.stompStrength = imuStompStrength();
-  input.dt = now - lastPatternUpdateMs;
+  input.dt = patternStarting ? 0 : elapsed;
   input.audioLevel = audioLevel();
-  lastPatternUpdateMs = now;
+  patternStarting = false;
   stompPending = false;
   const uint32_t updateStart = micros();
   activePattern->update(input);
@@ -635,8 +638,7 @@ void loop() {
   }
 
   // Read the clock after handling commands, which stamp their changes with millis().
-  // An earlier reading would make those stamps look like they're in the future, and
-  // the elapsed times below would wrap around to huge values.
+  // An earlier reading could make a command's preview or identify timer appear to wrap around.
   const unsigned long now = millis();
 
   if (saveScheduler.due(now)) saveNow();
