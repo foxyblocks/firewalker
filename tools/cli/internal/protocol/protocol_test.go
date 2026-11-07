@@ -2,6 +2,17 @@ package protocol
 
 import "testing"
 
+func TestClassifyAudioKeepsRawCaptureAndTuningSeparate(t *testing.T) {
+	line := Classify(`{"t":"audio","ready":true,"level":0.52,"rms":92.3,"mean":703.11,"low":532,"high":879,"blocks":42,"captureUs":15687}`)
+	if line.Kind != KindAudio || line.Audio == nil || line.Audio.RMS != 92.3 || line.Audio.Blocks != 42 || line.Audio.CaptureUs != 15687 {
+		t.Fatalf("audio = %+v", line)
+	}
+	config := Classify(`{"t":"audio-config","ready":true,"noiseFloor":8,"sensitivity":74,"calibrating":false,"saved":true}`)
+	if config.Kind != KindAudioConfig || config.AudioConfig == nil || config.AudioConfig.Sensitivity != 74 {
+		t.Fatalf("audio config = %+v", config)
+	}
+}
+
 func TestClassifyStatusKeepsTheLayoutOfProtoTwo(t *testing.T) {
 	line := Classify(`{"t":"status","proto":2,"id":"3ED8","pattern":"flow","lit":"flow","brightness":24,"maxBrightness":64,"sensor":"ok","tilt":0.12,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":3,"debug":false,"ble":true,"leds":94,"maxLeds":160,"toe":86,"heel":48,"preview":false}`)
 	if line.Kind != KindStatus || line.Status == nil {

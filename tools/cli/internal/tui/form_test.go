@@ -26,12 +26,12 @@ func (f *benchForm) focusOn(t *testing.T, field fieldID) {
 
 func TestFormPreviewIsTheMatchingCommand(t *testing.T) {
 	form := newTestForm()
-	if got := form.preview(""); got != "./cli flow --brightness 16" {
+	if got := form.preview(""); got != "./cli install flow --brightness 16" {
 		t.Fatalf("got %q", got)
 	}
 	form.values[fieldTilt] = "-0.5"
 	form.values[fieldStomp] = "2s"
-	if got := form.preview(""); got != "./cli flow --tilt=-0.5 --stomp-every 2s --brightness 16" {
+	if got := form.preview(""); got != "./cli install flow --tilt=-0.5 --stomp-every 2s --brightness 16" {
 		t.Fatalf("got %q", got)
 	}
 	if got := form.preview("99C817E5"); !strings.HasSuffix(got, "--serial 99C817E5") {
@@ -181,7 +181,7 @@ func TestColorTestsRunOnTheConfiguredLength(t *testing.T) {
 	if o.Pixels != testConfigLayout.Pixels || c.Lit != testConfigLayout.Pixels {
 		t.Fatalf("pixels = %d lit = %d", o.Pixels, c.Lit)
 	}
-	if got := form.preview(""); got != "./cli color --brightness 16" {
+	if got := form.preview(""); got != "./cli install color --brightness 16" {
 		t.Fatalf("got %q", got)
 	}
 }

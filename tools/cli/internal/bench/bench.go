@@ -146,7 +146,7 @@ func (o *Options) CheckTarget() error {
 		return fmt.Errorf("use --port or --serial, not both")
 	}
 	if o.Debug && o.BuildOnly {
-		return fmt.Errorf("--debug needs an upload, so it can't be combined with --build-only")
+		return fmt.Errorf("--follow/--debug needs an upload, so it can't be combined with --build-only")
 	}
 	return nil
 }
@@ -281,7 +281,7 @@ var TestNames = map[int]string{TestFlow: "flow", TestFireTrail: "fire-trail", Te
 // boot's own layout stays short and only an edited layout spells out its flags. This is
 // what the TUI previews, and main_test.go checks that it parses back to the same test.
 func Args(o *Options, c *Config, saved StripLayout) []string {
-	args := []string{c.Name}
+	args := []string{"install", c.Name}
 	if c.IsPattern() {
 		if c.Motion {
 			args = append(args, "--motion")
