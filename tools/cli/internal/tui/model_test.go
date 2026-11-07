@@ -297,7 +297,7 @@ func TestALoneBootIsPickedAndAskedForStatus(t *testing.T) {
 		t.Fatalf("sent %v", sent)
 	}
 	// The bench form starts from what the boot has saved, toe after heel and all.
-	h.wantView("94", "saved on 3ED8", "./cli flow --brightness 16")
+	h.wantView("94", "saved on 3ED8", "./cli install flow --brightness 16 --serial "+right.Serial)
 	if h.m.form.values[fieldToe] != "86" || h.m.form.values[fieldHeel] != "48" {
 		t.Fatalf("form = %+v", h.m.form.values)
 	}
@@ -631,7 +631,7 @@ func TestFlashingTheAppAsksFirstAndReconnectsAfter(t *testing.T) {
 		t.Fatal("the port should close before an upload")
 	}
 	h.settle()
-	h.wantView("building final_app for 3ED8", "./cli app --serial "+right.Serial)
+	h.wantView("building final_app for 3ED8", "./cli install --serial "+right.Serial)
 
 	job.onLine("Compiling .pio/build/final_app/src/main.cpp.o")
 	job.onLine("mg24 upload: targeting probe " + right.Serial)
@@ -799,7 +799,7 @@ func TestTypingInAFieldDoesntTriggerShortcuts(t *testing.T) {
 	if h.m.confirm != nil {
 		t.Fatal("enter in a field should keep the value, not flash")
 	}
-	h.wantView("./cli flow --stomp-every 2s --brightness 16")
+	h.wantView("./cli install flow --stomp-every 2s --brightness 16")
 }
 
 func TestBootScreenShowsTheStatusAndTheKeysSendCommands(t *testing.T) {

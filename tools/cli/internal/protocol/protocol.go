@@ -29,18 +29,22 @@ const (
 	KindMotion
 	KindCalibrate
 	KindPatterns
+	KindAudio
+	KindAudioConfig
 )
 
 // Line is one classified line. Raw always holds the original text, and only the field
 // matching Kind is set.
 type Line struct {
-	Raw       string
-	Kind      Kind
-	Ack       *Ack
-	Status    *Status
-	Motion    *Motion
-	Calibrate *Calibrate
-	Patterns  []string
+	Raw         string
+	Kind        Kind
+	Ack         *Ack
+	Status      *Status
+	Motion      *Motion
+	Calibrate   *Calibrate
+	Patterns    []string
+	Audio       *Audio
+	AudioConfig *AudioConfig
 }
 
 // Ack is the reply to any command except `status`.
@@ -101,6 +105,30 @@ type Motion struct {
 	Gyro      float64 `json:"gyro"`
 	Stomp     bool    `json:"stomp"`
 	Strength  float64 `json:"strength"`
+	FrameUs   uint32  `json:"frameUs"`
+}
+
+// Audio keeps the microphone's raw signal separate from the tuned recipe level.
+// Diagnostics compare RMS (the changing signal in ADC counts), not Level, which
+// depends on the boot's saved noise floor and sensitivity. Blocks must advance
+// to prove these are fresh samples rather than a stalled capture's last value.
+type Audio struct {
+	Ready     bool    `json:"ready"`
+	Level     float64 `json:"level"`
+	RMS       float64 `json:"rms"`
+	Mean      float64 `json:"mean"`
+	Low       int     `json:"low"`
+	High      int     `json:"high"`
+	Blocks    uint32  `json:"blocks"`
+	CaptureUs uint32  `json:"captureUs"`
+}
+
+type AudioConfig struct {
+	Ready       bool `json:"ready"`
+	NoiseFloor  int  `json:"noiseFloor"`
+	Sensitivity int  `json:"sensitivity"`
+	Calibrating bool `json:"calibrating"`
+	Saved       bool `json:"saved"`
 }
 
 // Calibrate reports a pose capture's progress.
@@ -139,6 +167,12 @@ func Classify(raw string) Line {
 	case "motion":
 		line.Kind, line.Motion = KindMotion, &Motion{}
 		err = json.Unmarshal([]byte(raw), line.Motion)
+	case "audio":
+		line.Kind, line.Audio = KindAudio, &Audio{}
+		err = json.Unmarshal([]byte(raw), line.Audio)
+	case "audio-config":
+		line.Kind, line.AudioConfig = KindAudioConfig, &AudioConfig{}
+		err = json.Unmarshal([]byte(raw), line.AudioConfig)
 	case "calibrate":
 		line.Kind, line.Calibrate = KindCalibrate, &Calibrate{}
 		err = json.Unmarshal([]byte(raw), line.Calibrate)
@@ -169,6 +203,7 @@ var commands = []string{
 	"calibrate neutral", "calibrate heel", "calibrate toe",
 	"debug on", "debug off",
 	"identify",
+	"audio", "audio gain ", "audio calibrate",
 	"strip leds ", "strip toe ", "strip heel ",
 	"strip preview on", "strip preview off",
 }

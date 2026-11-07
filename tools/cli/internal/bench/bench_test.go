@@ -206,26 +206,26 @@ func TestCommandLineShowsOnlyWhatDiffersFromTheDefaults(t *testing.T) {
 	}{
 		{"simulated flow on the saved layout", TestFlow, func(o *Options, c *Config) {
 			c.Tilt, c.StompEvery = -0.5, 2*time.Second
-		}, "./cli flow --tilt=-0.5 --stomp-every 2s --brightness 16"},
+		}, "./cli install flow --tilt=-0.5 --stomp-every 2s --brightness 16"},
 		{"motion with logs", TestFlow, func(o *Options, c *Config) {
 			c.Motion, c.LogMotion = true, true
-		}, "./cli flow --motion --log-motion --brightness 16"},
+		}, "./cli install flow --motion --log-motion --brightness 16"},
 		{"a layout edited for this test", TestFlow, func(o *Options, c *Config) {
 			o.Pixels, c.Toe = 90, 80
-		}, "./cli flow --pixels 90 --toe 80 --heel 48 --brightness 16"},
+		}, "./cli install flow --pixels 90 --toe 80 --heel 48 --brightness 16"},
 		{"fire-trail's usual timer is the default", TestFireTrail, func(o *Options, c *Config) {
 			c.StompEvery = time.Second
-		}, "./cli fire-trail --brightness 16"},
+		}, "./cli install fire-trail --brightness 16"},
 		{"fire-trail with its timer off has to say so", TestFireTrail, func(o *Options, c *Config) {
 			c.StompEvery = 0
-		}, "./cli fire-trail --stomp-every 0s --brightness 16"},
+		}, "./cli install fire-trail --stomp-every 0s --brightness 16"},
 		{"a color needs quoting", TestColor, func(o *Options, c *Config) {
 			c.Color, c.Lit = "#ff8000", 10
-		}, "./cli color --lit 10 --color '#ff8000' --brightness 16"},
-		{"off has nothing to set", TestOff, func(o *Options, c *Config) {}, "./cli off"},
+		}, "./cli install color --lit 10 --color '#ff8000' --brightness 16"},
+		{"off has nothing to set", TestOff, func(o *Options, c *Config) {}, "./cli install off"},
 		{"two boots need a serial", TestFlow, func(o *Options, c *Config) {
 			o.Serial = "99C817E5"
-		}, "./cli flow --brightness 16 --serial 99C817E5"},
+		}, "./cli install flow --brightness 16 --serial 99C817E5"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

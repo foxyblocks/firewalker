@@ -110,7 +110,7 @@ func (m *Model) appItem(row boardRow) flashItem {
 		Job:     flash.Job{RepoRoot: m.deps.RepoRoot, Env: flash.AppEnv, Serial: row.Serial},
 		Label:   flash.AppEnv,
 		Target:  row.name(),
-		Command: "./cli app --serial " + row.Serial,
+		Command: "./cli install --serial " + row.Serial,
 	}
 }
 
@@ -205,13 +205,11 @@ func (m *Model) askFlashBench(buildOnly bool) tea.Cmd {
 	return nil
 }
 
-// previewSerial is the --serial a pasted command needs: none with one boot on USB,
-// because the subcommand can work that out too, and the picked boot's with more.
+// previewSerial always names the picked boot. Canonical install commands without
+// an identifier open the selector, so a pasted bench command needs the serial to
+// run headlessly even when only one board is connected.
 func (m *Model) previewSerial() string {
-	if len(m.connected) > 1 {
-		return m.selected
-	}
-	return ""
+	return m.selected
 }
 
 func (m *Model) startItems(items []flashItem) tea.Cmd {

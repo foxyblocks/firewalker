@@ -34,8 +34,39 @@ func TestBareCommandPrintsHelpWithoutATerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "Usage:") || !strings.Contains(out, "flow") || !strings.Contains(out, "app") {
+	if !strings.Contains(out, "Usage:") || !strings.Contains(out, "install") || !strings.Contains(out, "identify") || !strings.Contains(out, "list") {
 		t.Fatalf("got %q", out)
+	}
+}
+
+func TestHeadlessIdentifyRequiresAnExplicitSelection(t *testing.T) {
+	_, err := run(t, "identify", "--headless")
+	if err == nil || !strings.Contains(err.Error(), "--boot") {
+		t.Fatalf("missing selection error = %v", err)
+	}
+}
+
+func TestInstallDryRunDoesNotNeedAConnectedBoot(t *testing.T) {
+	out, err := run(t, "install", "3ED8", "--dry-run")
+	if err != nil || !strings.Contains(out, "final_app") || !strings.Contains(out, "Dry run") {
+		t.Fatalf("got %q, %v", out, err)
+	}
+}
+
+func TestDiagnosticFlagsFailBeforeOpeningHardware(t *testing.T) {
+	for _, test := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"debug", "audio", "--boot", "ABCD", "--require-movement"}, "--require-movement"},
+		{[]string{"debug", "motion", "--boot", "ABCD", "--volume", "0.5"}, "--volume"},
+		{[]string{"debug", "audio", "--boot", "ABCD", "--duration", "0s"}, "--duration"},
+		{[]string{"identify", "--boot", "ABCD", "--all"}, "--all"},
+		{[]string{"install", "--firmware", "missing", "--dry-run"}, "unknown firmware"},
+	} {
+		if _, err := run(t, test.args...); err == nil || !strings.Contains(err.Error(), test.want) {
+			t.Errorf("%v: got %v", test.args, err)
+		}
 	}
 }
 
