@@ -325,7 +325,7 @@ func (m *Model) selectBoard(serial string) tea.Cmd {
 }
 
 // layoutForForm picks the strip layout for the selected boot: the same choice, in the
-// same order, as `./cli flow` makes.
+// same order, as `./cli install flow` makes.
 func (m *Model) layoutForForm() (bench.StripLayout, string) {
 	choices := bench.LayoutChoices{Config: m.deps.Config}
 	name := ""

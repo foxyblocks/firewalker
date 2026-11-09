@@ -1,4 +1,4 @@
-# Runs the designer's checks and the firmware's off-hardware tests on every pull request. The
+# Runs the CLI, designer, remote, and firmware's off-hardware tests on every pull request. The
 # generated recipe files, the reference frames, and the recipes in patterns/ only stay honest if
 # these run, and this repo has no commit hooks.
 name: Test
@@ -13,6 +13,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/cli/go.mod
+          cache-dependency-path: tools/cli/go.sum
+
+      - name: Boot CLI
+        working-directory: tools/cli
+        run: go test ./...
 
       - uses: oven-sh/setup-bun@v2
 

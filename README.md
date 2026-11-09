@@ -80,104 +80,137 @@ previous calibration. Do this for each boot and recapture after changing its mou
 
 ## Bench tool
 
-`./cli` flashes a boot, runs debug tests, and shows what the firmware says. It needs
-[Go](https://go.dev) and PlatformIO. Bench tests never change firmware settings or a shoe's
-saved settings. Pattern, brightness, calibration, and the strip layout all stay on the iPhone
-remote.
+`./cli` lists USB-connected boots, installs firmware, identifies hardware, and runs live or
+headless diagnostics. It needs [Go](https://go.dev); installing firmware also needs PlatformIO.
+Diagnostics observe the running app and restore its debug setting when they finish. They do
+not change saved microphone tuning, poses, brightness, patterns, or strip layouts.
 
-### The TUI
+### Commands and boot selection
 
-Run `./cli` with no arguments to open it. Piped or scripted, it prints help instead.
+```bash
+./cli list                              # IDs, USB serials, ports, and firmware status
+./cli list --json                       # machine-readable inventory
+./cli identify ABCD                     # blink this boot's onboard user LED and strip
+./cli identify --boot ABCD,EF12          # blink several boots without a menu
+./cli install ABCD                      # build and install this checkout's shoe app
+./cli install --all                     # install on every connected boot
+./cli install --build-only              # compile without selecting or touching hardware
+./cli debug ABCD                        # live motion and microphone dashboard
+./cli debug audio --boot ABCD           # speaker tones, measurements, and PASS / FAIL
+./cli debug motion --boot ABCD          # finite IMU capture check
+./cli debug --headless --boot ABCD      # audio and motion checks together
+```
 
-The board bar across the top lists every boot on USB and each one it has seen before, with a
-tag for what's running: `app` if it answered `status`, otherwise what this tool last flashed
-(such as `bench flow`), or `unknown`. A lone boot is picked for you. With two, nothing flashes
-or sends until you press `p` and pick one.
+`install`, `identify`, and `debug` accept positional identifiers or `--boot`. An identifier
+can be a four-character boot ID, its USB serial, or its current port path. Repeat `--boot`,
+use commas, or provide several positional identifiers to select several boards. `--all`
+selects every connected board explicitly. Unknown or ambiguous identifiers fail before
+anything runs; repeated identifiers act on that board once.
 
-| Key | Screen | What it's for |
-|---|---|---|
-| `1` | Bench test | Every test below as a form, on the boot's real strip layout, with the matching `./cli` command. `←` `→` change a value, `e` types one, `Enter` flashes, and `b` only builds |
-| `2` | Builds | Whole firmware: the app, `imu_debug`, `strip_test`, and `strip_off` |
-| `3` | Boot | What the running app reports about itself. `r` refreshes, `i` blinks the onboard user LED and strip together, and `d` turns motion lines on or off |
-| `5` | Log | The whole log. `r`, `f`, `m`, and `b` show or hide replies, firmware logs, motion, and build output. `/` searches, `space` pauses, and `↑` `↓` scroll |
+With no identifier, a terminal shows a selection menu: **↑ / ↓** move, **Space** toggles each
+boot, and **Enter** runs the command on the checked boots. **a** toggles all, and **Esc** cancels.
+The `identify`, `debug audio`, and `debug motion` menus stay open after each run, retaining
+the checked boots and results. Press **Enter** again to repeat, or **q / Esc** to close.
+During a run, Enter does not start overlapping actions; quitting cancels and cleans up.
+Nothing is selected automatically, including when only one board is connected. Scripts must
+supply identifiers or `--all`; `--headless` also prevents a menu when running in a terminal.
+`list` includes connected boards that cannot answer, using a clearly marked remembered ID
+when available, so a bench build can still be selected for reinstalling.
 
-These work from any screen:
+### Live diagnostics
 
-| Key | Does |
+`./cli debug` opens the selector and then a dashboard for the selected boots. Each boot shows
+its firmware protocol, calibration state, tilt, angle, acceleration, rotation, stomp count,
+and microphone level, raw RMS, ADC range, sample counter, and capture timing. History graphs
+and the age of each report make changing or stale readings visible.
+
+| Key | Action |
 |---|---|
-| `tab`, `shift+tab` | Next or previous screen. The number keys jump straight to one |
-| `p` | Pick a boot from a list of each one's id, USB serial, and tag |
-| `a` | Flash the app to the picked boot. Its saved settings stay |
-| `A` | Flash the app to both boots, one after the other, after one confirm |
-| `:` | Send any protocol line to the boot, with tab completion and history |
-| `l` | Cycle the log pane: small, half, hidden |
-| `ctrl+j`, `ctrl+k` | Scroll the log down or up. Page keys work too, on keyboards that have them |
-| `?` | Show help |
-| `q` | Quit and leave the board running |
+| `Tab` | Focus the next boot |
+| `i` | Identify the focused boot |
+| `Space` | Pause and release the USB connections |
+| `r` | Reconnect the selected boots |
+| `l` | Show or hide recent firmware output |
+| `↑` / `↓` | Scroll |
+| `q`, `Esc`, `Ctrl-C` | Exit and restore debug streaming |
 
-Every flash names the boot and waits for `Enter`. The stage line then shows building, uploading,
-and running or failed, with build output in the log and the reason for a failure pinned above
-it. Afterward the TUI stays attached, so the firmware's output keeps streaming.
+The shared inactivity limit in `config/control-surfaces.json` also pauses the dashboard.
+Readings stay visible with their age. The first key after pausing reconnects; repeat an action
+once the board is connected. A live connection owns its USB port, so pause or exit before
+opening another serial tool.
 
-The TUI holds the boot's USB port while it's open, so `pio device monitor` can't attach until
-you quit or pick another boot.
-
-### Subcommands
-
-Each test is also a subcommand, for scripts and repeat runs:
+### Headless checks
 
 ```bash
-./cli app                                              # flash the app; saved settings stay
-./cli app --debug                                     # same, then stream the board's output
-./cli flow --brightness 16                             # flow with no sensor input
-./cli flow --tilt=-0.5                                # fixed simulated heel-down tilt
-./cli flow --stomp-every 2s                           # timed flashes and trails
-./cli flow --motion                                   # onboard tilt and stomp input
-./cli flow --motion --log-motion                      # same, and stream motion over USB
-./cli flow --debug                                    # stay attached and stream the output
-./cli fire-trail --stomp-every 1s                     # repeat fire trails from the middle
-./cli fire-trail --tilt=1                             # trails from the toe (-1 for the heel)
-./cli fire-trail --motion                             # real stomps trigger fire trails
-./cli color --lit 20 --brightness 16 --interval 500ms # cycle white/red/green/blue
-./cli color --color '#ff8000' --lit 10                # fixed orange, other pixels black
-./cli off                                             # blank all connected pixels
-./cli flow --build-only                               # compile without uploading
-./cli flow --dry-run                                  # show settings without building
-./cli flow --help
+./cli debug audio --boot ABCD,EF12 --json
+./cli debug motion ABCD --duration 5s --require-movement
+./cli debug --headless --all --json
 ```
 
-- Pattern tests light the boot's saved strip layout. They ask the boot for it over USB, then
-  fall back to what that board last reported, then to `include/config.h`, and they print which
-  one they used. A bench build can't answer, so the last report is kept in `boards.json`, in a
-  `firewalker-cli` folder under your user config folder.
-- `--pixels` overrides the total connected length, and pattern tests then scale the toe and heel
-  to fit. `--toe` and `--heel` override either marker, in either order. These only apply to that
-  test, and never change what the boot has saved. Color and off tests use the length in
-  `include/config.h`, and `--lit` chooses how many pixels light up while the rest get black.
-- With several boards connected, `--port` or `--serial` picks one. A selection that
-  matches nothing fails rather than falling through to another shoe. With no boards, it suggests
-  a data cable or a port without a hub, because a charge-only cable powers the board without
-  showing it on USB.
-- `--motion` can't be combined with simulated `--tilt` or `--stomp-every`.
-- `--debug` and `--log-motion` stay attached after the upload and reconnect if the board resets.
-  In a terminal, lines are colored and anything you type goes to the board. Piped, you get the
-  board's raw lines with no color. Ctrl-C leaves the board running.
+Audio plays **1 kHz and 2 kHz tones** through the computer's current sound output, with quiet
+windows before, between, and after them. Put the boards near the speakers and pause other
+audio. Every selected board is sampled during the same tones. The default window is two
+seconds; `--duration` sets each window's length. Playback startup silence is excluded from
+the measured tone window.
 
-A bench test replaces the app on that board. `./cli app`, or `a` in the TUI, gets it back with
-its saved settings still there.
+A microphone passes when both tones produce at least **3× the preceding background RMS**
+and an increase of **8 raw RMS counts**, with at least five readings per window, advancing
+capture counters, and no ADC clipping. The test uses raw signal strength, so saved sensitivity
+and the recipe's noise gate do not determine the result. `--min-ratio`, `--min-rise`, and
+`--volume` adjust the bench check; system volume and output-device settings stay unchanged.
+This is an acoustic response check, not a calibrated sensitivity measurement.
 
-The same tests are available without Go, and there's a build for checking the sensor's
-axes and thresholds:
+Motion checks require available, plausible IMU readings. A stationary boot can pass capture;
+`--require-movement` also requires a change in tilt, angle, acceleration, rotation, or a stomp.
+Diagnostics report every selected boot even if one fails. Exit status is **0 for all PASS**, or
+**1 for a failed check or execution error**. `--json` writes results to stdout and phase
+progress to stderr. Debug settings are restored and ports close before results return.
+
+Sound playback uses `afplay` on macOS, `paplay` / `aplay` on Linux, or PowerShell's SoundPlayer
+on Windows; `ffplay` is a fallback. A missing or failed player is reported as an execution
+error rather than a microphone failure.
+
+### Installing firmware and strip tests
+
+`install` defaults to `final_app`. `--firmware` selects `imu_debug`, `strip_test`, or `strip_off`.
+Application installs check the selected boots before the first upload and refuse a known
+protocol downgrade: use the matching/newer checkout, or `--allow-downgrade` for an intentional
+replacement. Uploads preserve the stored flash settings; an older app may not understand them.
+`--dry-run` prints the build settings without compiling or uploading.
+
+The one-off strip tests live under `install` because they replace the running firmware:
 
 ```bash
-pio run -e strip_test -t upload  # cycle colors on every pixel
-pio run -e strip_off -t upload   # blank every pixel
-pio run -e imu_debug -t upload   # log raw motion over USB, and mirror tilt as brightness
-pio device monitor
+./cli install flow ABCD --brightness 16
+./cli install flow ABCD --tilt=-0.5
+./cli install flow ABCD --stomp-every 2s
+./cli install flow ABCD --motion --log-motion
+./cli install fire-trail ABCD --motion
+./cli install color ABCD --color '#ff8000' --lit 10
+./cli install off ABCD
+./cli install flow --build-only
 ```
 
-`off` blanks the pixels but doesn't disconnect their power, so the strip still draws
-its idle current. Unplug it for a full power-off.
+Pattern tests use each selected boot's saved strip layout, then its remembered layout, then
+`include/config.h`. `--pixels`, `--toe`, and `--heel` override that test without changing saved
+settings. Color/off tests use the configured length; `--lit` sets the lit prefix for color.
+`--motion` cannot be combined with simulated `--tilt` or `--stomp-every`.
+
+`--follow` (also accepted as the hidden `--debug` alias) streams output after a single-board
+install. `--log-motion` does the same for a motion-driven strip test. Install multiple boots
+first, then use `debug` for the app's multi-boot dashboard. `off` blanks pixels but leaves
+their idle power draw; unplugging the strip removes power.
+
+### Firmware bench TUI and compatibility
+
+`./cli bench`, or bare `./cli` in a terminal, opens the firmware bench TUI. It keeps the test
+forms, build selection, boot information, raw protocol console, and searchable logs. `1`, `2`,
+`3`, and `5` select screens; `p` picks a boot, `a` installs the app, `:` opens the protocol
+console, and `q` exits. Its displayed shell commands use the `install` hierarchy.
+
+Older top-level `app`, `flow`, `fire-trail`, `color`, and `off` commands remain hidden aliases
+for existing scripts. `./cli web` still serves the phone remote; `./cli web --fake` uses
+pretend boots.
 
 ## Tests
 

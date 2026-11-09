@@ -1,24 +1,23 @@
-// cli is the local bench tool for the XIAO MG24 Sense: it flashes one-off strip tests
-// and whole firmware builds to a USB-connected board, and streams what the board says
-// back, so bench work doesn't depend on the phone remote. With no arguments it opens the
-// TUI in internal/tui, and the subcommands here do the same jobs for scripts.
+// cli controls USB-connected Firewalker boots. list discovers hardware, install
+// builds and flashes firmware, identify blinks selected boots, and debug observes
+// the running app. commands.go owns shared boot selection; diagnostics and its
+// live dashboard share the typed telemetry in internal/protocol.
 //
-// This file is the command line: Cobra subcommands, and the flow from parsed flags to a
-// flash. The pieces it calls own the rest. internal/bench is what a test is, boards is
-// which board it runs on, link talks to that board, flash runs PlatformIO, and theme
-// decides how output looks. A bench test becomes build flags for the `bench` PlatformIO
-// environment (see src/modes/bench.cpp), so running one never edits firmware sources and
-// never touches a shoe's saved settings. `./cli app` puts the shoe app back, and `./cli
-// web` (internal/webapp) runs the phone remote in a browser here.
+// This file keeps firmware build options and the existing bench workflow. A
+// one-off strip test becomes build flags for src/modes/bench.cpp, while installing
+// the app uses each boot's saved settings. Older top-level build commands remain
+// hidden aliases so saved shell commands continue to work.
 package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -29,6 +28,7 @@ import (
 	"firewalker/cli/internal/controlconfig"
 	"firewalker/cli/internal/flash"
 	"firewalker/cli/internal/link"
+	"firewalker/cli/internal/pickboot"
 	"firewalker/cli/internal/protocol"
 	"firewalker/cli/internal/theme"
 	"firewalker/cli/internal/tui"
@@ -41,15 +41,18 @@ import (
 const statusTimeout = 1200 * time.Millisecond
 
 func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	if err := newCommand().ExecuteContext(ctx); err != nil {
+		if errors.Is(err, pickboot.ErrCanceled) {
+			return
+		}
 		fmt.Fprintln(os.Stderr, "cli:", err)
 		os.Exit(1)
 	}
 }
 
-func newCommand() *cobra.Command { return newCommandWith(runTest) }
+func newCommand() *cobra.Command { return newCommandWith(runInstallTest) }
 
 // testRunner is what a bench test's subcommand does once its flags are parsed.
 type testRunner func(ctx context.Context, cmd *cobra.Command, o *bench.Options, c *bench.Config) error
@@ -59,21 +62,16 @@ type testRunner func(ctx context.Context, cmd *cobra.Command, o *bench.Options, 
 func newCommandWith(run testRunner) *cobra.Command {
 	opts := &bench.Options{}
 	root := &cobra.Command{
-		Use: "cli", Short: "Build and run MG24 Sense strip tests on D10",
-		Long:         "Run MG24 bench tests without editing firmware settings. Defaults: the board's saved strip layout, brightness 16/255, data on D10. Each command builds and uploads; --build-only compiles without touching the board.",
+		Use: "cli", Short: "List, install, identify, and diagnose Firewalker boots",
+		Long:         "Control Firewalker boots over USB. Use list to find IDs, install to flash firmware, identify to blink a boot, and debug for live or headless motion and microphone diagnostics. Commands without a boot identifier offer an interactive multi-select menu.",
 		SilenceUsage: true, SilenceErrors: true,
 		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 	}
-	f := root.PersistentFlags()
-	f.StringVar(&opts.RepoRoot, "repo-root", "../..", "Firewalker repository root")
-	_ = f.MarkHidden("repo-root")
-	f.IntVar(&opts.Pixels, "pixels", 0, "Total connected pixels (1–4096); pattern tests default to the board's saved layout, then include/config.h")
-	f.IntVar(&opts.Brightness, "brightness", 16, "Global brightness (1–255; not a current limit)")
-	f.StringVar(&opts.Port, "port", "", "MG24 USB port; auto-detected when one board is connected")
-	f.StringVar(&opts.Serial, "serial", "", "MG24 USB serial number; useful with multiple boards")
-	f.BoolVar(&opts.BuildOnly, "build-only", false, "Compile without uploading")
-	f.BoolVar(&opts.DryRun, "dry-run", false, "Show resolved settings without compiling or uploading")
-	f.BoolVar(&opts.Debug, "debug", false, "Stay attached after the upload and stream the board's output; Ctrl-C leaves the board running")
+	root.PersistentFlags().StringVar(&opts.RepoRoot, "repo-root", "../..", "Firewalker repository root")
+	_ = root.PersistentFlags().MarkHidden("repo-root")
+
+	install := newInstallCommand(opts)
+	addBuildFlags(install, opts)
 
 	tests := []struct {
 		name, short string
@@ -85,42 +83,76 @@ func newCommandWith(run testRunner) *cobra.Command {
 		{"off", "Blank every connected pixel (power remains on)", bench.TestOff},
 	}
 	for _, t := range tests {
-		cfg := &bench.Config{Name: t.name, Test: t.test, Toe: -1, Heel: -1, Lit: -1, Color: "cycle", Interval: 500 * time.Millisecond}
-		cmd := &cobra.Command{Use: t.name, Short: t.short, Args: cobra.NoArgs}
-		if cfg.IsPattern() {
-			flags := cmd.Flags()
-			flags.BoolVar(&cfg.Motion, "motion", false, "Use the onboard sensor for tilt and stomp input")
-			flags.BoolVar(&cfg.LogMotion, "log-motion", false, "Log motion over USB and stream it after flashing; Ctrl-C leaves the board running")
-			flags.Float64Var(&cfg.Tilt, "tilt", 0, "Fixed simulated tilt (-1 heel-down, 0 level, +1 toe-down)")
-			flags.DurationVar(&cfg.StompEvery, "stomp-every", 0, "Simulate impacts at this interval; 0 disables (fire-trail defaults to 1s without --motion)")
-			flags.IntVar(&cfg.Toe, "toe", -1, "Toe pixel; defaults to the board's saved layout, or 32.5% of the strip with a custom --pixels")
-			flags.IntVar(&cfg.Heel, "heel", -1, "Heel pixel; defaults to the board's saved layout, or 82.5% of the strip with a custom --pixels")
-		}
-		if t.test == bench.TestColor {
-			cmd.Flags().IntVar(&cfg.Lit, "lit", -1, "Pixels to light at the input end; defaults to all")
-			cmd.Flags().StringVar(&cfg.Color, "color", "cycle", "cycle, white, red, green, blue, or '#RRGGBB'")
-			cmd.Flags().DurationVar(&cfg.Interval, "interval", 500*time.Millisecond, "Time per color in the cycle")
-		}
-		cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-			if cfg.Test == bench.TestFireTrail && !cfg.Motion && !cmd.Flags().Changed("stomp-every") {
-				cfg.StompEvery = time.Second
-			}
-			return run(cmd.Context(), cmd, opts, cfg)
-		}
-		root.AddCommand(cmd)
-	}
-	root.AddCommand(newAppCommand(opts))
-	root.AddCommand(newWebCommand(opts))
+		cmd := newBenchCommand(t.name, t.short, t.test, opts, run)
+		cmd.Args = cobra.ArbitraryArgs
+		cmd.Annotations = map[string]string{"select-boots": "true"}
+		install.AddCommand(cmd)
 
-	// Bare `./cli` opens the TUI for a person at a terminal. Piped or scripted, there's
-	// nobody to press keys, so it prints help.
+		legacy := newBenchCommand(t.name, t.short, t.test, opts, run)
+		legacy.Hidden = true
+		addBuildFlags(legacy, opts)
+		root.AddCommand(legacy)
+	}
+	app := newAppCommand(opts)
+	app.Hidden = true
+	addBuildFlags(app, opts)
+	root.AddCommand(app, install)
+	web := newWebCommand(opts)
+	web.Flags().BoolVar(&opts.BuildOnly, "build-only", false, "Build without serving")
+	web.Flags().BoolVar(&opts.DryRun, "dry-run", false, "Print the commands without running them")
+	root.AddCommand(web)
+	addDeviceCommands(root, opts)
+	root.AddCommand(&cobra.Command{Use: "bench", Short: "Open the firmware bench TUI", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error { return tui.Run(opts.RepoRoot) }})
+
 	root.RunE = func(cmd *cobra.Command, _ []string) error {
-		if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
-			return cmd.Help()
+		if term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) {
+			return tui.Run(opts.RepoRoot)
 		}
-		return tui.Run(opts.RepoRoot)
+		return cmd.Help()
 	}
 	return root
+}
+
+// addBuildFlags keeps firmware-only knobs under install and its hidden aliases;
+// live diagnostics never inherit flags that would quietly do nothing.
+func addBuildFlags(cmd *cobra.Command, opts *bench.Options) {
+	f := cmd.PersistentFlags()
+	f.IntVar(&opts.Pixels, "pixels", 0, "Total strip pixels; defaults to the boot's saved layout")
+	f.IntVar(&opts.Brightness, "brightness", 16, "Global strip brightness (1–255; not a current limit)")
+	f.StringVar(&opts.Port, "port", "", "USB port (also accepted as a boot identifier)")
+	f.StringVar(&opts.Serial, "serial", "", "USB serial (also accepted as a boot identifier)")
+	f.BoolVar(&opts.BuildOnly, "build-only", false, "Compile without uploading")
+	f.BoolVar(&opts.DryRun, "dry-run", false, "Print the build plan without compiling or uploading")
+	f.BoolVar(&opts.Debug, "follow", false, "Stream output after installing; Ctrl-C leaves the boot running")
+	f.BoolVar(&opts.Debug, "debug", false, "Alias for --follow")
+	_ = f.MarkHidden("debug")
+}
+
+func newBenchCommand(name, short string, test int, opts *bench.Options, run testRunner) *cobra.Command {
+	cfg := &bench.Config{Name: name, Test: test, Toe: -1, Heel: -1, Lit: -1, Color: "cycle", Interval: 500 * time.Millisecond}
+	cmd := &cobra.Command{Use: name + " [boot...]", Short: short, Args: cobra.NoArgs}
+	if cfg.IsPattern() {
+		flags := cmd.Flags()
+		flags.BoolVar(&cfg.Motion, "motion", false, "Use the onboard sensor for tilt and stomp input")
+		flags.BoolVar(&cfg.LogMotion, "log-motion", false, "Log motion over USB and stream it after flashing; Ctrl-C leaves the board running")
+		flags.Float64Var(&cfg.Tilt, "tilt", 0, "Fixed simulated tilt (-1 heel-down, 0 level, +1 toe-down)")
+		flags.DurationVar(&cfg.StompEvery, "stomp-every", 0, "Simulate impacts at this interval; 0 disables (fire-trail defaults to 1s without --motion)")
+		flags.IntVar(&cfg.Toe, "toe", -1, "Toe pixel; defaults to the board's saved layout, or 32.5% of the strip with a custom --pixels")
+		flags.IntVar(&cfg.Heel, "heel", -1, "Heel pixel; defaults to the board's saved layout, or 82.5% of the strip with a custom --pixels")
+	}
+	if test == bench.TestColor {
+		cmd.Flags().IntVar(&cfg.Lit, "lit", -1, "Pixels to light at the input end; defaults to all")
+		cmd.Flags().StringVar(&cfg.Color, "color", "cycle", "cycle, white, red, green, blue, or '#RRGGBB'")
+		cmd.Flags().DurationVar(&cfg.Interval, "interval", 500*time.Millisecond, "Time per color in the cycle")
+	}
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		if cfg.Test == bench.TestFireTrail && !cfg.Motion && !cmd.Flags().Changed("stomp-every") {
+			cfg.StompEvery = time.Second
+		}
+		return run(cmd.Context(), cmd, opts, cfg)
+	}
+	return cmd
 }
 
 func newAppCommand(opts *bench.Options) *cobra.Command {
@@ -189,7 +221,7 @@ func printWebPlan(out io.Writer, web webapp.Options) error {
 // do nothing on a command it doesn't apply to.
 func refuseFlags(cmd *cobra.Command, reason string, names ...string) error {
 	for _, name := range names {
-		if cmd.Flag(name).Changed {
+		if flag := cmd.Flag(name); flag != nil && flag.Changed {
 			return fmt.Errorf("%s, so --%s doesn't apply", reason, name)
 		}
 	}
