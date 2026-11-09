@@ -17,6 +17,7 @@ struct AudioSample {
   float level;
   uint32_t blocks;
   uint32_t captureUs;
+  int8_t waveform[AUDIO_WAVEFORM_SIZE];
 };
 
 // Sensitivity is 0..100, with larger values needing less sound for a full bar.

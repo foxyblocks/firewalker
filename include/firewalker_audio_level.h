@@ -11,6 +11,24 @@
 
 namespace Firewalker {
 
+constexpr size_t AUDIO_WAVEFORM_SIZE = 24;
+
+// A compact waveform from a real captured block. Keep the largest signed excursion
+// in each bucket so higher-frequency sound doesn't vanish when averaged down.
+// Runtime uses the configured full-volume amplitude as scale, so the trace stays
+// readable at normal microphone levels. This is a preview, not stored audio.
+inline void audioWaveform(const uint32_t* samples, size_t count, float mean,
+                          int8_t* out, size_t size, float amplitudeScale = 2048.0f) {
+  for (size_t bucket = 0; bucket < size; bucket++) {
+    float peak = 0;
+    for (size_t i = bucket*count/size; i < (bucket+1)*count/size; i++) {
+      const float excursion = (float)(samples[i] & 0xFFF) - mean;
+      if (fabsf(excursion) > fabsf(peak)) peak = excursion;
+    }
+    out[bucket] = amplitudeScale > 0 ? (int8_t)roundf(fmaxf(-1, fminf(1, peak/amplitudeScale))*127) : 0;
+  }
+}
+
 struct AudioBlock {
   uint16_t low;
   uint16_t high;

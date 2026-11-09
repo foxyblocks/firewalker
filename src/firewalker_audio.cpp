@@ -157,6 +157,8 @@ void audioUpdate() {
     return;
   }
   latest.block = measureAudioBlock(samples, AUDIO_BLOCK_SAMPLES);
+  audioWaveform(samples, AUDIO_BLOCK_SAMPLES, latest.block.mean,
+                latest.waveform, AUDIO_WAVEFORM_SIZE, fullRms * 1.41421356f);
   const bool gateOpen = audioGateStep(gate, latest.block.rms, noiseRms,
       gateMultiplier, AUDIO_GATE_OPEN_BLOCKS);
   const float target = gateOpen ? audioLevelFromRms(latest.block.rms, noiseRms, fullRms) : 0.0f;

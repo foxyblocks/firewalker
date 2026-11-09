@@ -1,30 +1,10 @@
 /**
- * What the Calibrate flow walks through, and what it says when a capture fails. The
+ * Labels and instructions for one boot's pose capture, and what a failed capture says. The
  * firmware does the capture and the tilt math (docs/remote-protocol.md), so this only
- * decides the order of poses and the wording.
+ * supplies wording to the per-boot configuration screen.
  */
 
-import type { Side } from "./boots";
 import type { Pose } from "./protocol";
-
-export interface CalibrationStep {
-  pose: Pose;
-  sides: Side[];
-}
-
-/**
- * The poses to take for the chosen boots. Neutral goes first because the firmware
- * checks heel and toe against it. With two boots, neutral is captured together since
- * you're standing on both, then heel and toe go one boot at a time, which is steadier
- * than rocking back on both feet.
- */
-export function calibrationSteps(sides: Side[]): CalibrationStep[] {
-  const steps: CalibrationStep[] = [{ pose: "neutral", sides }];
-  for (const side of sides) {
-    steps.push({ pose: "heel", sides: [side] }, { pose: "toe", sides: [side] });
-  }
-  return steps;
-}
 
 export const POSE_NAMES: Record<Pose, string> = {
   neutral: "Neutral",
@@ -42,9 +22,15 @@ const FAILURES: Record<string, string> = {
   motion: "It kept moving too much to find one pose. Settle into it and try again.",
   "no-samples": "The motion sensor stopped responding. Try again, then restart the boot.",
   "sensor-unavailable": "This boot's motion sensor isn't available, so it can't calibrate.",
-  "out-of-range": "It held still, but too far from level. Set it flatter and try again.",
+  "out-of-range": "The boot couldn't use that sensor angle. Restart it and try again. Older firmware may need an update for a vertical mount.",
+  "neutral-required": "Capture neutral first so the boot can learn its mounting angle.",
+  "orientation-update-required": "Update this boot's firmware for 3D pose calibration. Then recapture neutral, heel and toe.",
+  "off-axis": "That pose moved sideways from the learned heel-to-toe direction. Hold the boot steady and retake it.",
   "too-close": "That's too close to neutral. Tilt further and try again.",
-  "wrong-side": "Heel and toe came out on the same side of neutral. Retake them, starting with neutral.",
+  "wrong-side": "Heel and toe came out on the same side of neutral. Clear a saved heel or toe pose, then retake it.",
+  "needs-update": "Update this boot's firmware to clear saved poses.",
+  "save-failed": "The pose changed, but the boot couldn't save it. Keep it powered and try again.",
+  "already-clearing": "It's still clearing the saved pose. Give it a second.",
   "no-answer": "The boot didn't answer. Check it's nearby and try again.",
   offline: "The boot isn't connected. Wait for it to reconnect and try again.",
   "already-capturing": "It's still capturing. Give it a second and try again.",

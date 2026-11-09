@@ -71,11 +71,12 @@ full reference, including the BLE service an iPhone app connects to. The app its
 tracked in [FOX-269](https://linear.app/foxyblocks/issue/FOX-269).
 
 To calibrate a boot, wear it and hold each pose while you send its command: first
-`calibrate neutral` at rest, then optionally `calibrate heel` and `calibrate toe`. The
-firmware samples for two seconds and maps those poses to tilt -1, 0, and +1 from then on. A
-little wobble is fine. A skipped side reaches full tilt 30 degrees from neutral. If the boot
-never settles or a pose can't work, it reports why and keeps the previous calibration. Do
-this once per boot.
+`calibrate neutral` at rest, then at least one of `calibrate heel` or `calibrate toe`.
+The firmware samples for two seconds and learns how the boot moves in the chip's 3D
+coordinates. Neutral alone leaves tilt at zero until a side pose teaches its direction.
+A little wobble is fine. Capturing both sides maps your full travel to -1 and +1; an
+uncaptured side reaches full tilt 30 degrees from neutral. A failed capture keeps the
+previous calibration. Do this for each boot and recapture after changing its mounting.
 
 ## Bench tool
 
@@ -89,7 +90,7 @@ not change saved microphone tuning, poses, brightness, patterns, or strip layout
 ```bash
 ./cli list                              # IDs, USB serials, ports, and firmware status
 ./cli list --json                       # machine-readable inventory
-./cli identify ABCD                     # blink this boot's strip
+./cli identify ABCD                     # blink this boot's onboard user LED and strip
 ./cli identify --boot ABCD,EF12          # blink several boots without a menu
 ./cli install ABCD                      # build and install this checkout's shoe app
 ./cli install --all                     # install on every connected boot

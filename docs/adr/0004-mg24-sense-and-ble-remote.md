@@ -1,5 +1,8 @@
 # Move to the XIAO MG24 Sense, with a BLE remote and per-controller settings
 
+The mounting assumption below is superseded by [ADR-0006](0006-learn-mounting-from-3d-poses.md):
+each boot now learns its controller's arbitrary 3D mounting from held poses.
+
 The firmware moves from the Feather RP2040, external GY-521, and D6 button to one
 all-in-one board, the Seeed XIAO MG24 Sense, driving a denser BTF FCOB strip. Bluetooth
 comes into scope, which supersedes the earlier guardrail against all wireless features,

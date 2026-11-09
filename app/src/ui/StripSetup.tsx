@@ -1,8 +1,7 @@
 /**
- * The Strip tab of the Calibrate sheet: tells one boot how long its strip is and which
- * pixels sit at the toe and heel, while you look at the strip itself. Each boot saves its
- * own, because a cut length and a mount can differ, so with two boots you set them one at
- * a time.
+ * The Strip tab of a boot's Configuration: tells that one boot how long its strip is and which
+ * pixels sit at the toe and heel, while you look at the strip itself. Each boot saves its own,
+ * because a cut length and a mount can differ.
  *
  * For as long as this tab is open, the strip shows the whole layout at once: the ring in
  * blue, with one yellow pixel at the toe and one purple pixel at the heel. So you stop the
@@ -14,11 +13,12 @@
  * and the boot drops it by itself if the phone goes away.
  */
 
-import { useEffect, useState } from "react";
-import type { BootsStore, Side } from "../core/boots";
+import { useEffect } from "react";
+import type { BootClient } from "../core/boot";
 import type { StripSetting } from "../core/protocol";
 import { dragTo, nudge, shownStrip, sliderRange, type StripValues } from "../core/stripSetup";
-import { LinkDot, PixelSlider, type PixelSliderShape, type PixelTone } from "./parts";
+import { Notice } from "./components/Notice";
+import { PixelSlider, type PixelSliderShape, type PixelTone } from "./components/PixelSlider";
 
 const SLIDERS: { setting: StripSetting; name: string; tone: PixelTone; shape: PixelSliderShape }[] = [
   { setting: "leds", name: "LED count", tone: "blue", shape: "fill" },
@@ -26,78 +26,49 @@ const SLIDERS: { setting: StripSetting; name: string; tone: PixelTone; shape: Pi
   { setting: "heel", name: "Heel", tone: "purple", shape: "point" },
 ];
 
-export function StripSetup({ store, onClose }: { store: BootsStore; onClose: () => void }) {
-  const sides = store.targetSides();
-  const [side, setSide] = useState<Side | undefined>(
-    () => sides.find((candidate) => store.client(candidate)?.getState().link === "online") ?? sides[0],
-  );
-  const client = side ? store.client(side) : undefined;
-  const state = client?.getState();
-  const online = state?.link === "online";
-  const values = state ? shownStrip(state) : undefined;
+export function StripSetup({ client, name }: { client: BootClient; name: string }) {
+  const state = client.getState();
+  const online = state.link === "online";
+  const values = shownStrip(state);
 
   // The strip shows its layout for as long as this tab is on this boot.
   useEffect(() => {
-    client?.setStripPreview(true);
-    return () => client?.setStripPreview(false);
+    client.setStripPreview(true);
+    return () => client.setStripPreview(false);
   }, [client]);
 
   const change = (setting: StripSetting, value: number) => {
-    if (values && value !== values[setting]) client?.setStrip(setting, value);
+    if (values && value !== values[setting]) client.setStrip(setting, value);
   };
 
+  if (!values) {
+    return online ? (
+      <Notice tone="warn">{name} needs a firmware update before it can set its strip.</Notice>
+    ) : (
+      <Notice>Waiting for {name} to reconnect.</Notice>
+    );
+  }
+
   return (
-    <>
-      {sides.length > 1 && (
-        <div className="tabs tabs-sheet" role="tablist" aria-label="Boot">
-          {sides.map((candidate) => (
-            <button
-              key={candidate}
-              type="button"
-              role="tab"
-              aria-selected={candidate === side}
-              className={`tab${candidate === side ? " tab-on" : ""}`}
-              onClick={() => setSide(candidate)}
-            >
-              <LinkDot link={store.client(candidate)?.getState().link} />
-              <span className="tab-name">{store.displayName(candidate)}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {values && side ? (
-        <>
-          <p className="sheet-help">
-            Slide until the blue reaches the end of the strip. Then move yellow to the tip of your toe, and
-            purple to the back of your heel.
-          </p>
-          <div className="strip-cards">
-            {SLIDERS.map((slider) => (
-              <SliderCard
-                key={slider.setting}
-                {...slider}
-                values={values}
-                disabled={!online}
-                onDragging={(dragging) => client?.setDragging(dragging)}
-                onChange={(value) => change(slider.setting, value)}
-              />
-            ))}
-          </div>
-          <SaveNote store={store} side={side} online={online} />
-        </>
-      ) : (
-        <p className="sheet-help">
-          {online
-            ? `${side ? store.displayName(side) : "This boot"} needs a firmware update before it can set its strip.`
-            : "Waiting for this boot to reconnect."}
-        </p>
-      )}
-
-      <button type="button" className="button button-primary button-wide" onClick={onClose}>
-        Done
-      </button>
-    </>
+    <div className="stack">
+      <p className="help-text">
+        Slide until the blue reaches the end of the strip. Then move yellow to the tip of your toe, and purple to the back of
+        your heel.
+      </p>
+      <div className="strip-cards">
+        {SLIDERS.map((slider) => (
+          <SliderCard
+            key={slider.setting}
+            {...slider}
+            values={values}
+            disabled={!online}
+            onDragging={(dragging) => client.setDragging(dragging)}
+            onChange={(value) => change(slider.setting, value)}
+          />
+        ))}
+      </div>
+      <SaveNote client={client} name={name} />
+    </div>
   );
 }
 
@@ -155,10 +126,10 @@ function SliderCard({
   );
 }
 
-function SaveNote({ store, side, online }: { store: BootsStore; side: Side; online: boolean }) {
-  const status = store.client(side)?.getState().status;
-  const name = store.displayName(side);
-  if (!online) return <span className="save-line">Reconnecting to {name}</span>;
+function SaveNote({ client, name }: { client: BootClient; name: string }) {
+  const state = client.getState();
+  const status = state.status;
+  if (state.link !== "online") return <span className="save-line">Reconnecting to {name}</span>;
   if (status?.saveFailed) return <span className="save-line save-failed">Not saved on {name}</span>;
   return (
     <span className="save-line">

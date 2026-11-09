@@ -64,8 +64,19 @@ static void test_gate_rejects_quiet_spikes_and_follows_music_after_opening() {
 
 void setUp() {}
 void tearDown() {}
+static void test_waveform_removes_bias_and_retains_both_polarities() {
+  const uint32_t samples[] = {2048, 3072, 2048, 1024};
+  int8_t waveform[4];
+  audioWaveform(samples, 4, 2048, waveform, 4);
+  TEST_ASSERT_EQUAL_INT(0, waveform[0]);
+  TEST_ASSERT_EQUAL_INT(64, waveform[1]);
+  TEST_ASSERT_EQUAL_INT(0, waveform[2]);
+  TEST_ASSERT_EQUAL_INT(-64, waveform[3]);
+}
+
 int main() {
   UNITY_BEGIN();
+  RUN_TEST(test_waveform_removes_bias_and_retains_both_polarities);
   RUN_TEST(test_quiet_calibration_ignores_a_short_click);
   RUN_TEST(test_gate_rejects_quiet_spikes_and_follows_music_after_opening);
   RUN_TEST(test_dc_bias_is_silence);

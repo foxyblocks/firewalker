@@ -1,25 +1,4 @@
-import { calibrationSteps, failureMessage } from "./calibration";
-
-describe("calibrationSteps", () => {
-  it("walks one boot through neutral, heel, and toe", () => {
-    expect(calibrationSteps(["left"])).toEqual([
-      { pose: "neutral", sides: ["left"] },
-      { pose: "heel", sides: ["left"] },
-      { pose: "toe", sides: ["left"] },
-    ]);
-  });
-
-  it("takes neutral together on Both, then heel and toe one boot at a time", () => {
-    expect(calibrationSteps(["left", "right"])).toEqual([
-      { pose: "neutral", sides: ["left", "right"] },
-      { pose: "heel", sides: ["left"] },
-      { pose: "toe", sides: ["left"] },
-      { pose: "heel", sides: ["right"] },
-      { pose: "toe", sides: ["right"] },
-    ]);
-  });
-
-});
+import { failureMessage } from "./calibration";
 
 describe("failureMessage", () => {
   it("explains each firmware reason in plain words", () => {

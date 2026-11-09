@@ -1,29 +1,9 @@
 #pragma once
-
-#include <math.h>
 #include <stdint.h>
 
-// Pure orientation + stomp math for the IMU module — no Arduino, no sensor I/O.
-// firewalker_imu.cpp supplies axis-mapped samples. The native tests
-// (`pio test -e native`) exercise this math and replay the MG24's mount mapping,
-// so tracking during motion, thresholds, and hysteresis can be checked
-// off-hardware. See ADR-0003 and docs/open-questions.md (bench calibration).
-
+// Pure stomp hysteresis and timing, shared by the IMU service and native tests.
+// Gravity/orientation fusion lives in firewalker_orientation.h and uses all axes.
 namespace Firewalker {
-
-// Absolute fore-aft tilt angle (radians) from the axis-mapped accelerometer
-// components: gravity split between the heel↔toe axis (aFwd) and the
-// vertical-at-rest axis (aUp). 0 = level.
-inline float accelTiltAngle(float aFwd, float aUp) { return atan2f(aFwd, aUp); }
-
-// One complementary-filter step: integrate the gyro pitch rate short-term,
-// pulled toward the accelerometer's absolute angle. `alpha` is the weight on
-// the gyro term (≈0.96); dt in seconds. Returns the new fused angle (radians).
-inline float fuseTiltStep(float fusedAngle, float accAngle, float gyroRate,
-                          float dt, float alpha) {
-  return alpha * (fusedAngle + gyroRate * dt) + (1.0f - alpha) * accAngle;
-}
-
 // Stomp detection: acceleration-magnitude hysteresis + a refractory gap, so one
 // physical impact = one trigger (see CONTEXT.md, Hysteresis). The caller owns
 // the state and consumes `pending`.

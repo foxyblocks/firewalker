@@ -70,18 +70,18 @@ code, issues, and docs rather than drifting to synonyms.
   complementary filter. Drives the **flow** Pattern. In code this is the
   fore-aft **tilt** (`imuTiltFwd()`, `tiltFwd`, `IMU_TILT_*` — "tilt" is the
   code spelling of Orientation's fore-aft component). The pure fusion math
-  lives in `include/firewalker_fusion.h` and is tested off-hardware
+  lives in `include/firewalker_orientation.h` and is tested off-hardware
   (`pio test -e native`). _Avoid_: "gyro angle" (the gyro alone can't give
   absolute tilt).
 - **Hysteresis** — separate arm/release thresholds so one physical event = one
   trigger even when readings wiggle around the threshold (used for IMU stomp
   detection).
-- **Pose** — a held position of the boot, captured per controller to calibrate **tilt**:
-  **neutral** (at rest, tilt 0), **heel** (heel-down, tilt -1), and **toe** (toe-down,
-  tilt +1). Each is an absolute fused angle in degrees, saved in that controller's flash.
-  Heel and toe are optional, and a skipped side uses a default range. Poses set where tilt
-  lands and which way it runs. They don't change the strip's toe and heel positions, which
-  are pixel indices, or stomp thresholds.
+- **Pose** — a held 3D position of one boot: **neutral** at rest, **heel** with the heel
+  down, or **toe** with the toe down. Neutral and at least one side pose establish the
+  boot's fore-aft direction regardless of how the controller is mounted. The other side
+  is optional and uses a default range until captured.
+- **Mounting reference** — the boot's resting orientation and fore-aft direction as seen
+  by its controller. It belongs to that boot, and must be recaptured after remounting.
 - **Settings** — what each controller remembers across power cycles: its pattern,
   brightness, and poses. They live in the controller's own flash, never in the build,
   so both shoes run the same firmware binary.

@@ -21,7 +21,7 @@ import {
   type Transport,
 } from "./transport";
 import { USB_PORT_BUSY_MESSAGE } from "./usb";
-import { AUDIO_PROTOCOL_VERSION, type Pose, type StripSetting } from "../core/protocol";
+import { AUDIO_PROTOCOL_VERSION, CALIBRATION_CLEAR_PROTOCOL_VERSION, ORIENTATION_PROTOCOL_VERSION, type Pose, type StripSetting } from "../core/protocol";
 
 const STATUS_MIN_MS = 250;
 const MOTION_MS = 200;
@@ -30,11 +30,18 @@ const SAVE_MAX_MS = 5000;
 const CAPTURE_MS = 2000;
 const REPLY_LATENCY_MS = 10;
 const DEFAULT_FULL_TILT_DEG = 30;
-const MAX_NEUTRAL_DEG = 45;
 const MIN_POSE_RANGE_DEG = 10;
 const NEUTRAL_DEAD_ZONE_DEG = 3;
 const MIN_LEDS = 2;
 const PREVIEW_HOLD_MS = 60000;
+
+/** Signed shortest angle, matching firewalker_angles.h at the -180/+180 boundary. */
+function degreesBetween(angle: number, reference: number): number {
+  let difference = (angle - reference) % 360;
+  if (difference > 180) difference -= 360;
+  if (difference < -180) difference += 360;
+  return difference;
+}
 
 export interface FakeBootOptions {
   id?: string;
@@ -149,7 +156,7 @@ export class FakeBoot {
     this.id = options.id ?? "3ED1";
     this.deviceId = `fake-${this.id}`;
     this.name = `Firewalker-${this.id}`;
-    this.proto = options.proto ?? AUDIO_PROTOCOL_VERSION;
+    this.proto = options.proto ?? ORIENTATION_PROTOCOL_VERSION;
     this.availablePatterns = options.patterns ?? ["flow", "fire-trail"];
     this.pattern = options.pattern ?? "flow";
     this.lastLit = options.lastLit ?? (this.pattern === "off" ? "flow" : this.pattern);
@@ -271,6 +278,7 @@ export class FakeBoot {
         this.markChanged();
         return this.ackThenStatus("cap");
       case "calibrate":
+        if (arg === "clear") return this.clearCalibration(words[2]);
         if (arg && arg !== "neutral" && arg !== "heel" && arg !== "toe") {
           return this.ackInvalid("unknown-pose");
         }
@@ -373,6 +381,24 @@ export class FakeBoot {
     return this.poseAngles[pose];
   }
 
+  /** Mirrors the firmware's explicit removal, including its immediate flash save. */
+  private clearCalibration(target: string | undefined): void {
+    if (this.proto < CALIBRATION_CLEAR_PROTOCOL_VERSION) return this.ackInvalid("unknown-pose");
+    if (this.capturing) {
+      return this.send(JSON.stringify({ t: "ack", cmd: "calibrate", ok: false, error: "already-capturing" }));
+    }
+    if (target !== "heel" && target !== "toe" && target !== "all") return this.ackInvalid("unknown-clear-target");
+    if (target === "heel" || target === "all") this.heelDeg = null;
+    if (target === "toe" || target === "all") this.toeDeg = null;
+    if (target === "all") {
+      this.neutralDeg = 0;
+      this.calibrated = false;
+    }
+    this.calibration = "idle";
+    this.saveNow();
+    this.ackThenStatus("calibrate");
+  }
+
   private startCapture(pose: Pose): void {
     if (this.capturing) {
       return this.send(JSON.stringify({ t: "ack", cmd: "calibrate", ok: false, error: "already-capturing" }));
@@ -408,7 +434,8 @@ export class FakeBoot {
 
     const angle = this.currentAngle(pose);
     if (pose === "neutral") {
-      this.resetPosesInvalidatedBy(angle);
+      if (this.proto >= ORIENTATION_PROTOCOL_VERSION) this.heelDeg = this.toeDeg = null;
+      else this.resetPosesInvalidatedBy(angle);
       this.neutralDeg = angle;
       this.calibrated = true;
     } else if (pose === "heel") {
@@ -432,10 +459,13 @@ export class FakeBoot {
   private captureFailure(pose: Pose): string | null {
     if (this.moving) return "motion";
     const angle = this.currentAngle(pose);
-    if (pose === "neutral") return Math.abs(angle) > MAX_NEUTRAL_DEG ? "out-of-range" : null;
-    if (Math.abs(angle - this.neutralDeg) < MIN_POSE_RANGE_DEG) return "too-close";
+    if (!Number.isFinite(angle) || Math.abs(angle) > 180) return "out-of-range";
+    if (pose === "neutral") return null;
+    if (this.proto >= ORIENTATION_PROTOCOL_VERSION && !this.calibrated) return "neutral-required";
+    const offset = degreesBetween(angle, this.neutralDeg);
+    if (Math.abs(offset) < MIN_POSE_RANGE_DEG) return "too-close";
     const other = pose === "heel" ? this.toeDeg : this.heelDeg;
-    if (other !== null && Math.sign(angle - this.neutralDeg) === Math.sign(other - this.neutralDeg)) {
+    if (other !== null && Math.sign(offset) === Math.sign(degreesBetween(other, this.neutralDeg))) {
       return "wrong-side";
     }
     return null;
@@ -448,21 +478,30 @@ export class FakeBoot {
   private resetPosesInvalidatedBy(newNeutral: number): void {
     const stillValid = (pose: number | null) =>
       pose !== null &&
-      Math.sign(pose - newNeutral) === Math.sign(pose - this.neutralDeg) &&
-      Math.abs(pose - newNeutral) >= MIN_POSE_RANGE_DEG;
+      Math.sign(degreesBetween(pose, newNeutral)) === Math.sign(degreesBetween(pose, this.neutralDeg)) &&
+      Math.abs(degreesBetween(pose, newNeutral)) >= MIN_POSE_RANGE_DEG;
     if (!stillValid(this.heelDeg)) this.heelDeg = null;
     if (!stillValid(this.toeDeg)) this.toeDeg = null;
   }
 
-  /** Maps an angle to -1..+1 the way the firmware's three-point tilt does. */
+  /**
+   * Matches the firmware's three-pose tilt: heel/toe select the direction, a
+   * missing side uses the default range, and the dead zone is removed before
+   * scaling the remaining range. Both halves work across -180/+180 degrees.
+   */
   private tiltAt(angle: number): number {
-    const toe = this.toeDeg ?? this.neutralDeg + DEFAULT_FULL_TILT_DEG;
-    const heel = this.heelDeg ?? this.neutralDeg - DEFAULT_FULL_TILT_DEG;
-    const offset = angle - this.neutralDeg;
+    if (this.proto >= ORIENTATION_PROTOCOL_VERSION && (!this.calibrated || (this.heelDeg === null && this.toeDeg === null))) return 0;
+    const offset = degreesBetween(angle, this.neutralDeg);
     if (Math.abs(offset) <= NEUTRAL_DEAD_ZONE_DEG) return 0;
-    const towardToe = Math.sign(offset) === Math.sign(toe - this.neutralDeg);
-    const tilt = towardToe ? offset / (toe - this.neutralDeg) : -offset / (heel - this.neutralDeg);
-    return Math.max(-1, Math.min(1, tilt));
+    const direction = this.toeDeg !== null
+      ? Math.sign(degreesBetween(this.toeDeg, this.neutralDeg))
+      : this.heelDeg !== null ? -Math.sign(degreesBetween(this.heelDeg, this.neutralDeg)) : 1;
+    const towardToe = offset * direction >= 0;
+    const pose = towardToe ? this.toeDeg : this.heelDeg;
+    const range = pose === null ? DEFAULT_FULL_TILT_DEG : Math.abs(degreesBetween(pose, this.neutralDeg));
+    const tilt = range > NEUTRAL_DEAD_ZONE_DEG
+      ? Math.min(1, (Math.abs(offset) - NEUTRAL_DEAD_ZONE_DEG) / (range - NEUTRAL_DEAD_ZONE_DEG)) : 1;
+    return towardToe ? tilt : -tilt;
   }
 
   /** The angle right now: held still, or slowly rocking in a demo. */
@@ -522,6 +561,7 @@ export class FakeBoot {
         sensor: this.sensor,
         tilt: round2(this.sensor === "ok" ? this.tiltAt(this.liveAngle()) : 0),
         calibrated: this.calibrated,
+        ...(this.proto >= ORIENTATION_PROTOCOL_VERSION ? { orientationCalibrated: this.calibrated && (this.heelDeg !== null || this.toeDeg !== null) } : {}),
         neutralDeg: round2(this.neutralDeg),
         calibration: this.calibration,
         saved: this.saved,
@@ -550,6 +590,11 @@ export class FakeBoot {
   }
 
   private sendMotion(): void {
+    const level = .25 + .2 * Math.sin(Date.now() / 700);
+    this.send(JSON.stringify({
+      t: "audio", ready: this.audioReady, level, rms: 8 + level * 40,
+      waveform: Array.from({ length: 24 }, (_, index) => Math.sin(index * .8 + Date.now() / 100) * level),
+    }));
     const angle = this.liveAngle();
     const accel = 9.81 + Math.abs(Math.sin(Date.now() / 300)) * 2;
     this.send(

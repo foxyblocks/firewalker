@@ -306,21 +306,6 @@ describe("the pattern tiles", () => {
 });
 
 describe("calibrating and naming", () => {
-  it("only calibrates boots that are online with a working sensor", async () => {
-    const { right, store } = await pair({}, { sensor: "unavailable" });
-    expect(store.calibrationSides()).toEqual(["left"]);
-
-    right.sensor = "ok";
-    store.client("right")?.requestStatus();
-    await settle();
-    expect(store.calibrationSides()).toEqual(["left", "right"]);
-
-    right.reachable = false;
-    right.dropLink();
-    await settle();
-    expect(store.calibrationSides()).toEqual(["left"]);
-  });
-
   it("names a boot from its own id, even if the scan had no name yet", async () => {
     const boot = new FakeBoot({ id: "3ED8" });
     const store = new BootsStore(new FakeTransport([boot]), memoryStorage());

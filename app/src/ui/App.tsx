@@ -1,26 +1,31 @@
 /**
- * The app's frame: which screen is showing, and the checks that apply to all of them.
- * Every screen reads from `BootsStore` and re-renders when it changes, so there's no
- * other app-wide state. Bluetooth being off or denied replaces the whole app where Bluetooth
+ * The app frame owns the persistent Remote/Boots pills and the current screen.
+ * Boot details stay under Boots; capture sheets can lock the global navigation.
+ * Every screen reads from `BootsStore` and re-renders when it changes. The only other
+ * app-wide state is the list of boots Find boots has seen, which outlives that screen so a
+ * boot's own screen can be opened from it and returned from. A boot's screen is keyed by its
+ * device id, never its side, because labeling it can change its side. Bluetooth being off or denied replaces the whole app where Bluetooth
  * is the only way to reach a boot, because nothing else can work until it's fixed. A desktop
  * browser with USB carries on without it (`BrowserTransport.radioState`).
  */
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import type { BootsStore } from "../core/boots";
-import type { RadioState } from "../transport/transport";
-import { CalibrateSheet } from "./CalibrateSheet";
-import { FindBoots } from "./FindBoots";
+import type { FoundBoot, RadioState } from "../transport/transport";
+import { BootDetail } from "./BootDetail";
+import { FindBoots, withFound } from "./FindBoots";
 import { Remote } from "./Remote";
-import { Status } from "./Status";
+import { AppNavigation } from "./components/AppNavigation";
 
-type Screen = "remote" | "status" | "find";
+type Screen = { kind: "remote" } | { kind: "find" } | { kind: "boot"; deviceId: string };
 
 export function App({ store }: { store: BootsStore }) {
   useSyncExternalStore(store.subscribe, store.getVersion);
-  const [screen, setScreen] = useState<Screen>(store.sides().length > 0 ? "remote" : "find");
-  const [calibrating, setCalibrating] = useState(false);
+  const [screen, setScreen] = useState<Screen>({ kind: store.sides().length > 0 ? "remote" : "find" });
+  const [detailBusy, setDetailBusy] = useState(false);
+  const [found, setFound] = useState<FoundBoot[]>([]);
   const [radio, setRadio] = useState<RadioState>("on");
+  const addFound = useCallback((boot: FoundBoot) => setFound((current) => withFound(current, boot)), []);
 
   const checkRadio = useCallback(() => {
     void store.transport.radioState().then(setRadio);
@@ -44,27 +49,69 @@ export function App({ store }: { store: BootsStore }) {
     return <RadioPrompt radio={radio} onRetry={checkRadio} onOpenSettings={() => void store.transport.openSettings()} />;
   }
 
+  const mainTab = screen.kind === "remote" ? "remote" : "boots";
+
   return (
     <div className="app">
       {store.transport.simulated && <div className="simulated">Simulated boots, not real ones</div>}
+      <AppNavigation
+        value={mainTab}
+        disabled={detailBusy}
+        onChange={(tab) => {
+          if (!detailBusy) setScreen({ kind: tab === "remote" ? "remote" : "find" });
+        }}
+      />
       {store.paused() && (
         <div className="banner banner-warn banner-action" role="status">
           <span>Connections paused while idle. Your boots keep running.</span>
           <button type="button" className="button" onClick={() => store.activity()}>Reconnect</button>
         </div>
       )}
-      {screen === "find" && (
-        <FindBoots store={store} onDone={() => setScreen("remote")} onCalibrate={() => setCalibrating(true)} />
-      )}
-      {screen === "status" && <Status store={store} onBack={() => setScreen("remote")} />}
-      {screen === "remote" && (
-        <Remote store={store} onStatus={() => setScreen("status")} onBoots={() => setScreen("find")} />
-      )}
-      {calibrating && screen === "find" && (
-        <CalibrateSheet store={store} onClose={() => setCalibrating(false)} />
-      )}
+      <section className="app-content" id={`main-panel-${mainTab}`} role="tabpanel" aria-labelledby={`main-tab-${mainTab}`}>
+        {screen.kind === "find" && (
+          <FindBoots
+            store={store}
+            found={found}
+            onFound={addFound}
+            onOpen={(boot) => setScreen({ kind: "boot", deviceId: boot.deviceId })}
+          />
+        )}
+        {screen.kind === "boot" && (
+          <BootScreen store={store} deviceId={screen.deviceId} found={found} onBack={() => setScreen({ kind: "find" })} onBusy={setDetailBusy} />
+        )}
+        {screen.kind === "remote" && <Remote store={store} onBoots={() => setScreen({ kind: "find" })} />}
+      </section>
     </div>
   );
+}
+
+/**
+ * Finds the boot a detail screen is for: a labeled one by its device id, or one Find boots
+ * has seen. A boot that's gone from both, such as one just forgotten, goes back to the list.
+ */
+function BootScreen({
+  store,
+  deviceId,
+  found,
+  onBack,
+  onBusy,
+}: {
+  store: BootsStore;
+  deviceId: string;
+  found: FoundBoot[];
+  onBack: () => void;
+  onBusy: (busy: boolean) => void;
+}) {
+  const side = store.sides().find((candidate) => store.known(candidate)?.deviceId === deviceId);
+  const known = side ? store.known(side) : undefined;
+  const boot: FoundBoot | undefined = known
+    ? { deviceId: known.deviceId, name: known.name }
+    : found.find((candidate) => candidate.deviceId === deviceId);
+  const missing = boot === undefined;
+  useEffect(() => {
+    if (missing) onBack();
+  }, [missing, onBack]);
+  return boot ? <BootDetail key={deviceId} store={store} boot={boot} onBack={onBack} onBusy={onBusy} /> : null;
 }
 
 function RadioPrompt({

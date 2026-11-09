@@ -16,6 +16,8 @@
 #include <string.h>
 
 #include "firewalker_calibration.h"
+#include "firewalker_angles.h"
+#include "firewalker_orientation.h"
 #include "firewalker_strip_map.h"
 
 namespace Firewalker {
@@ -61,14 +63,13 @@ struct Settings {
   bool capped;
   uint8_t audioNoiseFloor;
   uint8_t audioSensitivity;
-  TiltCalibration calibration;
+  OrientationCalibration orientation;
   StripLayout strip;
 };
 
 struct SettingsBounds {
   uint8_t minBrightness;
   uint8_t maxBrightness;      // the most a boot accepts with its soft cap off
-  float maxNeutralDeg;
   uint16_t maxStripPixels;
   uint8_t softCapBrightness;  // the most a boot accepts with its soft cap on
 };
@@ -83,7 +84,6 @@ inline Settings defaultSettings(uint8_t brightness, const StripLayout& strip) {
   settings.capped = true;
   settings.audioNoiseFloor = AUDIO_DEFAULT_NOISE_FLOOR;
   settings.audioSensitivity = AUDIO_DEFAULT_SENSITIVITY;
-  settings.calibration = TiltCalibration{};
   settings.strip = strip;
   return settings;
 }
@@ -109,6 +109,28 @@ inline bool setBrightnessCap(Settings& settings, bool capped, const SettingsBoun
 
 // The fixed-size record stored in flash. The magic number and version let a future
 // firmware recognize this layout, and the CRC catches a damaged or partial record.
+struct SettingsRecordV5 {
+  uint32_t magic;
+  uint16_t version;
+  uint8_t brightness;
+  uint8_t calibratedPoses;  // the SETTINGS_POSE_* bits
+  uint16_t stripCount;
+  uint16_t stripToe;
+  uint16_t stripHeel;
+  uint8_t flags;  // the SETTINGS_FLAG_* bits
+  uint8_t reserved;
+  float neutralDeg;
+  float heelDeg;
+  float toeDeg;
+  char pattern[PATTERN_NAME_SIZE];
+  char lastLitPattern[PATTERN_NAME_SIZE];
+  uint8_t audioNoiseFloor;  // version 5; these two bytes are reserved in version 4
+  uint8_t audioSensitivity;
+  uint32_t crc;
+};
+
+// Version 6 stores the mounting reference as 3D gravity vectors. Scalar pose
+// angles remain report metadata; motion uses only these vectors.
 struct SettingsRecord {
   uint32_t magic;
   uint16_t version;
@@ -126,6 +148,9 @@ struct SettingsRecord {
   char lastLitPattern[PATTERN_NAME_SIZE];
   uint8_t audioNoiseFloor;  // version 5; these two bytes are reserved in version 4
   uint8_t audioSensitivity;
+  Vec3 neutralGravity;
+  Vec3 heelGravity;
+  Vec3 toeGravity;
   uint32_t crc;
 };
 
@@ -170,10 +195,12 @@ struct SettingsRecordV2 {
 // tuning; the overall record size and the stored pose/layout offsets stay fixed.
 static_assert(sizeof(SettingsRecordV2) == 28, "SettingsRecordV2 must match saved records");
 static_assert(sizeof(SettingsRecordV3) == 32, "SettingsRecordV3 must match saved records");
-static_assert(sizeof(SettingsRecord) == 60, "A new record layout needs a new version");
+static_assert(sizeof(SettingsRecordV5) == 60, "V4/V5 records stay readable");
+static_assert(sizeof(SettingsRecord) == 96, "A new record layout needs a new version");
 
 constexpr uint32_t SETTINGS_MAGIC = 0x46574C4B;  // "FWLK"
-constexpr uint16_t SETTINGS_VERSION = 5;
+constexpr uint16_t SETTINGS_VERSION = 6;
+constexpr uint16_t SETTINGS_VERSION_V5 = 5;
 constexpr uint16_t SETTINGS_VERSION_V4 = 4;
 constexpr uint16_t SETTINGS_VERSION_V3 = 3;
 constexpr uint16_t SETTINGS_VERSION_V2 = 2;
@@ -224,10 +251,13 @@ inline SettingsRecord encodeSettings(const Settings& settings) {
   record.stripToe = settings.strip.toe;
   record.stripHeel = settings.strip.heel;
   record.flags = settings.capped ? 0 : SETTINGS_FLAG_UNCAPPED;
-  const TiltCalibration& calibration = settings.calibration;
+  const TiltCalibration calibration = orientationReport(settings.orientation);
   record.calibratedPoses = (calibration.neutralSet ? SETTINGS_POSE_NEUTRAL : 0) |
                            (calibration.heelSet ? SETTINGS_POSE_HEEL : 0) |
                            (calibration.toeSet ? SETTINGS_POSE_TOE : 0);
+  record.neutralGravity = settings.orientation.neutral;
+  record.heelGravity = settings.orientation.heel;
+  record.toeGravity = settings.orientation.toe;
   record.neutralDeg = calibration.neutralDeg;
   record.heelDeg = calibration.heelDeg;
   record.toeDeg = calibration.toeDeg;
@@ -239,31 +269,24 @@ inline SettingsRecord encodeSettings(const Settings& settings) {
 // the versions share field names but not offsets.
 template <typename Record>
 inline bool sharedFieldsValid(const Record& record, const SettingsBounds& bounds) {
-  const bool neutralValid = isfinite(record.neutralDeg) &&
-                            fabsf(record.neutralDeg) <= bounds.maxNeutralDeg;
-  // Fused angles come from atan2, so nothing valid lies beyond half a turn.
-  const bool heelValid = isfinite(record.heelDeg) && fabsf(record.heelDeg) <= 180.0f;
-  const bool toeValid = isfinite(record.toeDeg) && fabsf(record.toeDeg) <= 180.0f;
+  // Every mounting angle is usable as neutral. This checks the stored angle's
+  // representation, just like heel and toe, rather than how flat the board sits.
+  const bool neutralValid = validAngleDegrees(record.neutralDeg);
+  const bool heelValid = validAngleDegrees(record.heelDeg);
+  const bool toeValid = validAngleDegrees(record.toeDeg);
   const uint8_t poses = record.calibratedPoses;
   const bool posesKnown =
       (poses & ~(SETTINGS_POSE_NEUTRAL | SETTINGS_POSE_HEEL | SETTINGS_POSE_TOE)) == 0;
   const bool bothSides = (poses & SETTINGS_POSE_HEEL) && (poses & SETTINGS_POSE_TOE);
-  const bool sidesOpposite = !bothSides || signOf(record.heelDeg - record.neutralDeg) !=
-                                               signOf(record.toeDeg - record.neutralDeg);
+  const bool sidesOpposite = !bothSides || (degreesBetween(record.heelDeg, record.neutralDeg) < 0) !=
+                                               (degreesBetween(record.toeDeg, record.neutralDeg) < 0);
   return neutralValid && heelValid && toeValid && posesKnown && sidesOpposite &&
          record.brightness >= bounds.minBrightness && record.brightness <= bounds.maxBrightness;
 }
 
 template <typename Record>
 inline void readSharedFields(const Record& record, Settings& out) {
-  const uint8_t poses = record.calibratedPoses;
   out.brightness = record.brightness;
-  out.calibration.neutralSet = (poses & SETTINGS_POSE_NEUTRAL) != 0;
-  out.calibration.neutralDeg = record.neutralDeg;
-  out.calibration.heelSet = (poses & SETTINGS_POSE_HEEL) != 0;
-  out.calibration.heelDeg = record.heelDeg;
-  out.calibration.toeSet = (poses & SETTINGS_POSE_TOE) != 0;
-  out.calibration.toeDeg = record.toeDeg;
 }
 
 // Whether an old record's pattern numbers are ones those firmwares could save.
@@ -310,7 +333,7 @@ inline SettingsDecode decodeSettings(const SettingsRecord& record,
       record.crc != settingsCrc(&record, offsetof(SettingsRecord, crc))) {
     return SettingsDecode::Corrupt;
   }
-  if (record.version != SETTINGS_VERSION && record.version != SETTINGS_VERSION_V4) return SettingsDecode::Unsupported;
+  if (record.version != SETTINGS_VERSION) return SettingsDecode::Unsupported;
 
   const StripLayout strip = {record.stripCount, record.stripToe, record.stripHeel};
   if (!sharedFieldsValid(record, bounds) || !stripLayoutValid(strip, bounds.maxStripPixels)) {
@@ -320,14 +343,55 @@ inline SettingsDecode decodeSettings(const SettingsRecord& record,
   if (record.version == SETTINGS_VERSION && (record.audioNoiseFloor == 0 || record.audioSensitivity > 100)) {
     return SettingsDecode::Invalid;
   }
+  OrientationCalibration orientation;
+  orientation.neutralSet = record.calibratedPoses & SETTINGS_POSE_NEUTRAL;
+  orientation.heelSet = record.calibratedPoses & SETTINGS_POSE_HEEL;
+  orientation.toeSet = record.calibratedPoses & SETTINGS_POSE_TOE;
+  orientation.neutral = record.neutralGravity;
+  orientation.heel = record.heelGravity;
+  orientation.toe = record.toeGravity;
+  if (!validOrientationCalibration(orientation)) return SettingsDecode::Invalid;
   out.audioNoiseFloor = record.version == SETTINGS_VERSION ? record.audioNoiseFloor : AUDIO_DEFAULT_NOISE_FLOOR;
   out.audioSensitivity = record.version == SETTINGS_VERSION ? record.audioSensitivity : AUDIO_DEFAULT_SENSITIVITY;
+
+  readSharedFields(record, out);
+  out.orientation = orientation;
+  readSavedPatternName(record.pattern, true, out.pattern);
+  readSavedPatternName(record.lastLitPattern, false, out.lastLitPattern);
+  out.strip = strip;
+  out.capped = (record.flags & SETTINGS_FLAG_UNCAPPED) == 0;
+  holdUnderSoftCap(out, bounds);
+  return SettingsDecode::Ok;
+}
+
+// Loads the scalar-pose V4/V5 format, preserving non-pose settings.
+inline SettingsDecode decodeSettingsV5(const SettingsRecordV5& record,
+                                     const SettingsBounds& bounds, Settings& out) {
+  if (record.magic != SETTINGS_MAGIC ||
+      record.crc != settingsCrc(&record, offsetof(SettingsRecordV5, crc))) {
+    return SettingsDecode::Corrupt;
+  }
+  if (record.version != SETTINGS_VERSION_V5 && record.version != SETTINGS_VERSION_V4) return SettingsDecode::Unsupported;
+
+  const StripLayout strip = {record.stripCount, record.stripToe, record.stripHeel};
+  if (!sharedFieldsValid(record, bounds) || !stripLayoutValid(strip, bounds.maxStripPixels)) {
+    return SettingsDecode::Invalid;
+  }
+
+  if (record.version == SETTINGS_VERSION_V5 && (record.audioNoiseFloor == 0 || record.audioSensitivity > 100)) {
+    return SettingsDecode::Invalid;
+  }
+  out.audioNoiseFloor = record.version == SETTINGS_VERSION_V5 ? record.audioNoiseFloor : AUDIO_DEFAULT_NOISE_FLOOR;
+  out.audioSensitivity = record.version == SETTINGS_VERSION_V5 ? record.audioSensitivity : AUDIO_DEFAULT_SENSITIVITY;
   readSharedFields(record, out);
   readSavedPatternName(record.pattern, true, out.pattern);
   readSavedPatternName(record.lastLitPattern, false, out.lastLitPattern);
   out.strip = strip;
   out.capped = (record.flags & SETTINGS_FLAG_UNCAPPED) == 0;
   holdUnderSoftCap(out, bounds);
+  // Scalar angles cannot reconstruct an arbitrary 3D mount. Keep all other
+  // settings, and ask for fresh held poses after the firmware update.
+  out.orientation = OrientationCalibration{};
   return SettingsDecode::Ok;
 }
 
@@ -355,6 +419,7 @@ inline SettingsDecode decodeSettingsV3(const SettingsRecordV3& record,
   out.strip = strip;
   out.capped = true;
   holdUnderSoftCap(out, bounds);
+  out.orientation = OrientationCalibration{};
   return SettingsDecode::Ok;
 }
 
@@ -376,6 +441,7 @@ inline SettingsDecode decodeSettingsV2(const SettingsRecordV2& record,
   holdUnderSoftCap(out, bounds);
   out.audioNoiseFloor = AUDIO_DEFAULT_NOISE_FLOOR;
   out.audioSensitivity = AUDIO_DEFAULT_SENSITIVITY;
+  out.orientation = OrientationCalibration{};
   return SettingsDecode::Ok;
 }
 

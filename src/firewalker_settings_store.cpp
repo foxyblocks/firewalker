@@ -28,6 +28,10 @@ const char* loadSettings(const SettingsBounds& bounds, Settings& out) {
       return "read-failed";
     }
     decoded = decodeSettings(record, bounds, out);
+  } else if (objectSize == sizeof(SettingsRecordV5)) {
+    SettingsRecordV5 record;
+    if (nvm3_readData(nvm3_defaultHandle, SETTINGS_KEY, &record, sizeof(record)) != ECODE_NVM3_OK) return "read-failed";
+    decoded = decodeSettingsV5(record, bounds, out);
   } else if (objectSize == sizeof(SettingsRecordV3)) {
     SettingsRecordV3 record;
     if (nvm3_readData(nvm3_defaultHandle, SETTINGS_KEY, &record, sizeof(record)) != ECODE_NVM3_OK) {

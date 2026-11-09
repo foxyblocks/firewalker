@@ -1,66 +1,9 @@
-// Native (off-hardware) tests for the IMU module's pure math:
-// include/firewalker_fusion.h — complementary-filter tilt fusion and stomp
-// hysteresis. Run with `pio test -e native`.
-//
-// These pin down the behaviors the bench-calibration checklist
-// (docs/open-questions.md) tunes: filter alpha, stomp thresholds, refractory.
-
+// Native tests of acceleration-magnitude stomp detection. Orientation regression
+// tests live in test_orientation and remount the chip throughout 3D space.
 #include <unity.h>
-
 #include "firewalker_fusion.h"
-
 using namespace Firewalker;
-
-void setUp() {}
-void tearDown() {}
-
-// ── accelTiltAngle ────────────────────────────────────────────────────────
-
-static void test_accel_angle_level_is_zero() {
-  // Board level: gravity entirely on the vertical axis.
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.0f, accelTiltAngle(0.0f, 9.81f));
-}
-
-static void test_accel_angle_45_degrees() {
-  // Gravity split evenly between fore-aft and vertical → 45°.
-  float a = 9.81f * 0.7071f;
-  TEST_ASSERT_FLOAT_WITHIN(1e-4f, (float)M_PI / 4.0f, accelTiltAngle(a, a));
-}
-
-static void test_accel_angle_sign_follows_foreaft() {
-  TEST_ASSERT_TRUE(accelTiltAngle(3.0f, 9.0f) > 0.0f);   // toe-down → +
-  TEST_ASSERT_TRUE(accelTiltAngle(-3.0f, 9.0f) < 0.0f);  // heel-down → -
-}
-
-// ── fuseTiltStep ──────────────────────────────────────────────────────────
-
-static void test_fusion_converges_to_accel_angle_at_rest() {
-  // Still board (gyro 0), constant accel angle: the fused angle must converge
-  // to the accelerometer's absolute angle regardless of where it started.
-  float fused = 0.0f;
-  const float target = 0.5f;  // rad
-  for (int i = 0; i < 600; i++) {  // 600 steps @20 ms = 12 s
-    fused = fuseTiltStep(fused, target, 0.0f, 0.02f, 0.96f);
-  }
-  TEST_ASSERT_FLOAT_WITHIN(1e-3f, target, fused);
-}
-
-static void test_fusion_integrates_gyro_when_alpha_is_one() {
-  // alpha = 1 → pure gyro integration: angle accumulates rate * dt.
-  float fused = 0.0f;
-  for (int i = 0; i < 50; i++) {
-    fused = fuseTiltStep(fused, 0.0f, 0.4f, 0.02f, 1.0f);
-  }
-  TEST_ASSERT_FLOAT_WITHIN(1e-4f, 0.4f * 0.02f * 50.0f, fused);
-}
-
-static void test_fusion_single_step_blend() {
-  // One step from level with a disagreeing accel angle: exactly the
-  // complementary blend.
-  float fused = fuseTiltStep(0.2f, 0.6f, 0.0f, 0.02f, 0.96f);
-  TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.96f * 0.2f + 0.04f * 0.6f, fused);
-}
-
+void setUp() {} void tearDown() {}
 // ── stompStep hysteresis ──────────────────────────────────────────────────
 
 static const StompParams P = {18.0f, 12.0f, 250};  // fire / re-arm / refractory
@@ -114,12 +57,6 @@ static void test_stomp_below_threshold_never_fires() {
 
 int main(int, char**) {
   UNITY_BEGIN();
-  RUN_TEST(test_accel_angle_level_is_zero);
-  RUN_TEST(test_accel_angle_45_degrees);
-  RUN_TEST(test_accel_angle_sign_follows_foreaft);
-  RUN_TEST(test_fusion_converges_to_accel_angle_at_rest);
-  RUN_TEST(test_fusion_integrates_gyro_when_alpha_is_one);
-  RUN_TEST(test_fusion_single_step_blend);
   RUN_TEST(test_stomp_fires_once_on_spike);
   RUN_TEST(test_stomp_rearms_only_below_release);
   RUN_TEST(test_stomp_refractory_blocks_rapid_refire);

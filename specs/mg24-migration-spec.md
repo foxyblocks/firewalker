@@ -21,8 +21,8 @@ strip's measured behavior; do not assume an original Worldsemi WS2812B package,
 RGBW data, grouped pixels, or generic older-strip current figures.
 
 Keep both existing patterns and motion behavior, replace button controls with a
-BLE remote on iPhone, and use the same firmware on both identically
-oriented shoe mounts. Completion requires both mounted shoes to work. Support
+BLE remote on iPhone, and use the same firmware on both shoes with a separately learned
+mounting reference. Completion requires both mounted shoes to work. Support
 USB bench tests and external 5V; defer the final battery design.
 
 The planned Firewalker remote provides pattern/off selection, brightness, live motion/status
@@ -53,7 +53,7 @@ Several guides describe hardware and behavior that are no longer current.
   pattern selection. Build and verify the remote in FOX-269.
 - Support the `cli` bench tool alongside the remote for debugging and running
   patterns and diagnostics locally.
-- Use the same firmware on both shoes mounted in the same controller orientation.
+- Use the same firmware on both shoes, supporting arbitrary fixed controller orientations.
 - Preserve color test, all-off, and motion-calibration diagnostics.
 - Persist pattern, brightness, and neutral calibration independently on each
   controller, while keeping the firmware binary identical for both shoes.
@@ -93,7 +93,7 @@ without reconstructing the prototype's history.
 | Fire-trail pattern | Shared pattern; triggers on stomps | Preserve | Confirmed |
 | Tilt fusion and stomp detection/strength | Pure math plus board-specific sensor readers | Keep pure math; use onboard sensor reader | Confirmed |
 | Pattern selection and off | Prototype cycles with a D1 button | Replace the button with iPhone BLE controls | Confirmed. Capacitor app in FOX-269 |
-| Left/right shoe configurations | Root Feather builds; old per-foot mount calibration | Retire; use one firmware and a common mount orientation | Confirmed |
+| Left/right shoe configurations | Root Feather builds; old per-foot mount calibration | Retire; use one firmware and per-controller 3D pose calibration | Confirmed; ADR-0006 |
 | Per-foot pair flashing | `tools/flash-all.py` identifies Feather serial numbers | Retire the old per-foot selection tool; bulk flashing is not required | Confirmed direction |
 | Color test and all-off firmware | MG24 PlatformIO `strip_test` / `strip_off` | Preserve | Confirmed |
 | Motion calibration/debug build | Root Feather `imu_debug`; MG24 has calibration switches | Provide an MG24 diagnostic flow with iPhone feedback | Confirmed |
@@ -200,21 +200,23 @@ for live control of a running shoe.
 1. The user holds the boot still in the desired neutral position and taps
    **Calibrate neutral** for that connected controller.
 2. Firmware reports capture in progress, samples a short stable window, and records
-   the average resting fore-aft angle as the zero offset.
-3. On success, firmware applies and saves the offset, reports success, and exposes
-   a tilt reading near zero while the boot remains in the captured pose.
+   the resting gravity vector in chip coordinates.
+3. On success, firmware saves the reference and clears old side poses. Tilt stays at
+   zero until a heel or toe pose teaches the fore-aft direction.
 4. Reject captures with significant motion, no fresh sensor samples, or an
-   unavailable sensor. Report a useful reason and retain the previous valid offset.
+   unavailable sensor. Report a useful reason and retain the previous valid reference.
 
 The app plan added heel and toe poses, captured the same way while wearing the boot
 (`calibrate heel`, `calibrate toe`). Tilt then maps heel to -1, neutral to 0, and toe to +1,
-and direction comes from those poses. A skipped side uses a 30° default, so neutral alone
-still works. Poses don't change the strip's toe/heel positions or tune stomp thresholds.
+and direction comes from those poses. Once at least one side is captured, the other can
+use a 30° default. Poses don't change the strip's toe/heel positions or tune stomp thresholds.
 Do not automatically recalibrate at startup, since a boot may be tilted then.
 
-The implementation must document its sampling window, stillness bounds, timeout,
-and accepted neutral-angle tolerance. These numeric values require bench tuning,
-not additional product-scope decisions.
+Neutral accepts arbitrary 3D mounting. A heel or toe pose teaches the fore-aft axis
+across the sensor axes; at least one side is required before tilt becomes active. The implementation must document its sampling window, stillness
+bounds, and timeout. Those numeric values require bench tuning, not additional
+product-scope decisions. Captured gravity vectors and the learned mounting reference survive a restart.
+Retaking neutral resets the old side poses. See ADR-0006.
 
 ## Technical Design
 
@@ -232,10 +234,10 @@ Proposed approach:
    validation of the full app.
 5. Define app and diagnostic modes at the root. Final environment names depend on
    the retained features; avoid parallel prototype and production settings.
-6. Configure strip count, toe/heel positions, brightness, and common mount axes/signs.
+6. Configure strip count, toe/heel positions, brightness, and per-controller mounting references.
    The old 40-pixel toe/heel positions and GY-521 mount signs are not measurements
-   of the new strip or MG24 shoe mounts. Neutral offsets are captured and stored
-   per controller, using the same firmware and axis configuration on both shoes.
+   of the new strip or MG24 shoe mounts. Gravity vectors are captured and stored
+   per controller, using the same firmware on both shoes.
 7. Confirm the BLE interface and MG24 stack against the remote in FOX-269.
 8. Continue consolidating bench diagnostics and motion firmware while the
    remote is built. Verify the remote before the full migration sign-off.
@@ -253,15 +255,15 @@ Proposed approach:
   boundary with the shared motion math.
 - Separate connected strip length, diagnostic lit length, ring layout, and
   brightness; establish valid bounds for each.
-- Use common MG24 mount axes/signs for both consistently oriented controllers,
-  with a separately captured neutral offset stored on each device. Do not copy
+- Learn the fore-aft plane from each controller's captured 3D gravity vectors,
+  with its neutral, heel, and toe poses stored on that device. Do not copy
   the old board's foot-specific offsets or signs.
 - Persist a stable pattern identifier (flow, fire-trail, or off), brightness,
-  neutral offset/calibration validity, and settings format version. Do not store
+  pose vectors/calibration validity, and settings format version. Do not store
   only an array index whose meaning changes if the pattern list is reordered.
 - Validate saved values and fall back to documented conservative defaults if
   settings are absent, invalid, or unsupported. Recommended first-use defaults
-  are flow, brightness 96/255 (the soft cap, which starts on), and zero neutral offset with an uncalibrated status.
+  are flow, brightness 96/255 (the soft cap, which starts on), and no saved poses with an uncalibrated status.
 - Debug status exposes active pattern, brightness, connection/sensor readiness,
   tilt and stomp information, calibration state, and whether settings saved.
 - Document phone commands and status/debug responses in `docs/remote-protocol.md`.
@@ -281,8 +283,8 @@ Proposed approach:
   BTF strip and tested setup. A boot's 69 cm is rated about 5.5 W, or 1.1 A at full white.
   Validate USB bench and external-5V operation as distinct profiles. Final battery design
   is outside this migration.
-- **Same firmware, two shoes:** identical controller orientation is the intended
-  mounting constraint, not a reason to skip toe-down/heel-down checks on each shoe.
+- **Same firmware, two shoes:** each controller may have a different fixed mounting
+  orientation. Capture its poses and verify toe-down/heel-down behavior on each shoe.
 - **Independent settings:** the phone must identify which controller it is connected
   to. Calibrating or changing one boot must not implicitly change the other.
 - **Neutral capture and storage:** an unstable or failed capture must not replace
@@ -322,15 +324,15 @@ migration. Proposed checks during implementation:
 - On hardware, check colors, inactive-pixel blanking, all-off, reboot behavior,
   tilt direction, single stomp events, and iPhone pattern/off and brightness controls.
 - Test sensor-unavailable behavior and the chosen firmware-running/error indicator.
-- Test both mounted shoes with the same firmware and mounting orientation.
+- Test both mounted shoes with the same firmware and independently captured mounting references.
 - Run every retained `cli` tool command on hardware, including board selection with
   two controllers connected and `--log-motion` over USB.
 - Test the chosen remote's controls, debug output, button releases/repeats, disconnects, and reconnects
   while animations and motion processing are active.
-- Capture neutral on each mounted boot and verify near-zero tilt, correct
+- Capture neutral and at least one side on each mounted boot and verify near-zero neutral tilt, correct
   toe-down/heel-down response, and rejection of moving/unavailable-sensor captures.
 - Power-cycle each controller and verify restoration of pattern (including off),
-  brightness, and its own neutral offset. Test missing/invalid settings and failed
+  brightness, and its own pose vectors. Test missing/invalid settings and failed
   saves without overwriting a valid calibration.
 - Verify a slider burst does not cause a flash write for every received update.
 - Check USB bench and external-5V operation against their documented brightness

@@ -9,6 +9,7 @@
 #include <stddef.h>
 
 #include "firewalker_calibration.h"
+#include "firewalker_orientation.h"
 #include "firewalker_strip_map.h"
 
 // ── Serial ──────────────────────────────────────────────────────────────
@@ -144,28 +145,29 @@ constexpr unsigned long IMU_REFRACTORY_MS = 250;              // min gap between
 constexpr float         IMU_STOMP_FORCE_FULL = 40.0f;  // |accel| (m/s^2) → full-brightness trail
 
 // ── Orientation fusion ───────────────────────────────────────────────────
-// Axes and signs live in include/firewalker_mg24_mount.h, shared with the native
-// motion tests.
+// All three axes feed gravity tracking; held poses teach the boot mounting.
 constexpr float   IMU_FILTER_ALPHA  = 0.96f;  // complementary-filter weight on the gyro term
 
 // ── Tilt calibration ─────────────────────────────────────────────────────
-// How fused angles become tilt (include/firewalker_calibration.h). A side with no
+// How learned 3D orientation becomes tilt (include/firewalker_orientation.h). A side with no
 // captured heel or toe pose reaches full tilt at IMU_TILT_FULL_DEG from neutral. The dead
 // zone is in degrees, so a calibrated boot rests exactly flat even if it settles a little
-// off its captured neutral.
+// off its captured neutral. Neutral can sit at any mounting angle in the fore-aft plane.
 constexpr float   IMU_TILT_FULL_DEG     = 30.0f;
 constexpr float   IMU_TILT_DEADZONE_DEG = 3.0f;
-constexpr Firewalker::TiltLimits TILT_LIMITS = {
+constexpr float IMU_ACCEL_GRAVITY_TOLERANCE = 2.0f;  // ignore impact acceleration for orientation correction
+constexpr Firewalker::OrientationLimits ORIENTATION_LIMITS = {
     IMU_TILT_FULL_DEG,
     IMU_TILT_DEADZONE_DEG,
     10.0f,  // a heel or toe pose must sit at least this far from neutral
-    45.0f,  // a neutral pose must sit within this of sensor level
+    30.0f,  // maximum disagreement between heel/toe rotation planes
 };
 
 // How a capture finds a pose in a hold, which is judged as a whole at the end of the window
-// (PoseCapture in include/firewalker_calibration.h). These are generous because the poses
+// (OrientationCalibrator in include/firewalker_orientation.h). These are generous because the poses
 // are held on a foot, and a tired foot wobbles and sags. The spread limit only has to catch
-// a boot that never settled, such as one rocking from heel to toe.
+// a boot that never settled, such as one rocking from heel to toe. The central three
+// quarters of the samples must sit within the angular spread of their mean.
 constexpr unsigned long CALIBRATION_WINDOW_MS      = 2000;  // how long a capture collects the hold
 constexpr unsigned long CALIBRATION_NO_SAMPLE_MS   = 500;   // gap in sensor samples that fails a capture
 constexpr uint16_t      CALIBRATION_MIN_SAMPLES    = 50;    // half the samples expected at 50 Hz
@@ -190,8 +192,9 @@ constexpr unsigned long RECIPE_UPLOAD_IDLE_MS     = 5000;  // an upload this qui
 constexpr size_t        REMOTE_TX_BUFFER_BYTES    = 1024;  // reply bytes waiting to go out over BLE
 constexpr size_t        REMOTE_ATT_VALUE_MAX      = 244;   // largest notification payload the firmware will send
 constexpr uint8_t       REMOTE_NOTIFICATIONS_PER_LOOP = 4; // cap per main-loop pass, so sending can't stall it
-constexpr unsigned long IDENTIFY_MS       = 1500;  // how long `identify` blinks the strip
-constexpr unsigned long IDENTIFY_BLINK_MS = 125;   // half-period of that blink
+constexpr unsigned long IDENTIFY_MS       = 1500;  // how long both strip and onboard LED blink
+constexpr unsigned long IDENTIFY_BLINK_MS = 125;   // shared half-period, starting dark
+constexpr uint32_t      IDENTIFY_COLOR    = 0xFFFFFF;
 constexpr unsigned long APP_FRAME_MS            = 16;   // shortest time between strip frames
 constexpr unsigned long APP_OFF_REFRESH_MS      = 1000; // black refresh when off, in case the strip repowers
 

@@ -17,6 +17,7 @@
  *   &offline=1                     Right is out of range
  *   &access=lost                   the browser lost access to both, as a reload can do
  *   &capture=moving                Left moves during every capture
+ *   &capture=conflict              Right has old poses that block replacement after remounting
  *   &usb=1                         offer Add over USB beside Bluetooth, as a desktop browser does
  *   &usb=busy                      the same, but another program has the boot's USB port
  *   &cap=off                       Left's soft brightness cap is off
@@ -81,7 +82,10 @@ function fakeSetup(params: URLSearchParams): { transport: Transport; storage: Ke
     patterns: params.get("mismatch") ? patterns.slice(0, -1) : patterns,
     wander: true,
     sensor: params.get("sensor") === "missing" ? "unavailable" : "ok",
-    poseAngles: { neutral: -0.8, heel: -22.5, toe: 41 },
+    ...(params.get("capture") === "conflict" ? {
+      calibrated: true, neutralDeg: -40.6, heelDeg: -80, toeDeg: 84.1,
+      poseAngles: { neutral: -40.6, heel: -15.6, toe: -65.6 },
+    } : { poseAngles: { neutral: -0.8, heel: -22.5, toe: 41 } }),
   });
   if (params.get("offline")) right.reachable = false;
   if (params.get("access") === "lost") left.accessLost = right.accessLost = true;

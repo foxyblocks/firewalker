@@ -5,9 +5,10 @@
 #include "firewalker_strip.h"
 #include "firewalker_strip_map.h"
 
-// Shared hardware services: the main strip, the onboard status LED, and a solid
-// idle fill. Sensor logic lives in firewalker_imu; visual behaviors, including
-// their animation engines, live in patterns/.
+// Shared hardware services: the main strip, the onboard status LED, and temporary
+// visuals such as identify and idle fill. The final_app mode owns identify's timing;
+// renderIdentifyBlink drives both lights from that one phase. Sensor logic lives in
+// firewalker_imu; visual behaviors and their animation engines live in patterns/.
 
 namespace Firewalker {
 
@@ -29,12 +30,17 @@ void setupCore(const __FlashStringHelper* modeName);
 // imu_debug motion visual).
 void renderIdleBrightness(uint8_t brightness);
 
+// Show one identify frame on both the MG24 Sense's user LED and the entire strip.
+// Uses the strip's current brightness and changes no settings. While identify owns
+// the lights, the caller must skip updateStatusLight so it cannot overwrite this phase.
+void renderIdentifyBlink(bool lit);
+
 // What the onboard LED shows, so a shoe's state is visible with no phone or
 // serial monitor attached.
 enum class StatusLight : uint8_t {
   Running,        // solid
   SensorMissing,  // slow blink: patterns run, but motion input is unavailable
-  Calibrating,    // fast blink: a capture is collecting, or this is the boot being identified
+  Calibrating,    // fast blink: a capture is collecting
 };
 
 // Advances the blink pattern. Call often from the main loop.

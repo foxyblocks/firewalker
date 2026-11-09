@@ -262,7 +262,7 @@ func (m *Model) handleBuildsKey(key string) tea.Cmd {
 }
 
 // handleBootKey covers the Boot screen's few actions. None of them change a saved
-// setting: identify blinks the strip, and debug only turns motion lines on or off.
+// setting: identify blinks the onboard user LED and strip, and debug only turns motion lines on or off.
 func (m *Model) handleBootKey(key string) {
 	switch key {
 	case "r":

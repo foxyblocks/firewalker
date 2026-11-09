@@ -24,8 +24,15 @@ export const BOOT_NAME_PREFIX = "Firewalker-";
 export const PROTOCOL_VERSION = 2;
 /** Firmware that supports saved microphone tuning. Other controls work on older boots. */
 export const AUDIO_PROTOCOL_VERSION = 4;
+/** Debug lines with measured waveform samples. */
+export const AUDIO_WAVEFORM_PROTOCOL_VERSION = 6;
+/** Firmware that can remove saved heel/toe poses or reset all pose calibration. */
+export const CALIBRATION_CLEAR_PROTOCOL_VERSION = 5;
+/** Full 3D pose calibration; neutral needs a side pose to establish the boot axis. */
+export const ORIENTATION_PROTOCOL_VERSION = 6;
 
 export type Pose = "neutral" | "heel" | "toe";
+export type CalibrationClearTarget = "heel" | "toe" | "all";
 
 /** The strip layout values a boot saves: its pixel count, and the pixels at the toe and heel. */
 export type StripSetting = "leds" | "toe" | "heel";
@@ -41,6 +48,7 @@ export interface StatusReply {
   sensor: "ok" | "unavailable";
   tilt: number;
   calibrated: boolean;
+  orientationCalibrated?: boolean; // neutral plus a side pose has taught the mounting axis
   neutralDeg: number;
   calibration: string;
   saved: boolean;
@@ -99,7 +107,16 @@ export interface AudioConfigReply {
   saved: boolean;
 }
 
-export type BootReply = AudioConfigReply | StatusReply | AckReply | CalibrateReply | MotionReply | PatternsReply;
+/** A short, measured microphone block. Waveform samples are signed full-scale fractions. */
+export interface AudioSignalReply {
+  t: "audio";
+  ready: boolean;
+  level: number;
+  rms: number;
+  waveform: number[];
+}
+
+export type BootReply = AudioSignalReply | AudioConfigReply | StatusReply | AckReply | CalibrateReply | MotionReply | PatternsReply;
 
 // Every command fits the 20-byte Bluetooth write the firmware promises, as long as
 // pattern names stay at 12 characters or fewer.
@@ -114,6 +131,7 @@ export const commands = {
   cap: (on: boolean) => `cap ${on ? "on" : "off"}`,
   brightness: (level: number) => `brightness ${Math.round(level)}`,
   calibrate: (pose: Pose) => `calibrate ${pose}`,
+  clearCalibration: (target: CalibrationClearTarget) => `calibrate clear ${target}`,
   debug: (on: boolean) => `debug ${on ? "on" : "off"}`,
   identify: () => "identify",
   strip: (setting: StripSetting, value: number) => `strip ${setting} ${Math.round(value)}`,
@@ -139,6 +157,13 @@ export function parseLine(line: string): BootReply | null {
   if (!isObject(value)) return null;
 
   switch (value.t) {
+    case "audio":
+      return typeof value.ready === "boolean" && typeof value.level === "number" &&
+        Number.isFinite(value.level) && value.level >= 0 && value.level <= 1 &&
+        typeof value.rms === "number" && Number.isFinite(value.rms) && value.rms >= 0 &&
+        Array.isArray(value.waveform) && value.waveform.length <= 64 &&
+        value.waveform.every((sample: unknown) => typeof sample === "number" && Number.isFinite(sample) && sample >= -1 && sample <= 1)
+        ? (value as unknown as AudioSignalReply) : null;
     case "audio-config":
       return typeof value.ready === "boolean" && typeof value.calibrating === "boolean" &&
         typeof value.saved === "boolean" && typeof value.noiseFloor === "number" &&

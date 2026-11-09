@@ -81,6 +81,7 @@ void setup() {
       delay(10);
     }
   }
+  imuLoadSavedCalibration();
 #endif
 
 #if BENCH_TEST <= 1

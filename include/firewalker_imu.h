@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#include "firewalker_calibration.h"
+#include "firewalker_orientation.h"
 
 // Shared motion service used by the app and diagnostics. src/firewalker_imu.cpp
 // reads the MG24 Sense's onboard LSM6DS3TR-C and owns:
@@ -10,10 +10,9 @@
 //   * a fused fore-aft tilt (complementary filter of accel "down" + gyro rate),
 //   * this controller's calibrated poses, which set where tilt reads -1, 0, and +1,
 //   * stomp detection (acceleration-magnitude spike with hysteresis).
-// Thresholds and filter settings live in config.h. The mount's axes live in
-// firewalker_mg24_mount.h, shared with the native fast-rotation tests. The pure
-// filter/hysteresis math lives in firewalker_fusion.h (tested natively:
-// `pio test -e native`). See ADR-0003.
+// Thresholds and filter settings live in config.h. firewalker_orientation.h learns
+// the mount from held gravity vectors and tracks all three gyro axes. Stomp
+// hysteresis lives in firewalker_fusion.h. Both are tested natively; see ADR-0006.
 
 namespace Firewalker {
 
@@ -44,16 +43,20 @@ float imuTiltFwd();
 // boot. Reads 0 with no sensor. Drives the fire-trail pattern.
 float imuTiltDeg();
 
-// Fused fore-aft angle in degrees before any calibration, which is what a pose capture
-// averages.
-float imuRawAngleDeg();
+// Fused gravity in chip coordinates, for capturing full 3D poses. Zero until the
+// first usable sensor sample arrives; it never assumes a particular mounting axis.
+Vec3 imuGravity();
 
 // Angular rate magnitude of the latest sample, rad/s. Zero when no motion.
 float imuGyroMagnitude();
 
 // The poses tilt is measured against. Starts uncalibrated. The caller owns saving them;
 // see firewalker_settings.h.
-void imuSetCalibration(const TiltCalibration& calibration);
+void imuSetCalibration(const OrientationCalibration& calibration);
+
+// Bench/debug builds reuse the mounting reference captured by final_app. That app
+// supplies its in-memory settings directly; these tools only load and never save.
+void imuLoadSavedCalibration();
 
 // True exactly once per detected stomp (consume-on-read).
 bool imuTakeStomp();
