@@ -2,7 +2,9 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Fact, FactTable } from "./Facts";
 
 const meta = {
-  title: "Components/FactTable",
+  title: "Components/Data/FactTable",
+  tags: ["autodocs"],
+  parameters: { docs: { description: { component: "Label and value rows for what a boot reports. Tone colors a value that needs attention; quiet rows are settings made elsewhere; tight packs live numbers." } } },
   component: FactTable,
   args: { tight: false, children: null },
   decorators: [(Story) => <div className="story-column"><Story /></div>],

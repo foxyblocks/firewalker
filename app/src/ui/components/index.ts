@@ -8,6 +8,8 @@ export { Segmented, type SegmentOption, type SegmentedProps } from "./Segmented"
 export { Fact, FactTable, type Tone } from "./Facts";
 export { TextField, type TextFieldProps } from "./TextField";
 export { Notice } from "./Notice";
+export { Banner, type BannerProps } from "./Banner";
+export { PatternTile, type PatternTileProps, type PatternPreview } from "./PatternTile";
 export { PoseList, PoseRow, type PoseRowProps, type PoseStatus } from "./PoseRow";
 export { AudioWaveform, formatRms, type AudioSignalStatus, type AudioWaveformProps } from "./AudioWaveform";
 export { Toggle } from "./Toggle";

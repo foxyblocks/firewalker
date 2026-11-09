@@ -1,0 +1,22 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+import { ColorGroups } from "../docs/TokenDocs";
+
+<Meta title="Design system/Color" />
+
+# Color
+
+Five groups, all near black but the accents. Values below are read from the running page, so they're what the app uses now.
+
+<ColorGroups />
+
+## How to use it
+
+- **Ember is for one thing at a time:** the chosen tab, the running pattern, the switch that's on, the primary button. If two things on a screen are ember, one of them is probably wrong.
+- **Status colors mean status:** green is connected or saved, yellow is working or waiting on you, red has failed. Don't use them to decorate.
+- **Strip colors are the strip's:** blue, yellow, and purple only ever mean the ring, the toe, and the heel, because the real strip shows those same colors during setup.
+- **Quiet ink for hints, faint ink for scales.** Faint ink is too low in contrast for anything you need to read; see [Accessibility](?path=/docs/design-system-accessibility--docs).
+
+## For review
+
+- `--surface-high` is new to the app. The designer already uses it, and the Studio mockups use it for unlit pixels on raised cards.
+- The Studio mockups drew strip markers in `#4ea8ff`, `#ffd23f`, and `#c08cff`. The app and firmware use `--led-ring`, `--led-toe`, and `--led-heel`. The build should use the tokens.

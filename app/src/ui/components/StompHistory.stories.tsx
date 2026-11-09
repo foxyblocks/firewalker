@@ -8,7 +8,9 @@ const samples = Array.from({ length: 76 }, (_, index) => ({
 }));
 
 const meta = {
-  title: "Components/StompHistory",
+  title: "Components/Data/StompHistory",
+  tags: ["autodocs"],
+  parameters: { docs: { description: { component: "Fifteen seconds of acceleration peaks, with each stomp marked, so you can see why a step did or didn’t count." } } },
   component: StompHistory,
   args: { samples, live: true },
   decorators: [(Story) => <div className="story-column panel"><Story /></div>],

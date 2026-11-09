@@ -4,7 +4,9 @@ import { fn } from "storybook/test";
 import { AppNavigation, type MainTab } from "./AppNavigation";
 
 const meta = {
-  title: "Components/AppNavigation",
+  title: "Components/Navigation/AppNavigation",
+  tags: ["autodocs"],
+  parameters: { docs: { description: { component: "The two pills at the top of every screen, Remote and Boots. A capture in progress disables them so a result can’t land on a screen you’ve left." } } },
   component: AppNavigation,
   args: { value: "remote", onChange: fn(), disabled: false },
   argTypes: { value: { control: "inline-radio", options: ["remote", "boots"] } },

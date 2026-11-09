@@ -1,0 +1,49 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+
+<Meta title="Design system/Studio readiness" />
+
+# Studio readiness
+
+The desktop Studio puts the remote, the designer, and boot setup in one app ([canvas](https://claude.ai/artifact/JZRWbKw8RZysCAzrUcyR2n)). This page lists what it can build from today's components, what's new, and where the mockups need to come back to these tokens.
+
+## Built from what's here
+
+| Studio piece | Components | What changes |
+| --- | --- | --- |
+| Pattern grid | PatternTile | Add Send and Edit actions to the tile. |
+| Lights tab | Dock pattern: PixelSlider, Toggle | Lives in a wide bottom bar beside Sound. |
+| Sound tab | PixelSlider, Button, Notice | The same pieces as the phone's microphone panel. |
+| Tilt meters | TiltStrip | None. |
+| Poses | PoseList, PoseRow | Laid out inline instead of in a sheet. |
+| Strip setup | PixelSlider point markers, Toggle | Laid out inline, beside a drawing of the layout. |
+| Configuration and Diagnostics | Segmented, joined and large | One switch for both boot columns. |
+| Stomp, volume, waveform graphs | StompHistory, AudioLevelHistory, AudioWaveform | Stomp gains the 18 m/s² trigger line and a scale to 40. |
+| Last report, readouts | FactTable, Fact | Two columns on a wide card. |
+| Banners | Banner | None. |
+| Boot status in the header | LinkDot | Inside a new boot pill. |
+
+## New components the Studio needs
+
+1. **Workspace nav**: three tabs, Remote, Design, and Boots, with a warning dot. It replaces AppNavigation's two pills on desktop.
+2. **Boot pill**: side, id, link, and LinkDot, in the header.
+3. **Boot card with mirror**: the boot's real outline with its LEDs lit by what it reports, and tap to pick. The outline and LED placement already exist in `designer/src/sim/bootGeometry.ts` and `designer/src/engine/strip.ts`.
+4. **Strip layout drawing**: the same outline with blue, yellow, and purple markers.
+5. **Vertical tabs**: Segmented stacked vertically, for Lights and Sound.
+6. **Size meter**: a pixel row against the 254-byte recipe limit.
+7. **Check row**: a test's name, result, and Run button.
+8. **Console**: timed log lines from a USB boot.
+9. **Pause bar**: Pause, a status line, and the Stay live switch.
+
+## Where the mockups need to match the tokens
+
+| In the mockups | In the app | Fix |
+| --- | --- | --- |
+| Strip markers `#4ea8ff`, `#ffd23f`, `#c08cff` | `--led-ring`, `--led-toe`, `--led-heel` | Use the tokens, which match the firmware. |
+| Big Shoulders from Google Fonts | Big Shoulders Display, bundled | Use the bundled face. It works offline. |
+| Chosen fill `#2a1910` | `--ember-soft` over `--surface` | Use the token. |
+| Unlit pixels `#26221e`, `#2a2622`, `#1f1c19` | `--line`, or `--surface-high` on raised cards | Pick one per ground. |
+| Raw hex for every color | Tokens | Import `tokens.css`. |
+
+## The designer
+
+The pattern designer keeps its own copy of these tokens in `designer/src/ui/styles.css`. Two differ: its `--radius` is 10px, not 14px, and it has `--surface-high`, which this system now has too. When the designer moves into the Studio, it should import `app/src/ui/tokens.css` and drop its copy.

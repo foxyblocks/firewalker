@@ -21,7 +21,9 @@ function Live(props: Props) {
 }
 
 const meta = {
-  title: "Components/Segmented",
+  title: "Components/Inputs/Segmented",
+  tags: ["autodocs"],
+  parameters: { docs: { description: { component: "A row of mutually exclusive choices: tabs that switch a panel, or a choice that sets a value. Large is for the top of a screen, joined for sections inside one boot." } } },
   component: Live,
   args: {
     label: "Boot sections",

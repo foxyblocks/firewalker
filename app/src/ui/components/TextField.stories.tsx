@@ -18,7 +18,9 @@ function Live(props: TextFieldProps) {
 }
 
 const meta = {
-  title: "Components/TextField",
+  title: "Components/Inputs/TextField",
+  tags: ["autodocs"],
+  parameters: { docs: { description: { component: "One line of text with a label above, an optional hint below, and an error that replaces the hint." } } },
   component: Live,
   args: {
     label: "Boot name",

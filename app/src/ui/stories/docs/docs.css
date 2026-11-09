@@ -1,0 +1,199 @@
+/* The blocks on Storybook's Design system pages. Storybook only: nothing here ships in the app. */
+
+.ds {
+  display: grid;
+  gap: var(--space-4);
+  margin: var(--space-4) 0 var(--space-6);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: var(--text-small);
+  line-height: 1.45;
+}
+
+.ds-panel {
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--night);
+}
+
+.ds-group-title {
+  margin: 0 0 2px;
+  font-family: var(--display);
+  font-size: var(--text-card);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.ds-lead {
+  margin: 0 0 var(--space-3);
+  color: var(--ink-quiet);
+}
+
+.ds-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+
+.ds-swatch {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.ds-chip {
+  height: 64px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.ds-name {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.ds-value,
+.ds-meta {
+  color: var(--ink-quiet);
+  font-size: var(--text-hint);
+}
+
+.ds-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ds-table th {
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-quiet);
+  font-size: var(--text-label);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.ds-table td {
+  padding: 10px 10px 10px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.ds-table td:first-child {
+  white-space: nowrap;
+}
+
+.ds-sample-cell {
+  width: 140px;
+}
+
+.ds-pass {
+  color: var(--good);
+}
+
+.ds-fail {
+  color: var(--bad);
+}
+
+.ds-near {
+  color: var(--wait);
+}
+
+.ds-lit {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.ds-box {
+  width: 72px;
+  height: 44px;
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+}
+
+.ds-bar {
+  height: 12px;
+  border-radius: 3px;
+  background: var(--ember);
+}
+
+.ds-strip {
+  height: 4px;
+  border-radius: 2px;
+}
+
+.ds-type-sample {
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-type-display {
+  font-family: var(--display);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ds-type-mono {
+  font-family: var(--mono);
+}
+
+.ds-icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--space-3);
+}
+
+.ds-icon {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: center;
+  padding: var(--space-4) var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.ds-do-dont {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-3);
+}
+
+.ds-do,
+.ds-dont {
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--good);
+  border-radius: var(--radius-xs);
+  background: var(--good-soft);
+}
+
+.ds-dont {
+  border-left-color: var(--bad);
+  background: var(--bad-soft);
+}
+
+.ds-do strong,
+.ds-dont strong {
+  display: block;
+  margin-bottom: 4px;
+  font-family: var(--display);
+  font-size: var(--text-section);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ds-specimen {
+  display: grid;
+  gap: var(--space-3);
+  width: min(100%, 398px);
+}

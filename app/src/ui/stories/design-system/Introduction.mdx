@@ -1,0 +1,32 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+
+<Meta title="Design system/Introduction" />
+
+# Firewalker design system
+
+This is how the boot remote looks, reads, and behaves, written down so the phone app, the pattern designer, and the desktop Studio stay one product. Everything here runs on the app's own code: the tokens come from `src/ui/tokens.css`, and every component is the one the screens use.
+
+## Five principles
+
+1. **Built for the dark.** The boots are worn at night, so every surface is near black and the only bright things are what matter. Light means something.
+2. **One accent.** Ember means chosen, on, or primary. It's never decoration, so when something is ember, it's the thing to look at.
+3. **Drawn like the strip.** Brightness, tilt, and strip positions are rows of pixels, because that's what they control. See [LED language](?path=/docs/design-system-led-language--docs).
+4. **The boot is the truth.** Screens show what the boots report, plus any change still on its way. Nothing pretends a change landed before the boot confirms it.
+5. **Plain words.** Name the boot, say what happened, and say what to do next. See [Writing](?path=/docs/design-system-writing--docs).
+
+## What's here
+
+| Section | What it holds |
+| --- | --- |
+| Design system | Foundations: color, type, space and shape, glow and motion, the LED language, icons, writing, accessibility, and what the Studio still needs. |
+| Components | The building blocks, grouped by job: Actions, Inputs, Status, Data, Navigation, Overlays. Each has a Docs page with its props and every state. |
+| Patterns | Components put together the way screens use them: the dock, section headers, setup actions, debug output. |
+| Sheets and Screens | Real screens on phone sizes, run against pretend boots that speak the real protocol. |
+
+## Working with it
+
+- Run it with `bun run storybook` in `app/`, or build a static copy with `bun run build-storybook`.
+- Use a token for every color, type size, radius, glow, and duration. `tokens.test.ts` fails if `styles.css` uses a raw color, or if a token isn't documented.
+- A new component gets a story file beside it with every state it can be in, and `tags: ["autodocs"]` so it gets a Docs page.
+- Components take plain props and know nothing about boots. Words that depend on the app, such as a boot's link state, live in `src/ui/parts.tsx`.
+- Check a screen on the small phone (375 × 667) first. It has the tightest dock.

@@ -3,7 +3,9 @@ import { fn } from "storybook/test";
 import { Button, ClearIcon, IconButton } from "./Button";
 
 const meta = {
-  title: "Components/Button",
+  title: "Components/Actions/Button",
+  tags: ["autodocs"],
+  parameters: { docs: { description: { component: "A labeled action. Default sits on a card, primary is the one step a screen is for, on marks a chosen choice, and danger is only for Forget. Busy keeps a running action readable instead of fading it." } } },
   component: Button,
   args: { children: "Calibrate quiet", onClick: fn(), variant: "default", wide: false, busy: false, disabled: false },
   argTypes: {
