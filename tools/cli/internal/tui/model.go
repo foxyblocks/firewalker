@@ -171,7 +171,7 @@ type Model struct {
 	job     *runningJob
 	jobGen  int
 	stage   flash.Stage
-	stageOf string // what the stage is about, such as "bench flow on 3ED8"
+	stageOf string // what the stage is about, such as "bench rainbow-pool on 3ED8"
 	failure string // the reason the last flash failed, pinned above the log
 	spin    spinner.Model
 
@@ -325,7 +325,7 @@ func (m *Model) selectBoard(serial string) tea.Cmd {
 }
 
 // layoutForForm picks the strip layout for the selected boot: the same choice, in the
-// same order, as `./cli install flow` makes.
+// same order, as `./cli install rainbow-pool` makes.
 func (m *Model) layoutForForm() (bench.StripLayout, string) {
 	choices := bench.LayoutChoices{Config: m.deps.Config}
 	name := ""

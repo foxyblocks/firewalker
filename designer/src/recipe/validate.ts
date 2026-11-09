@@ -20,10 +20,10 @@ export type Validation = { ok: true; recipe: Recipe } | { ok: false; errors: str
 
 const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
 const COLOR_PATTERN = /^#[0-9a-f]{6}$/;
-// Names a recipe can't take. `off` is how the remote turns the strip off, and `flow` and
-// `fire-trail` are the firmware's own patterns, which a boot lists alongside its recipes by
-// name. Keep this in step with SELECTABLE_PATTERNS in include/firewalker_remote_protocol.h.
-export const RESERVED_NAMES: ReadonlySet<string> = new Set(["off", "flow", "fire-trail"]);
+// `off` is a remote command value, not a pattern. Every other legal name can be a recipe,
+// including the retired names `flow` and `fire-trail`. generateTables.ts carries this rule into
+// the firmware decoder, so uploading a tweaked built-in follows the same rules as saving it.
+export const RESERVED_NAMES: ReadonlySet<string> = new Set(["off"]);
 
 // Returns a reason the name can't be used, or null if it's fine.
 export function nameProblem(name: string): string | null {

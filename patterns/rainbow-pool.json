@@ -2,7 +2,7 @@
   "format": "firewalker-recipe",
   "version": 1,
   "name": "rainbow-pool",
-  "description": "A recipe take on the built-in flow: the spectrum cycles, tilt pools it toward the low end, a flat stomp flashes white, a tilted stomp sends trails.",
+  "description": "The spectrum cycles, tilt pools it toward the low end, a flat stomp flashes white, a tilted stomp sends trails.",
   "layers": [
     {
       "type": "fill",

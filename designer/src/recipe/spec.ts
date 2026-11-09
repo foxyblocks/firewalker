@@ -198,7 +198,7 @@ export const LAYER_SPECS: Record<LayerType, LayerSpec> = {
           { value: "down-end", label: "Down end" },
         ],
         default: "down-point",
-        help: "Down point launches fronts both ways from where the tilt points along the foot, like flow. Down end starts at the toe or heel, whichever is down, and runs both sides to the other end, like fire-trail.",
+        help: "Down point launches fronts both ways from where the tilt points along the foot, like rainbow-pool. Down end starts at the toe or heel, whichever is down, and runs both sides to the other end, like fire-stomp.",
       },
       {
         kind: "number",
@@ -210,7 +210,7 @@ export const LAYER_SPECS: Record<LayerType, LayerSpec> = {
         integer: false,
         default: 0.3,
         shownWhen: { key: "from", value: "down-end" },
-        help: "A stomp within this much tilt of flat starts from the middle of each side and runs out to both ends. fire-trail counts 8° from level as flat.",
+        help: "A stomp within this much tilt of flat starts from the middle of each side and runs out to both ends. fire-stomp uses 0.3 of calibrated tilt as its flat zone.",
       },
       { kind: "palette", key: "palette", label: "Palette, head to tail", default: ["#ffffff", "#ffc800", "#ff3c00"] },
       { kind: "knob", key: "speed", label: "Speed", min: 1, max: 400, step: 1, unit: "px/s", default: 45, help: "Read once, when the stomp lands." },

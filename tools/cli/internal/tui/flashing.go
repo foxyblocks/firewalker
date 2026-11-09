@@ -18,7 +18,7 @@ import (
 // the same thing by hand, which the log shows so that anything here can be scripted.
 type flashItem struct {
 	Job     flash.Job
-	Label   string // what goes on the board, as the tag will show it: "bench flow"
+	Label   string // what goes on the board, as the tag will show it: "bench rainbow-pool"
 	Target  string // the boot's name, or "" for a build with no upload
 	Command string
 }

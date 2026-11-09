@@ -34,7 +34,7 @@ export class FakeBoot {
   private unfinished = "";
   // Each uploaded recipe's bytes, by name.
   readonly stored = new Map<string, Uint8Array>();
-  pattern = "flow";
+  pattern = "rainbow-pool";
   // Skips storing the next `recipe data` line while still reporting success, as if a line went
   // missing, so the following one comes in at the wrong offset.
   loseNextData = false;
@@ -128,7 +128,7 @@ export class FakeBoot {
         if (!decoded.ok) return [recipeAck(false, decoded.error.includes("checksum") ? "bad-checksum" : "bad-recipe")];
         if (decoded.recipe.name !== name) return [recipeAck(false, "name-mismatch")];
         this.stored.set(name, data);
-        return [recipeAck(true), reply({ t: "patterns", list: ["flow", "fire-trail", ...this.stored.keys()] })];
+        return [recipeAck(true), reply({ t: "patterns", list: [...new Set(["comet", "fire-stomp", "rainbow-pool", ...this.stored.keys()])].sort() })];
       }
       case "cancel":
         this.upload = null;

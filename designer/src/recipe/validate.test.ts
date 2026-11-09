@@ -75,9 +75,12 @@ describe("nameProblem", () => {
     expect(nameProblem("9lives")).not.toBeNull();
   });
 
-  it("reserves off and the firmware's own patterns", () => {
-    for (const name of ["off", "flow", "fire-trail"]) expect(nameProblem(name)).toBe(`"${name}" is reserved.`);
-    expect(validateRecipe(recipe({ name: "flow" }))).toMatchObject({ ok: false, errors: ['"flow" is reserved.'] });
+  it("reserves off, while flow and fire-trail are ordinary recipe names", () => {
+    expect(nameProblem("off")).toBe('"off" is reserved.');
+    for (const name of ["flow", "fire-trail"]) {
+      expect(nameProblem(name)).toBeNull();
+      expect(validateRecipe(recipe({ name }))).toMatchObject({ ok: true });
+    }
   });
 });
 

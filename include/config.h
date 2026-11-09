@@ -200,72 +200,8 @@ constexpr unsigned long APP_OFF_REFRESH_MS      = 1000; // black refresh when of
 
 // ── Idle fill (imu_debug visual) ─────────────────────────────────────────
 // imu_debug fills the strip a solid color scaled by motion (the app uses the
-// flow / fire-trail patterns instead).
+// recipe patterns instead).
 constexpr uint8_t IDLE_MIN_BRIGHTNESS = 3;   // floor so a still IMU still glows faintly
 constexpr uint8_t IDLE_FILL_R = 255;         // warm yellow
 constexpr uint8_t IDLE_FILL_G = 200;
 constexpr uint8_t IDLE_FILL_B = 0;
-
-// ── Flow pattern (fill gauge + spectrum cycle + stomp trails) ────────────
-// The whole strip shares one hue that slowly rotates through the spectrum; tilt
-// drives a fill gauge. At level every pixel is lit at FLOW_BASELINE. As the foot
-// tilts, pixels extinguish one-by-one from the up-end (each fades across its own
-// ~1-pixel span of tilt) so the lit band shrinks toward the down-most end, while
-// the surviving pixels brighten toward full. At full tilt (IMU_TILT_FULL_DEG,
-// 30°) a single pixel remains lit at the down-most end. A tilted stomp launches
-// directional trails from the down-point; a flat stomp instead flashes the strip
-// white (FLOW_FLASH_MS). See ADR-0002/0003 and CONTEXT.md (Flow).
-constexpr float   FLOW_BASELINE = 0.80f;  // flat per-pixel brightness (0..1); surviving end → 100% at full tilt
-
-// A flat stomp has no tilt direction to pour toward, so instead of a trail it
-// flashes the whole strip white and fades back to the flow color over this span.
-constexpr unsigned long FLOW_FLASH_MS = 800;
-
-constexpr unsigned long FLOW_HUE_CYCLE_MS = 15000;  // ms for one full spectrum rotation
-
-// Stomp trails: each stomp launches up to 4 fronts from the tilt-derived "down"
-// point (toe-down→toe, heel-down→heels, flat→mid-foot ~25%/75%), each diverging
-// along its side to the heel and toe ends. Band gradient: white head → current
-// hue (full) → the previous hue in the rotation.
-constexpr float    FLOW_TRAIL_SPEED_PXPS = 45.0f;  // front travel speed (pixels/sec)
-constexpr uint8_t  FLOW_TRAIL_LEN        = 12;     // band length (pixels)
-constexpr uint16_t FLOW_TRAIL_PREV_HUE   = 7300;   // tail hue step back (~40° on the 0..65535 wheel)
-constexpr uint8_t  FLOW_MAX_FRONTS       = 16;     // 4 per stomp; supports ~4 concurrent stomps
-constexpr float    FLOW_TRAIL_BRIGHT_MIN = 0.30f;  // trail brightness at a threshold-force stomp (→1.0 at IMU_STOMP_FORCE_FULL)
-
-// Strip geometry (ring, toe/heel indices) is a saved setting, not a flow knob. See the
-// Strip section above.
-
-// ── Fire-trail pattern: gradient palette ─────────────────────────────────
-// Palette stops from the hot head to the cool tail, as plain R/G/B. The
-// fire-trail pattern interpolates these across the band length and caches the
-// result. Edit / add / remove stops to retune the flame — FIRE_STOPS updates
-// automatically. Note the white head draws more current than a single-color
-// fill; worst case is still the whole strip lit at once. See docs/power-budget.md.
-constexpr uint8_t FIRE[][3] = {
-  {255, 200, 0},  // head  — white-hot
-  {255, 150,   0},  // yellow
-  {255, 60,   0},  // orange
-  {255,   20,   0},  // tail  — red
-};
-constexpr uint8_t FIRE_STOPS = sizeof(FIRE) / sizeof(FIRE[0]);
-
-// ── Fire-trail pattern: band animation ───────────────────────────────────
-// Each stomp spawns a trail from whichever part of the boot is down, running along both
-// sides of the foot to the opposite part: toe to heel, heel to toe, or outward from the
-// middle of each side. Its bands are FIRE_TRAIL_LEN lit pixels. They "wipe in" as they emerge
-// from the origin and "wipe out" at the far end, with no hold in between. Stomps stack:
-// multiple trails run at once, up to FIRE_TRAIL_MAX (further stomps are ignored until a slot
-// frees up).
-constexpr uint8_t FIRE_TRAIL_LEN = 30;  // band length in pixels (the wipe-in/out width)
-constexpr uint8_t FIRE_TRAIL_MAX = 12;  // max simultaneous trails on the strip
-
-// How fast bands travel, in pixels per second. Example: at 200, a band crosses one side of a
-// 107-pixel ring (about 54 pixels) in about a quarter of a second.
-constexpr float FIRE_TRAIL_SPEED_PXPS = 200.0f;
-static_assert(FIRE_TRAIL_SPEED_PXPS > 0.0f, "A trail that never moves would never finish");
-
-// What counts as flat: a stomp within this many degrees of the neutral pose, either way,
-// starts from the middle. Further than that starts from the toe or heel. Each stomp logs its
-// angle over USB, for tuning on a real foot (see open-questions.md).
-constexpr float FIRE_TRAIL_FLAT_DEG = 8.0f;

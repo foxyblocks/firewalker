@@ -297,7 +297,7 @@ func TestALoneBootIsPickedAndAskedForStatus(t *testing.T) {
 		t.Fatalf("sent %v", sent)
 	}
 	// The bench form starts from what the boot has saved, toe after heel and all.
-	h.wantView("94", "saved on 3ED8", "./cli install flow --brightness 16 --serial "+right.Serial)
+	h.wantView("94", "saved on 3ED8", "./cli install rainbow-pool --brightness 16 --serial "+right.Serial)
 	if h.m.form.values[fieldToe] != "86" || h.m.form.values[fieldHeel] != "48" {
 		t.Fatalf("form = %+v", h.m.form.values)
 	}
@@ -327,13 +327,13 @@ func TestPickerListsEachBootAndSkipsOnesNotOnUSB(t *testing.T) {
 	if err := h.m.deps.Cache.Update(gone, func(r *boards.Record) { r.ID = "3ED1" }); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.m.deps.Cache.Update(left.Serial, func(r *boards.Record) { r.LastFlashed = "bench flow" }); err != nil {
+	if err := h.m.deps.Cache.Update(left.Serial, func(r *boards.Record) { r.LastFlashed = "bench rainbow-pool" }); err != nil {
 		t.Fatal(err)
 	}
 	h.plugIn(right, left)
 
 	h.key("p")
-	h.wantView("Pick a boot", "3ED8", right.Serial, "unknown", "3EB5", left.Serial, "bench flow", "3ED1", gone, "not on USB", "enter pick")
+	h.wantView("Pick a boot", "3ED8", right.Serial, "unknown", "3EB5", left.Serial, "bench rainbow-pool", "3ED1", gone, "not on USB", "enter pick")
 
 	// The rows sort by serial, with the one that's gone first, and the cursor skips it.
 	h.key("enter")
@@ -720,7 +720,7 @@ func TestBothBootsNeedsTwoBoots(t *testing.T) {
 func TestBenchFlashUsesTheBootsLayoutAndStaysAttached(t *testing.T) {
 	h := appRunning(t)
 	h.key("enter")
-	h.wantView("Flash bench flow to 3ED8? It replaces the app. Saved settings stay.", "enter flash · esc cancel")
+	h.wantView("Flash bench rainbow-pool to 3ED8? It replaces the app. Saved settings stay.", "enter flash · esc cancel")
 	h.key("enter")
 	job := h.nextJob()
 	if job.job.Env != "bench" || job.job.Serial != right.Serial {
@@ -739,7 +739,7 @@ func TestBenchFlashUsesTheBootsLayoutAndStaysAttached(t *testing.T) {
 	h.until("a new connection", func() bool { return h.m.conn != nil && h.m.stage == flash.StageRunning })
 	h.current(right.Serial).Push("[firewalker] stomp -> trail (2 active)")
 	h.until("the firmware's log", func() bool { return strings.Contains(h.view(), "stomp -> trail") })
-	h.wantView("● 3ED8 · bench flow · 94 LEDs", "✓ running bench flow on 3ED8")
+	h.wantView("● 3ED8 · bench rainbow-pool · 94 LEDs", "✓ running bench rainbow-pool on 3ED8")
 	// The boot can't report a layout now, so the form says it's going from memory.
 	if h.m.form.values[fieldLEDs] != "94" || h.m.form.layoutNote() != "last known for 3ED8" {
 		t.Fatalf("form = %+v note = %q", h.m.form.values, h.m.form.layoutNote())
@@ -760,7 +760,7 @@ func TestABuildOnlyRunNeedsNoBootAndNoConfirm(t *testing.T) {
 	}
 	job.finish <- nil
 	h.until("the build to finish", func() bool { return !h.m.flashing() })
-	h.wantView("built bench flow")
+	h.wantView("built bench rainbow-pool")
 }
 
 func TestAnImpossibleFormCantBeFlashed(t *testing.T) {
@@ -799,7 +799,7 @@ func TestTypingInAFieldDoesntTriggerShortcuts(t *testing.T) {
 	if h.m.confirm != nil {
 		t.Fatal("enter in a field should keep the value, not flash")
 	}
-	h.wantView("./cli install flow --stomp-every 2s --brightness 16")
+	h.wantView("./cli install rainbow-pool --stomp-every 2s --brightness 16")
 }
 
 func TestBootScreenShowsTheStatusAndTheKeysSendCommands(t *testing.T) {
@@ -818,14 +818,14 @@ func TestBootScreenShowsTheStatusAndTheKeysSendCommands(t *testing.T) {
 func TestBootScreenOnABenchBuildOffersTheApp(t *testing.T) {
 	h := newHarness(t)
 	if err := h.m.deps.Cache.Update(right.Serial, func(r *boards.Record) {
-		r.ID, r.LastFlashed = "3ED8", "bench flow"
+		r.ID, r.LastFlashed = "3ED8", "bench rainbow-pool"
 		r.Layout = &boards.SavedLayout{LEDs: 94, Toe: 86, Heel: 48}
 	}); err != nil {
 		t.Fatal(err)
 	}
 	h.plugIn(right)
 	h.key("3")
-	h.wantView("isn't answering status", "bench flow", "94 LEDs   toe 86   heel 48", "a flash the app")
+	h.wantView("isn't answering status", "bench rainbow-pool", "94 LEDs   toe 86   heel 48", "a flash the app")
 	if h.m.form.layoutNote() != "last known for 3ED8" {
 		t.Fatalf("note = %q", h.m.form.layoutNote())
 	}

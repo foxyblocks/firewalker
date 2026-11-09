@@ -93,8 +93,8 @@ func TestTagSaysWhatsRunning(t *testing.T) {
 		record   boards.Record
 		want     string
 	}{
-		{"it answered status", true, boards.Record{LastFlashed: "bench flow"}, "app"},
-		{"a bench build can't answer", false, boards.Record{LastFlashed: "bench flow"}, "bench flow"},
+		{"it answered status", true, boards.Record{LastFlashed: "bench rainbow-pool"}, "app"},
+		{"a bench build can't answer", false, boards.Record{LastFlashed: "bench rainbow-pool"}, "bench rainbow-pool"},
 		{"a whole-firmware build can't either", false, boards.Record{LastFlashed: "imu_debug"}, "imu_debug"},
 		{"the app was flashed but isn't answering", false, boards.Record{LastFlashed: "final_app"}, "unknown"},
 		{"nothing known", false, boards.Record{}, "unknown"},

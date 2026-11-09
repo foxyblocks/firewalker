@@ -28,7 +28,7 @@ describe("recipe tables header", () => {
   });
 
   it("carries the reserved names and the size limit", () => {
-    expect(header).toContain('{"off", "flow", "fire-trail"}');
+    expect(header).toContain('{"off"}');
     expect(header).toContain("RECIPE_MAX_BYTES = 254");
   });
 

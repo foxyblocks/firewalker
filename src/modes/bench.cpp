@@ -1,12 +1,12 @@
 // bench runs one strip test configured entirely by build flags, so a test never
 // edits firmware settings or touches a shoe's saved settings. The `cli` tool
 // generates these flags (see tools/cli), and the strip_test and strip_off
-// environments in platformio.ini use fixed ones. Pattern tests run the real flow and
-// fire-trail implementations, with simulated tilt and impacts unless BENCH_MOTION is
+// environments in platformio.ini use fixed ones. Pattern tests run the same built-in
+// recipes and RecipePattern as final_app, with simulated tilt and impacts unless BENCH_MOTION is
 // set. Motion-free builds never start the sensor. Every frame covers the whole strip,
 // with black for any pixel a test leaves unlit.
 //
-//   BENCH_TEST: 0 flow, 1 fire-trail, 2 color, 3 off
+//   BENCH_TEST: 0 rainbow-pool, 1 fire-stomp, 2 color, 3 off
 
 #include "modes/bench.h"
 
@@ -15,8 +15,8 @@
 #include "config.h"
 #include "firewalker_core.h"
 #include "firewalker_imu.h"
-#include "patterns/fire_trail.h"
-#include "patterns/flow.h"
+#include "generated/recipe_builtins.h"
+#include "patterns/recipe_pattern.h"
 
 #ifndef BENCH_TEST
 #define BENCH_TEST 2
@@ -50,10 +50,8 @@ namespace BenchMode {
 
 using namespace Firewalker;
 
-#if BENCH_TEST == 0
-static FlowPattern pattern;
-#elif BENCH_TEST == 1
-static FireTrailPattern pattern;
+#if BENCH_TEST <= 1
+static RecipePattern pattern;
 #endif
 
 static unsigned long lastFrameMs = 0;
@@ -85,6 +83,13 @@ void setup() {
 #endif
 
 #if BENCH_TEST <= 1
+  // These named arrays come from patterns/built-ins.txt. Using the same compiled bytes as
+  // the app keeps the bench preview in step with edits made in the designer.
+#if BENCH_TEST == 0
+  pattern.load(BUILTIN_RAINBOW_POOL, sizeof(BUILTIN_RAINBOW_POOL));
+#else
+  pattern.load(BUILTIN_FIRE_STOMP, sizeof(BUILTIN_FIRE_STOMP));
+#endif
   pattern.enter();
 #elif BENCH_TEST == 3
   digitalWrite(LED_BUILTIN, LED_BUILTIN_INACTIVE);
@@ -99,12 +104,10 @@ void loop() {
   input.dt = now - lastFrameMs;
   lastFrameMs = now;
   input.tiltFwd = BENCH_TILT;
-  input.tiltDeg = BENCH_TILT * IMU_TILT_FULL_DEG;  // a simulated full tilt is the default range
   input.stompStrength = 1.0f;
 #if BENCH_MOTION
   imuUpdate();
   input.tiltFwd = imuTiltFwd();
-  input.tiltDeg = imuTiltDeg();
   input.stomp = imuTakeStomp();
   input.stompStrength = imuStompStrength();
 #if BENCH_LOG_MOTION

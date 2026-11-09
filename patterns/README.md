@@ -6,11 +6,11 @@ Pattern recipes worth keeping, one `<name>.json` each. The designer in
 
 | Recipe | Built in | What it does |
 | --- | --- | --- |
-| `rainbow-pool` | Yes | The native flow as a recipe: a cycling spectrum that pools toward the low end, a white flash on a flat stomp, and trails on a tilted one |
-| `fire-stomp` | Yes | The native fire-trail as a recipe: fire from whichever end is down to the other |
+| `rainbow-pool` | Yes | A cycling spectrum that pools toward the low end, a white flash on a flat stomp, and trails on a tilted one |
+| `fire-stomp` | Yes | Stomp-launched fire from whichever end is down to the other |
 | `comet` | Yes | Two neon comets circling faster the more you tilt |
 | `lava-pour` | No | Lava colors crawling around the ring, pooled hard toward the low end, with sparks |
-| `bass-ripple` | No | A rainbow volume bar on both sides, sliding downhill with tilt and flashing from 70% to 100% brightness on a stomp |
+| `bass-ripple` | Yes | A rainbow volume bar on both sides, sliding downhill with tilt and flashing from 70% to 100% brightness on a stomp |
 | `starfield` | No | A dim sky with twinkling stars, and an ice-blue flash on a stomp |
 
 [`built-ins.txt`](built-ins.txt) lists the recipes compiled into the firmware, so every boot ships with

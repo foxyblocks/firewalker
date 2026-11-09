@@ -20,11 +20,11 @@ afterEach(() => vi.useRealTimers());
 
 describe("connecting", () => {
   it("shows the boot's real settings once connected", async () => {
-    const { client } = setup({ pattern: "fire-trail", brightness: 40 });
+    const { client } = setup({ pattern: "fire-stomp", brightness: 40 });
     client.connect();
     await settle();
     expect(state(client).link).toBe("online");
-    expect(state(client).status).toMatchObject({ id: "3ED1", pattern: "fire-trail", brightness: 40 });
+    expect(state(client).status).toMatchObject({ id: "3ED1", pattern: "fire-stomp", brightness: 40 });
   });
 
   it("asks for status if the boot doesn't send one on subscribe", async () => {
@@ -62,15 +62,15 @@ describe("connecting", () => {
   });
 
   it("gets the pattern list right away when status beats the connection finishing", async () => {
-    const { transport, client } = setup({ patterns: ["flow", "pattern-3"] });
+    const { transport, client } = setup({ patterns: ["rainbow-pool", "pattern-3"] });
     transport.openDelayMs = 100;
     client.connect();
     await settle();
-    expect(state(client).patterns).toEqual(["flow", "pattern-3"]);
+    expect(state(client).patterns).toEqual(["rainbow-pool", "pattern-3"]);
   });
 
   it("keeps a boot's pattern list if asking again goes unanswered", async () => {
-    const { boot, client } = setup({ patterns: ["flow", "pattern-3"] });
+    const { boot, client } = setup({ patterns: ["rainbow-pool", "pattern-3"] });
     client.connect();
     await settle();
 
@@ -78,11 +78,11 @@ describe("connecting", () => {
     boot.dropLink();
     await vi.advanceTimersByTimeAsync(4000);
     expect(state(client).link).toBe("online");
-    expect(state(client).patterns).toEqual(["flow", "pattern-3"]);
+    expect(state(client).patterns).toEqual(["rainbow-pool", "pattern-3"]);
   });
 
   it("asks again if the pattern list never arrived", async () => {
-    const { boot, client } = setup({ patterns: ["flow", "pattern-3"] });
+    const { boot, client } = setup({ patterns: ["rainbow-pool", "pattern-3"] });
     boot.ignoring = ["patterns"];
     client.connect();
     await vi.advanceTimersByTimeAsync(2500);
@@ -91,14 +91,14 @@ describe("connecting", () => {
     boot.ignoring = [];
     client.requestStatus();
     await settle();
-    expect(state(client).patterns).toEqual(["flow", "pattern-3"]);
+    expect(state(client).patterns).toEqual(["rainbow-pool", "pattern-3"]);
   });
 
   it("uses the pattern list the boot reports", async () => {
-    const { client } = setup({ patterns: ["flow", "fire-trail", "pattern-3"] });
+    const { client } = setup({ patterns: ["rainbow-pool", "fire-stomp", "pattern-3"] });
     client.connect();
     await settle();
-    expect(state(client).patterns).toEqual(["flow", "fire-trail", "pattern-3"]);
+    expect(state(client).patterns).toEqual(["rainbow-pool", "fire-stomp", "pattern-3"]);
   });
 
   it("turns off debug left on from an earlier session", async () => {
@@ -115,13 +115,13 @@ describe("commands", () => {
     client.connect();
     await settle();
 
-    client.setPattern("fire-trail");
-    expect(state(client).pending.pattern).toBe("fire-trail");
-    expect(state(client).status?.pattern).toBe("flow");
+    client.setPattern("fire-stomp");
+    expect(state(client).pending.pattern).toBe("fire-stomp");
+    expect(state(client).status?.pattern).toBe("rainbow-pool");
 
     await settle();
-    expect(boot.pattern).toBe("fire-trail");
-    expect(state(client).status?.pattern).toBe("fire-trail");
+    expect(boot.pattern).toBe("fire-stomp");
+    expect(state(client).status?.pattern).toBe("fire-stomp");
     expect(state(client).pending.pattern).toBeUndefined();
   });
 
@@ -132,13 +132,13 @@ describe("commands", () => {
     boot.received.length = 0;
     boot.replyDelayMs = 100;
 
-    client.setPattern("fire-trail");
+    client.setPattern("fire-stomp");
     client.setDebug(true);
     await vi.advanceTimersByTimeAsync(50);
-    expect(boot.received).toEqual(["pattern fire-trail"]);
+    expect(boot.received).toEqual(["pattern fire-stomp"]);
 
     await vi.advanceTimersByTimeAsync(100);
-    expect(boot.received).toEqual(["pattern fire-trail", "debug on"]);
+    expect(boot.received).toEqual(["pattern fire-stomp", "debug on"]);
   });
 
   it("says the boot didn't answer and returns to the last reported value", async () => {
@@ -147,11 +147,11 @@ describe("commands", () => {
     await settle();
     boot.unresponsive = true;
 
-    client.setPattern("fire-trail");
+    client.setPattern("fire-stomp");
     await vi.advanceTimersByTimeAsync(2100);
 
     expect(state(client).pending.pattern).toBeUndefined();
-    expect(state(client).status?.pattern).toBe("flow");
+    expect(state(client).status?.pattern).toBe("rainbow-pool");
     expect(state(client).notice).toBe("no-answer");
   });
 
@@ -160,7 +160,7 @@ describe("commands", () => {
     client.connect();
     await settle();
     boot.unresponsive = true;
-    client.setPattern("fire-trail");
+    client.setPattern("fire-stomp");
     await vi.advanceTimersByTimeAsync(2100);
     expect(state(client).notice).toBe("no-answer");
 
@@ -177,7 +177,7 @@ describe("commands", () => {
     boot.received.length = 0;
 
     boot.replyDelayMs = 2500;
-    client.setPattern("fire-trail");
+    client.setPattern("fire-stomp");
     await vi.advanceTimersByTimeAsync(2100);
 
     boot.replyDelayMs = 5000;
@@ -185,15 +185,15 @@ describe("commands", () => {
     client.setBrightness(30);
     await vi.advanceTimersByTimeAsync(600);
 
-    expect(boot.received).toEqual(["pattern fire-trail", "debug on"]);
+    expect(boot.received).toEqual(["pattern fire-stomp", "debug on"]);
   });
 
   it("reports a command the boot rejects and drops the pending value", async () => {
-    const { client } = setup({ patterns: ["flow"] });
+    const { client } = setup({ patterns: ["rainbow-pool"] });
     client.connect();
     await settle();
 
-    client.setPattern("fire-trail");
+    client.setPattern("fire-stomp");
     await settle();
 
     expect(state(client).pending.pattern).toBeUndefined();
@@ -202,14 +202,14 @@ describe("commands", () => {
 
   it("doesn't send anything while offline", async () => {
     const { boot, client } = setup();
-    client.setPattern("fire-trail");
+    client.setPattern("fire-stomp");
     await settle();
     expect(boot.received).toEqual([]);
     expect(state(client).pending.pattern).toBeUndefined();
   });
 
   it("turns the lights off and back on through power", async () => {
-    const { boot, client } = setup({ pattern: "fire-trail" });
+    const { boot, client } = setup({ pattern: "fire-stomp" });
     client.connect();
     await settle();
 
@@ -219,7 +219,7 @@ describe("commands", () => {
 
     client.setPower(true);
     await settle();
-    expect(boot.pattern).toBe("fire-trail");
+    expect(boot.pattern).toBe("fire-stomp");
   });
 });
 
@@ -327,7 +327,7 @@ describe("calibrating", () => {
   });
 
   it("resets all poses without changing strip, brightness, pattern, or audio tuning", async () => {
-    const { boot, client } = setup({ calibrated: true, neutralDeg: 90, heelDeg: 65, toeDeg: 120, pattern: "fire-trail", brightness: 32 });
+    const { boot, client } = setup({ calibrated: true, neutralDeg: 90, heelDeg: 65, toeDeg: 120, pattern: "fire-stomp", brightness: 32 });
     client.connect();
     await settle();
     const before = { ...state(client).status };
@@ -568,10 +568,10 @@ describe("losing the connection", () => {
     boot.dropLink();
     expect(state(client).link).toBe("reconnecting");
 
-    boot.pattern = "fire-trail";
+    boot.pattern = "fire-stomp";
     await vi.advanceTimersByTimeAsync(1500);
     expect(state(client).link).toBe("online");
-    expect(state(client).status?.pattern).toBe("fire-trail");
+    expect(state(client).status?.pattern).toBe("fire-stomp");
   });
 
   it("keeps trying, more slowly, while the boot is out of range", async () => {
@@ -623,7 +623,7 @@ describe("losing the connection", () => {
     client.connect();
     await settle();
     boot.replyDelayMs = 500;
-    client.setPattern("fire-trail");
+    client.setPattern("fire-stomp");
     await vi.advanceTimersByTimeAsync(10);
 
     boot.dropLink();
@@ -776,7 +776,7 @@ describe("blinking a boot", () => {
     client.blink();
     await settle();
     expect(boot.blinks).toBe(1);
-    expect(boot.pattern).toBe("flow");
+    expect(boot.pattern).toBe("rainbow-pool");
   });
 
 });

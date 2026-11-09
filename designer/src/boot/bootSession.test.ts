@@ -179,7 +179,7 @@ describe("sending a recipe", () => {
   it("skips the upload when the boot already has these exact bytes, and still selects it", async () => {
     const session = connect(boot);
     await session.sendRecipe("spark", compiled());
-    boot.pattern = "flow";
+    boot.pattern = "rainbow-pool";
     boot.linesSeen = [];
     expect(await session.sendRecipe("spark", compiled())).toEqual({ ok: true, alreadyThere: true });
     expect(boot.linesSeen.some((line) => line.startsWith("recipe data"))).toBe(false);
@@ -230,7 +230,7 @@ describe("sending a recipe", () => {
     const result = await connect(full).sendRecipe("spark", compiled());
     expect(result).toMatchObject({ ok: false, error: expect.stringMatching(/slots are full/) });
     expect(full.linesSeen.some((line) => line.startsWith("recipe data"))).toBe(false);
-    expect(full.pattern).toBe("flow");
+    expect(full.pattern).toBe("rainbow-pool");
   });
 
   it("gives up cleanly on a boot that stops answering", async () => {

@@ -77,8 +77,8 @@ func newCommandWith(run testRunner) *cobra.Command {
 		name, short string
 		test        int
 	}{
-		{"flow", "Run spectrum-cycling flow (no motion by default)", bench.TestFlow},
-		{"fire-trail", "Launch fire trails on a timer, or from motion", bench.TestFireTrail},
+		{"rainbow-pool", "Run the rainbow-pool recipe (no motion by default)", bench.TestRainbowPool},
+		{"fire-stomp", "Launch fire trails on a timer, or from motion", bench.TestFireStomp},
 		{"color", "Cycle white/red/green/blue, or show a fixed color", bench.TestColor},
 		{"off", "Blank every connected pixel (power remains on)", bench.TestOff},
 	}
@@ -132,12 +132,20 @@ func addBuildFlags(cmd *cobra.Command, opts *bench.Options) {
 func newBenchCommand(name, short string, test int, opts *bench.Options, run testRunner) *cobra.Command {
 	cfg := &bench.Config{Name: name, Test: test, Toe: -1, Heel: -1, Lit: -1, Color: "cycle", Interval: 500 * time.Millisecond}
 	cmd := &cobra.Command{Use: name + " [boot...]", Short: short, Args: cobra.NoArgs}
+	// Keep scripts using the old bench commands working; help and generated commands
+	// use the recipe's name so the CLI and the remote describe the same pattern.
+	switch test {
+	case bench.TestRainbowPool:
+		cmd.Aliases = []string{"flow"}
+	case bench.TestFireStomp:
+		cmd.Aliases = []string{"fire-trail"}
+	}
 	if cfg.IsPattern() {
 		flags := cmd.Flags()
 		flags.BoolVar(&cfg.Motion, "motion", false, "Use the onboard sensor for tilt and stomp input")
 		flags.BoolVar(&cfg.LogMotion, "log-motion", false, "Log motion over USB and stream it after flashing; Ctrl-C leaves the board running")
 		flags.Float64Var(&cfg.Tilt, "tilt", 0, "Fixed simulated tilt (-1 heel-down, 0 level, +1 toe-down)")
-		flags.DurationVar(&cfg.StompEvery, "stomp-every", 0, "Simulate impacts at this interval; 0 disables (fire-trail defaults to 1s without --motion)")
+		flags.DurationVar(&cfg.StompEvery, "stomp-every", 0, "Simulate impacts at this interval; 0 disables (fire-stomp defaults to 1s without --motion)")
 		flags.IntVar(&cfg.Toe, "toe", -1, "Toe pixel; defaults to the board's saved layout, or 32.5% of the strip with a custom --pixels")
 		flags.IntVar(&cfg.Heel, "heel", -1, "Heel pixel; defaults to the board's saved layout, or 82.5% of the strip with a custom --pixels")
 	}
@@ -147,7 +155,7 @@ func newBenchCommand(name, short string, test int, opts *bench.Options, run test
 		cmd.Flags().DurationVar(&cfg.Interval, "interval", 500*time.Millisecond, "Time per color in the cycle")
 	}
 	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
-		if cfg.Test == bench.TestFireTrail && !cfg.Motion && !cmd.Flags().Changed("stomp-every") {
+		if cfg.Test == bench.TestFireStomp && !cfg.Motion && !cmd.Flags().Changed("stomp-every") {
 			cfg.StompEvery = time.Second
 		}
 		return run(cmd.Context(), cmd, opts, cfg)

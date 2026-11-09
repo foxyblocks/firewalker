@@ -36,10 +36,10 @@ static void reseal(SettingsRecord& record) {
   record.crc = settingsCrc(&record, offsetof(SettingsRecord, crc));
 }
 
-static void test_defaults_are_flow_and_uncalibrated() {
+static void test_defaults_are_rainbow_pool_and_uncalibrated() {
   const Settings settings = defaultSettings(16, DEFAULT_STRIP);
-  TEST_ASSERT_EQUAL_STRING("flow", settings.pattern);
-  TEST_ASSERT_EQUAL_STRING("flow", settings.lastLitPattern);
+  TEST_ASSERT_EQUAL_STRING("rainbow-pool", settings.pattern);
+  TEST_ASSERT_EQUAL_STRING("rainbow-pool", settings.lastLitPattern);
   TEST_ASSERT_EQUAL(16, settings.brightness);
   TEST_ASSERT_FALSE(orientationReport(settings.orientation).neutralSet);
   TEST_ASSERT_FALSE(orientationReport(settings.orientation).heelSet);
@@ -81,7 +81,7 @@ static void test_flipped_bit_reads_as_corrupt_and_leaves_output_alone() {
   Settings out = defaultSettings(16, DEFAULT_STRIP);
   TEST_ASSERT_EQUAL(SettingsDecode::Corrupt, decodeSettings(record, BOUNDS, out));
   TEST_ASSERT_EQUAL(16, out.brightness);
-  TEST_ASSERT_EQUAL_STRING("flow", out.pattern);
+  TEST_ASSERT_EQUAL_STRING("rainbow-pool", out.pattern);
 }
 
 static void test_an_uploaded_recipes_name_round_trips() {
@@ -118,8 +118,8 @@ static void test_a_garbled_name_reads_as_the_default_and_keeps_the_rest() {
   reseal(record);
   Settings out = defaultSettings(16, DEFAULT_STRIP);
   TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
-  TEST_ASSERT_EQUAL_STRING("flow", out.pattern);
-  TEST_ASSERT_EQUAL_STRING("flow", out.lastLitPattern);
+  TEST_ASSERT_EQUAL_STRING("rainbow-pool", out.pattern);
+  TEST_ASSERT_EQUAL_STRING("rainbow-pool", out.lastLitPattern);
   TEST_ASSERT_EQUAL(32, out.brightness);
   TEST_ASSERT_EQUAL_FLOAT(-25.0f, orientationReport(out.orientation).heelDeg);
   TEST_ASSERT_EQUAL_UINT16(110, out.strip.count);
@@ -131,7 +131,7 @@ static void test_off_is_not_a_pattern_to_return_to() {
   reseal(record);
   Settings out = defaultSettings(16, DEFAULT_STRIP);
   TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
-  TEST_ASSERT_EQUAL_STRING("flow", out.lastLitPattern);
+  TEST_ASSERT_EQUAL_STRING("rainbow-pool", out.lastLitPattern);
 }
 
 static void test_brightness_outside_the_build_limits_reads_as_invalid() {
@@ -326,7 +326,7 @@ static void test_a_damaged_v3_record_is_corrupt_and_leaves_output_alone() {
   record.brightness ^= 0x01;
   Settings out = defaultSettings(16, DEFAULT_STRIP);
   TEST_ASSERT_EQUAL(SettingsDecode::Corrupt, decodeSettingsV3(record, BOUNDS, out));
-  TEST_ASSERT_EQUAL_STRING("flow", out.pattern);
+  TEST_ASSERT_EQUAL_STRING("rainbow-pool", out.pattern);
 }
 
 // ── Records saved before the strip layout was a setting ─────────────────
@@ -588,7 +588,7 @@ int main(int, char**) {
   UNITY_BEGIN();
   RUN_TEST(test_audio_settings_round_trip_and_v4_upgrade_requires_new_poses);
   RUN_TEST(test_mic_tuning_and_the_cap_flag_keep_their_own_bytes);
-  RUN_TEST(test_defaults_are_flow_and_uncalibrated);
+  RUN_TEST(test_defaults_are_rainbow_pool_and_uncalibrated);
   RUN_TEST(test_round_trip_keeps_every_field);
   RUN_TEST(test_off_round_trips_and_remembers_what_to_return_to);
   RUN_TEST(test_flipped_bit_reads_as_corrupt_and_leaves_output_alone);

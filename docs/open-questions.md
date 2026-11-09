@@ -13,9 +13,9 @@ decided deliberately. Once one is resolved, move the decision into `wiring.md`,
   (3EB5's count), so lower `FIREWALKER_LED_BRIGHTNESS_SOFT_CAP` for a longer one. Until then a
   boot starts from the uncut bench strip in `include/config.h` (160 pixels, toe 52, heel 132),
   which the `cli` tool also reads.
-- Do the animation speeds still look right? `FLOW_TRAIL_SPEED_PXPS`, `FLOW_TRAIL_LEN`,
-  `FIRE_TRAIL_SPEED_PXPS`, and `FIRE_TRAIL_LEN` count in pixels and were tuned on a far less
-  dense strip, so the same values now cover a much shorter physical distance.
+- Do the animation speeds still look right? The trail `speed` and `length` fields in
+  `patterns/rainbow-pool.json` and `patterns/fire-stomp.json` count in pixels, so check
+  their physical travel distance on the dense strip.
 
 ## Mount and motion calibration
 
@@ -23,14 +23,14 @@ Each controller learns its own 3D mounting reference from neutral and a heel/toe
 (ADR-0006). Check each mounted shoe after recapturing its poses:
 
 - **Axes and signs:** does the fused angle follow the foot, both on a slow static tilt and a
-  quick movement? Check with `./cli flow --motion --log-motion`. Captured heel and toe poses
+  quick movement? Check with `./cli install rainbow-pool --motion --log-motion`. Captured heel and toe poses
   teach both the direction and the rotation plane; verify the mount stays stable on the cloth.
 - **Stomp thresholds:** what does a real stomp and an ordinary step produce on a mounted
   shoe? Tune `IMU_STOMP_ACCEL_THRESHOLD`, `IMU_RELEASE_ACCEL_THRESHOLD`,
   `IMU_REFRACTORY_MS`, and `IMU_STOMP_FORCE_FULL`.
-- **Fire-trail origin:** do real stomps start from the part of the boot that's down? Each
-  stomp logs its angle and origin over USB, so tune `FIRE_TRAIL_FLAT_DEG` if a flat stomp reads
-  as toe or heel, or a heel strike reads as flat.
+- **Fire-stomp origin:** do real stomps start from the part of the boot that's down? Tune the recipe's
+  `flatZone` if a flat stomp reads as toe or heel, or a heel strike reads as flat. The threshold
+  follows calibrated tilt, so check it with each boot's saved poses.
 - **Worn pose captures:** does `CALIBRATION_MAX_SPREAD_DEG` in `include/config.h` let you
   capture neutral, heel, and toe while wearing the boot, and still reject a foot rocking back
   and forth?
@@ -59,7 +59,7 @@ Each controller learns its own 3D mounting reference from neutral and a heel/toe
 
 ## Scope guardrails
 
-In scope: one strip per shoe, the onboard sensor, native patterns and recipes, the iPhone
+In scope: one strip per shoe, the onboard sensor, recipe patterns, the iPhone
 remote, the USB console, the designer, and the `cli` bench tool. Out of scope: the 2-D
 "perimeter bubble" flow, multiple strips per shoe, synchronization between shoes,
 Android, over-the-air firmware updates, and the final battery and enclosure.

@@ -33,7 +33,7 @@ func TestValidateRejectsConflictingFlags(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			o, c := validConfig(TestFlow)
+			o, c := validConfig(TestRainbowPool)
 			test.mutate(o, c)
 			if err := Validate(o, c); err == nil {
 				t.Fatal("expected an error")
@@ -44,7 +44,7 @@ func TestValidateRejectsConflictingFlags(t *testing.T) {
 
 // Fire-trail starts from the part of the boot that's down, so a simulated tilt picks its origin.
 func TestValidateAllowsFireTrailTilt(t *testing.T) {
-	o, c := validConfig(TestFireTrail)
+	o, c := validConfig(TestFireStomp)
 	c.Tilt = -1
 	if err := Validate(o, c); err != nil {
 		t.Fatal(err)
@@ -52,7 +52,7 @@ func TestValidateAllowsFireTrailTilt(t *testing.T) {
 }
 
 func TestValidateDefaultsLayoutFromStripLength(t *testing.T) {
-	o, c := validConfig(TestFlow)
+	o, c := validConfig(TestRainbowPool)
 	if err := Validate(o, c); err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestValidateDefaultsLayoutFromStripLength(t *testing.T) {
 // boot is set up this way: 94 LEDs, toe 86, heel 48. Firmware's stripLayoutValid has the
 // same rule.
 func TestValidateAcceptsToeAndHeelInEitherOrder(t *testing.T) {
-	o, c := validConfig(TestFlow)
+	o, c := validConfig(TestRainbowPool)
 	o.Pixels, c.Toe, c.Heel = 94, 86, 48
 	if err := Validate(o, c); err != nil {
 		t.Fatal(err)
@@ -81,7 +81,7 @@ func TestValidateAcceptsToeAndHeelInEitherOrder(t *testing.T) {
 // CheckInputs runs before anything talks to a board, when the strip length may not be
 // known yet, so it can't depend on it. It still catches a bad flag early.
 func TestCheckInputsCatchesBadFlagsBeforeTheStripLengthIsKnown(t *testing.T) {
-	o, c := validConfig(TestFlow)
+	o, c := validConfig(TestRainbowPool)
 	o.Pixels = 0
 	if err := CheckInputs(o, c); err != nil {
 		t.Fatalf("a missing strip length isn't an input problem: %v", err)
@@ -117,7 +117,7 @@ func TestPickLayoutPrefersTheBootThenItsMemoryThenConfig(t *testing.T) {
 }
 
 func TestApplyLayoutKeepsExplicitToeAndHeel(t *testing.T) {
-	o, c := validConfig(TestFlow)
+	o, c := validConfig(TestRainbowPool)
 	o.Pixels = 0
 	c.Toe = 10
 	ApplyLayout(o, c, StripLayout{Pixels: 94, Toe: 86, Heel: 48})
@@ -162,7 +162,7 @@ func TestParseStripLayoutReadsConfig(t *testing.T) {
 }
 
 func TestBuildFlagsDescribeTheTest(t *testing.T) {
-	o, c := validConfig(TestFireTrail)
+	o, c := validConfig(TestFireStomp)
 	c.StompEvery = 2 * time.Second
 	if err := Validate(o, c); err != nil {
 		t.Fatal(err)
@@ -204,28 +204,28 @@ func TestCommandLineShowsOnlyWhatDiffersFromTheDefaults(t *testing.T) {
 		mutate func(*Options, *Config)
 		want   string
 	}{
-		{"simulated flow on the saved layout", TestFlow, func(o *Options, c *Config) {
+		{"simulated flow on the saved layout", TestRainbowPool, func(o *Options, c *Config) {
 			c.Tilt, c.StompEvery = -0.5, 2*time.Second
-		}, "./cli install flow --tilt=-0.5 --stomp-every 2s --brightness 16"},
-		{"motion with logs", TestFlow, func(o *Options, c *Config) {
+		}, "./cli install rainbow-pool --tilt=-0.5 --stomp-every 2s --brightness 16"},
+		{"motion with logs", TestRainbowPool, func(o *Options, c *Config) {
 			c.Motion, c.LogMotion = true, true
-		}, "./cli install flow --motion --log-motion --brightness 16"},
-		{"a layout edited for this test", TestFlow, func(o *Options, c *Config) {
+		}, "./cli install rainbow-pool --motion --log-motion --brightness 16"},
+		{"a layout edited for this test", TestRainbowPool, func(o *Options, c *Config) {
 			o.Pixels, c.Toe = 90, 80
-		}, "./cli install flow --pixels 90 --toe 80 --heel 48 --brightness 16"},
-		{"fire-trail's usual timer is the default", TestFireTrail, func(o *Options, c *Config) {
+		}, "./cli install rainbow-pool --pixels 90 --toe 80 --heel 48 --brightness 16"},
+		{"fire-trail's usual timer is the default", TestFireStomp, func(o *Options, c *Config) {
 			c.StompEvery = time.Second
-		}, "./cli install fire-trail --brightness 16"},
-		{"fire-trail with its timer off has to say so", TestFireTrail, func(o *Options, c *Config) {
+		}, "./cli install fire-stomp --brightness 16"},
+		{"fire-trail with its timer off has to say so", TestFireStomp, func(o *Options, c *Config) {
 			c.StompEvery = 0
-		}, "./cli install fire-trail --stomp-every 0s --brightness 16"},
+		}, "./cli install fire-stomp --stomp-every 0s --brightness 16"},
 		{"a color needs quoting", TestColor, func(o *Options, c *Config) {
 			c.Color, c.Lit = "#ff8000", 10
 		}, "./cli install color --lit 10 --color '#ff8000' --brightness 16"},
 		{"off has nothing to set", TestOff, func(o *Options, c *Config) {}, "./cli install off"},
-		{"two boots need a serial", TestFlow, func(o *Options, c *Config) {
+		{"two boots need a serial", TestRainbowPool, func(o *Options, c *Config) {
 			o.Serial = "99C817E5"
-		}, "./cli install flow --brightness 16 --serial 99C817E5"},
+		}, "./cli install rainbow-pool --brightness 16 --serial 99C817E5"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

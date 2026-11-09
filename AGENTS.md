@@ -9,9 +9,9 @@ one BTF FCOB strip (WS2812B-compatible, 160 pixels per meter) on D10 from the bo
 onboard motion sensor. The strip is a closed ring around the foot, about 69 cm or 110
 pixels. Each controller saves its own pixel count, toe, and heel, set from a remote, and
 starts from the uncut 160 pixels. The app (`final_app`) runs
-runtime-switchable **patterns**: native ones, `flow` (a slowly spectrum-cycling hue pooled toward
-the down-end by fused fore-aft tilt, where a stomp launches diverging trail fronts) and
-`fire-trail` (stomp-spawned fire bands), and **recipes**, built in or uploaded
+runtime-switchable **patterns**, all **recipes**, built in or uploaded. Built-ins include
+`rainbow-pool` (a cycling spectrum pooled toward the down-end by tilt, with stomp trails),
+`fire-stomp` (stomp-spawned fire bands), and `comet`
 (`specs/recipe-engine-spec.md`). A stomp is an IMU acceleration spike. Both
 shoes run one identical firmware binary. Each controller saves its own pattern,
 brightness, soft brightness cap, calibrated 3D poses (neutral, heel, toe), and strip layout in flash. A **remote** controls running firmware
@@ -22,15 +22,14 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
 ## Project map
 
 - `include/config.h` — all hardware/behavior knobs, named by owning module (`STRIP_*`, `IMU_*`,
-  `CALIBRATION_*`, `ORIENTATION_LIMITS`, `SETTINGS_*`, `REMOTE_*`, `FLOW_*`, `FIRE_TRAIL_*`). Never hard-code
-  these in source files.
+  `CALIBRATION_*`, `ORIENTATION_LIMITS`, `SETTINGS_*`, `REMOTE_*`). Never hard-code these in source files.
+  Visual knobs live in the recipe files in `patterns/`.
 - `src/main.cpp` — tiny Arduino dispatcher into the selected mode.
 - `src/modes/` — compile-time builds (`final_app`, `imu_debug`, `bench`), chosen by
   `platformio.ini` build flags via `include/modes/mode_select.h`.
-- `src/patterns/` — runtime visual behaviors (`flow`, `fire_trail`, and `recipe_pattern`, which
-  shows any recipe) behind the
-  `Pattern` interface (`include/patterns/pattern.h`). Each pattern owns its own
-  animation state and engine.
+- `src/patterns/recipe_pattern.cpp` — connects the pure recipe engine to the strip behind
+  the `Pattern` interface (`include/patterns/pattern.h`). One instance loads any built-in or
+  uploaded recipe; both the app and bench builds use it.
 - `src/firewalker_strip.cpp` — the strip driver behind `LedStrip`: hardware-timed, SPI + DMA on D10.
 - `src/firewalker_imu.cpp` — shared IMU service: read, complementary-filter tilt, calibrated
   poses, stomp detect.
@@ -85,7 +84,7 @@ pio test -e native                     # host-native tests of the pure logic
 ./cli                                 # the bench TUI: flash, test, and read logs
 ./cli app                             # flash the app onto the one connected board
 ./cli web                             # build the phone remote and open it in a browser
-./cli flow --motion --log-motion      # one-off strip test, see README.md
+./cli install rainbow-pool --motion --log-motion # one-off strip test, see README.md
 ```
 
 With two boards connected, uploads refuse to guess. Add `--upload-port <usb serial>`;

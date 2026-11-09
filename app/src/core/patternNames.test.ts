@@ -2,7 +2,7 @@ import { patternDisplay } from "./patternNames";
 
 describe("patternDisplay", () => {
   it("uses the friendly name and description for a known pattern", () => {
-    expect(patternDisplay("fire-trail")).toEqual({ name: "Fire-trail", description: "Stomps launch fire" });
+    expect(patternDisplay("fire-stomp")).toEqual({ name: "Fire stomp", description: "Stomps launch fire" });
   });
 
   it("makes a readable name for a pattern this build hasn't heard of", () => {

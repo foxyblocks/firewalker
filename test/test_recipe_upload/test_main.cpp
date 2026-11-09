@@ -66,13 +66,15 @@ static void test_receives_a_whole_recipe() {
 static void test_begin_refuses_bad_names_and_sizes() {
   RecipeUpload upload(IDLE_MS);
   TEST_ASSERT_EQUAL_STRING("bad-name", upload.begin("Not Good", 50, 0));
-  TEST_ASSERT_EQUAL_STRING("name-reserved", upload.begin("flow", 50, 0));
-  TEST_ASSERT_EQUAL_STRING("name-reserved", upload.begin("fire-trail", 50, 0));
   TEST_ASSERT_EQUAL_STRING("name-reserved", upload.begin("off", 50, 0));
   TEST_ASSERT_EQUAL_STRING("too-big", upload.begin("comet", RECIPE_MAX_BYTES + 1, 0));
   TEST_ASSERT_EQUAL_STRING("short", upload.begin("comet", 3, 0));
   TEST_ASSERT_FALSE(upload.active());
   TEST_ASSERT_NULL(upload.begin("comet", RECIPE_MAX_BYTES, 0));
+  upload.cancel();
+  TEST_ASSERT_NULL(upload.begin("flow", 50, 0));
+  upload.cancel();
+  TEST_ASSERT_NULL(upload.begin("fire-trail", 50, 0));
 }
 
 static void test_data_needs_an_upload_in_progress() {

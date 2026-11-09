@@ -71,7 +71,7 @@ func TestDiagnosticFlagsFailBeforeOpeningHardware(t *testing.T) {
 }
 
 func TestExplicitLayoutRunsInEitherOrderWithoutAnyBoard(t *testing.T) {
-	out, err := run(t, "flow", "--pixels", "94", "--toe", "86", "--heel", "48", "--dry-run")
+	out, err := run(t, "rainbow-pool", "--pixels", "94", "--toe", "86", "--heel", "48", "--dry-run")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,7 +120,7 @@ func TestWebDryRunShowsThePlanAndRunsNothing(t *testing.T) {
 func TestDebugNeedsAnUpload(t *testing.T) {
 	for _, args := range [][]string{
 		{"app", "--debug", "--build-only"},
-		{"flow", "--debug", "--build-only", "--pixels", "94"},
+		{"rainbow-pool", "--debug", "--build-only", "--pixels", "94"},
 	} {
 		if _, err := run(t, args...); err == nil || !strings.Contains(err.Error(), "--debug") {
 			t.Errorf("%v: got %v", args, err)
@@ -142,18 +142,18 @@ func TestPreviewedCommandsParseBackToTheSameTest(t *testing.T) {
 		test   int
 		mutate func(*bench.Options, *bench.Config)
 	}{
-		{"simulated flow", bench.TestFlow, func(_ *bench.Options, c *bench.Config) { c.Tilt, c.StompEvery = -0.5, 2*time.Second }},
-		{"flow with motion and logs", bench.TestFlow, func(_ *bench.Options, c *bench.Config) { c.Motion, c.LogMotion = true, true }},
-		{"edited layout", bench.TestFlow, func(o *bench.Options, c *bench.Config) { o.Pixels, c.Toe, c.Heel = 90, 10, 60 }},
-		{"bright flow", bench.TestFlow, func(o *bench.Options, _ *bench.Config) { o.Brightness = 40 }},
-		{"timed fire-trail", bench.TestFireTrail, func(_ *bench.Options, c *bench.Config) { c.StompEvery = time.Second }},
-		{"fire-trail with its timer off", bench.TestFireTrail, func(_ *bench.Options, c *bench.Config) { c.StompEvery = 0 }},
-		{"fire-trail from the toe", bench.TestFireTrail, func(_ *bench.Options, c *bench.Config) { c.Tilt, c.StompEvery = 1, time.Second }},
-		{"fire-trail on motion", bench.TestFireTrail, func(_ *bench.Options, c *bench.Config) { c.Motion = true }},
+		{"simulated flow", bench.TestRainbowPool, func(_ *bench.Options, c *bench.Config) { c.Tilt, c.StompEvery = -0.5, 2*time.Second }},
+		{"flow with motion and logs", bench.TestRainbowPool, func(_ *bench.Options, c *bench.Config) { c.Motion, c.LogMotion = true, true }},
+		{"edited layout", bench.TestRainbowPool, func(o *bench.Options, c *bench.Config) { o.Pixels, c.Toe, c.Heel = 90, 10, 60 }},
+		{"bright flow", bench.TestRainbowPool, func(o *bench.Options, _ *bench.Config) { o.Brightness = 40 }},
+		{"timed fire-trail", bench.TestFireStomp, func(_ *bench.Options, c *bench.Config) { c.StompEvery = time.Second }},
+		{"fire-trail with its timer off", bench.TestFireStomp, func(_ *bench.Options, c *bench.Config) { c.StompEvery = 0 }},
+		{"fire-trail from the toe", bench.TestFireStomp, func(_ *bench.Options, c *bench.Config) { c.Tilt, c.StompEvery = 1, time.Second }},
+		{"fire-trail on motion", bench.TestFireStomp, func(_ *bench.Options, c *bench.Config) { c.Motion = true }},
 		{"fixed color", bench.TestColor, func(_ *bench.Options, c *bench.Config) { c.Color, c.Lit = "#ff8000", 10 }},
 		{"slow cycle", bench.TestColor, func(_ *bench.Options, c *bench.Config) { c.Interval = 2 * time.Second }},
 		{"off", bench.TestOff, func(*bench.Options, *bench.Config) {}},
-		{"named board", bench.TestFlow, func(o *bench.Options, _ *bench.Config) { o.Serial = "99C817E5" }},
+		{"named board", bench.TestRainbowPool, func(o *bench.Options, _ *bench.Config) { o.Serial = "99C817E5" }},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

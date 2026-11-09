@@ -2,7 +2,7 @@
   "format": "firewalker-recipe",
   "version": 1,
   "name": "fire-stomp",
-  "description": "A recipe take on the built-in fire-trail: every stomp sends fire from whichever end is down, along both sides, to the other end.",
+  "description": "Every stomp sends fire from whichever end is down, along both sides, to the other end.",
   "layers": [
     {
       "type": "trail",

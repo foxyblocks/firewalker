@@ -28,7 +28,7 @@ constexpr size_t PATTERN_NAME_MAX_LENGTH = 12;
 constexpr size_t PATTERN_NAME_SIZE = PATTERN_NAME_MAX_LENGTH + 1;
 constexpr const char* PATTERN_OFF = "off";
 // What a boot shows first, and what it falls back to when a saved name no longer exists.
-constexpr const char* PATTERN_DEFAULT = "flow";
+constexpr const char* PATTERN_DEFAULT = "rainbow-pool";
 
 // Whether a name is spelled legally: 1 to 12 characters, a lowercase letter and then lowercase
 // letters, digits, or hyphens. Whether a pattern by that name exists is a separate question.
@@ -74,7 +74,7 @@ struct SettingsBounds {
   uint8_t softCapBrightness;  // the most a boot accepts with its soft cap on
 };
 
-// First-boot settings: flow at the given brightness with the soft cap on, no calibrated poses,
+// First-boot settings: rainbow-pool at the given brightness with the soft cap on, no calibrated poses,
 // and the strip layout this build starts from.
 inline Settings defaultSettings(uint8_t brightness, const StripLayout& strip) {
   Settings settings{};

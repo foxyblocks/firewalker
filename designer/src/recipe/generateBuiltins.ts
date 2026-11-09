@@ -9,7 +9,7 @@ import { compileRecipe } from "./compile.ts";
 import type { Recipe } from "./types.ts";
 
 // Keeps the `patterns` reply under its line limit. See PATTERN_LIST_MAX in firewalker_pattern_list.h.
-export const MAX_BUILT_INS = 14;
+export const MAX_BUILT_INS = 16;
 
 // The names in a list file: one per line, with blank lines and `#` comments ignored.
 export function parseBuiltInList(text: string): string[] {

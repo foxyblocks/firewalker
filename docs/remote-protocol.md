@@ -102,7 +102,7 @@ change. Names are at most 12 characters, so `pattern <name>` always fits in a
 default 20-byte write.
 
 ```json
-{"t":"patterns","list":["flow","fire-trail"]}
+{"t":"patterns","list":["comet","fire-stomp","rainbow-pool"]}
 ```
 
 ### `status`
@@ -111,7 +111,7 @@ Sent in reply to `status`, when a client subscribes, and after any change. Chang
 are reported at most every 250 ms, so a slider drag gets one line per interval.
 
 ```json
-{"t":"status","proto":6,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":96,"capped":true,"capBrightness":96,"sensor":"ok","tilt":0.00,"calibrated":true,"orientationCalibrated":true,"neutralDeg":0.00,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}
+{"t":"status","proto":6,"id":"3ED1","pattern":"off","lit":"rainbow-pool","brightness":24,"maxBrightness":96,"capped":true,"capBrightness":96,"sensor":"ok","tilt":0.00,"calibrated":true,"orientationCalibrated":true,"neutralDeg":0.00,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}
 ```
 
 | Field | Meaning |
@@ -255,9 +255,8 @@ the pattern starts again.
 
 ### Recipes
 
-A boot shows three kinds of pattern: native ones written in C++, built-in recipes compiled into the
-firmware, and recipes uploaded to that boot. `patterns` lists them all, and `pattern <name>` selects
-one. `recipes` and the `recipe` commands deal only with uploads. A recipe sent here is in the compiled
+Every pattern is a recipe: built into the firmware or uploaded to that boot. `patterns` lists them
+all, and `pattern <name>` selects one. `recipes` and the `recipe` commands deal only with uploads. A recipe sent here is in the compiled
 form from [`recipe-format.md`](recipe-format.md), not its JSON.
 
 An upload goes one line at a time, and a client waits for each `ack`:
@@ -270,7 +269,7 @@ An upload goes one line at a time, and a client waits for each `ack`:
   ...
 > recipe end
 < {"t":"ack","cmd":"recipe","ok":true}
-< {"t":"patterns","list":["flow","fire-trail","comet","fire-stomp","rainbow-pool"]}
+< {"t":"patterns","list":["comet","fire-stomp","rainbow-pool"]}
 ```
 
 - Over BLE, lines can run to 47 characters, past a default 20-byte write, so send them as writes with
@@ -291,10 +290,12 @@ An upload goes one line at a time, and a client waits for each `ack`:
   as the new version. Sending `pattern <name>` afterward selects it.
 - A boot has 16 slots, and uploads survive a firmware update.
 
-An upload can use a built-in's name, which replaces it on that boot until the upload is deleted. `flow`,
-`fire-trail`, and `off` can't be used. Deleting the recipe on the strip brings back its built-in if there is
-one, and otherwise the boot switches to `flow`. A saved pattern that no longer exists does the same at
-startup, keeping the boot's brightness, poses, and strip layout.
+An upload can use a built-in's name, which replaces it on that boot until the upload is deleted.
+Only `off` is reserved. Deleting the recipe on the strip brings back its built-in if there is
+one, and otherwise the boot switches to `rainbow-pool`. A saved pattern that no longer exists does the same at
+startup, keeping the boot's brightness, poses, and strip layout. Old saved `flow` and `fire-trail`
+selections resume as `rainbow-pool` and `fire-stomp`, including the remembered pattern while off.
+The list is alphabetical, with uploaded and built-in names appearing once each.
 
 ```json
 {"t":"recipes","versions":[1,2],"slots":16,"free":15,"list":["comet"]}

@@ -26,12 +26,12 @@ func (f *benchForm) focusOn(t *testing.T, field fieldID) {
 
 func TestFormPreviewIsTheMatchingCommand(t *testing.T) {
 	form := newTestForm()
-	if got := form.preview(""); got != "./cli install flow --brightness 16" {
+	if got := form.preview(""); got != "./cli install rainbow-pool --brightness 16" {
 		t.Fatalf("got %q", got)
 	}
 	form.values[fieldTilt] = "-0.5"
 	form.values[fieldStomp] = "2s"
-	if got := form.preview(""); got != "./cli install flow --tilt=-0.5 --stomp-every 2s --brightness 16" {
+	if got := form.preview(""); got != "./cli install rainbow-pool --tilt=-0.5 --stomp-every 2s --brightness 16" {
 		t.Fatalf("got %q", got)
 	}
 	if got := form.preview("99C817E5"); !strings.HasSuffix(got, "--serial 99C817E5") {
@@ -47,9 +47,9 @@ func TestFormOnlyShowsFieldsForTheSelectedTest(t *testing.T) {
 		color  string
 		want   []fieldID
 	}{
-		{"simulated flow", bench.TestFlow, false, "cycle", []fieldID{fieldTest, fieldInput, fieldTilt, fieldStomp, fieldLEDs, fieldToe, fieldHeel, fieldBrightness}},
-		{"flow on motion", bench.TestFlow, true, "cycle", []fieldID{fieldTest, fieldInput, fieldLogMotion, fieldLEDs, fieldToe, fieldHeel, fieldBrightness}},
-		{"simulated fire-trail", bench.TestFireTrail, false, "cycle", []fieldID{fieldTest, fieldInput, fieldTilt, fieldStomp, fieldLEDs, fieldToe, fieldHeel, fieldBrightness}},
+		{"simulated flow", bench.TestRainbowPool, false, "cycle", []fieldID{fieldTest, fieldInput, fieldTilt, fieldStomp, fieldLEDs, fieldToe, fieldHeel, fieldBrightness}},
+		{"flow on motion", bench.TestRainbowPool, true, "cycle", []fieldID{fieldTest, fieldInput, fieldLogMotion, fieldLEDs, fieldToe, fieldHeel, fieldBrightness}},
+		{"simulated fire-trail", bench.TestFireStomp, false, "cycle", []fieldID{fieldTest, fieldInput, fieldTilt, fieldStomp, fieldLEDs, fieldToe, fieldHeel, fieldBrightness}},
 		{"color cycle", bench.TestColor, false, "cycle", []fieldID{fieldTest, fieldColor, fieldInterval, fieldLit, fieldBrightness}},
 		{"fixed color has no interval", bench.TestColor, false, "red", []fieldID{fieldTest, fieldColor, fieldLit, fieldBrightness}},
 		{"off", bench.TestOff, false, "cycle", []fieldID{fieldTest}},
@@ -94,7 +94,7 @@ func TestFormBuildsTheSameTestAsTheFlags(t *testing.T) {
 	if o.Pixels != 94 || o.Brightness != 16 || o.Serial != "99C817E5" {
 		t.Fatalf("options = %+v", o)
 	}
-	if c.Toe != 86 || c.Heel != 48 || c.Tilt != 0.25 || c.Name != "flow" {
+	if c.Toe != 86 || c.Heel != 48 || c.Tilt != 0.25 || c.Name != "rainbow-pool" {
 		t.Fatalf("config = %+v", c)
 	}
 }
@@ -103,7 +103,7 @@ func TestChoicesChangeWithLeftAndRight(t *testing.T) {
 	form := newTestForm()
 	form.focusOn(t, fieldTest)
 	form.adjust(1)
-	if form.test != bench.TestFireTrail {
+	if form.test != bench.TestFireStomp {
 		t.Fatalf("test = %d", form.test)
 	}
 	form.adjust(-1)

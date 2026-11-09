@@ -24,7 +24,7 @@ constexpr uint8_t RECIPE_MAX_KNOBS = 5;
 constexpr uint8_t RECIPE_MAX_TAIL_PIXELS = 60;
 
 // Names a recipe can't take.
-constexpr const char* const RECIPE_RESERVED_NAMES[] = {"off", "flow", "fire-trail"};
+constexpr const char* const RECIPE_RESERVED_NAMES[] = {"off"};
 
 enum class RecipeLayerType : uint8_t {
   Fill = 0,

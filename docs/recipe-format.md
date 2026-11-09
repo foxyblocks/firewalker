@@ -29,7 +29,7 @@ and `designer/src/engine/engine.ts` shows what each layer draws.
 | --- | --- |
 | `format` | Always `firewalker-recipe` |
 | `version` | `1` for the original layers and sources, `2` for Band or audio. New firmware reads both |
-| `name` | 1 to 12 characters: a lowercase letter, then `a-z`, `0-9`, or `-`. Not `off`, `flow`, or `fire-trail`, which the boot already uses. The boot lists patterns by this name, and the file is `patterns/<name>.json` |
+| `name` | 1 to 12 characters: a lowercase letter, then `a-z`, `0-9`, or `-`. Only `off` is reserved for turning the strip off. The boot lists patterns by this name, and the file is `patterns/<name>.json` |
 | `description` | Up to 200 characters, for people. The boot never sees it |
 | `layers` | 1 to 8 layers, drawn first to last, so the last one is on top |
 
@@ -104,7 +104,7 @@ Colors the whole strip from a looping palette. Default blend: `over`.
 
 ### `pool`
 
-Flow's tilt gauge. Flat, every pixel sits at `baseline`. As the boot tilts, light drains
+Rainbow-pool's tilt gauge. Flat, every pixel sits at `baseline`. As the boot tilts, light drains
 from the up end, and the pixels left brighten toward full, down to one pixel at the down end
 at full tilt. It paints gray, so use it with `multiply` to shape the layers below.
 
@@ -145,13 +145,12 @@ Bands a stomp launches along the strip. Default blend: `over`.
 | `brightness` | 0 to 1, knob, read once when the stomp lands | `stompStrength` 0.3 to 1 |
 | `maxFronts` | 1 to 16 fronts running at once. Further stomps wait for a free one | 16 |
 
-- **`down-point`** is flow's trail. Each side of the foot gets a source at the point the
+- **`down-point`** is rainbow-pool's trail. Each side of the foot gets a source at the point the
   tilt picks, from the heel at full heel down to the toe at full toe down, and sends a front
   each way. Fronts stop at the toe and heel.
-- **`down-end`** is fire-trail's. Toe down sends one front up each side from the toe to the
+- **`down-end`** is fire-stomp's. Toe down sends one front up each side from the toe to the
   heel, heel down does the reverse, and flat sends four fronts out from the middle of each
-  side. fire-trail counts 8° from level as flat. A recipe sees tilt, not degrees, so
-  `flatZone` sets it instead.
+  side. `flatZone` sets how close to level counts as flat, as a fraction of calibrated tilt.
 
 Bands wipe in where they start and out where they end.
 

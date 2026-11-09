@@ -316,8 +316,8 @@ export class RecipeEngine {
   }
 
   // Where a stomp's fronts start: one source on each arc, f of the way from heel to toe, and
-  // a front each way along both, skipping any with no room to move. Down point is flow's, with
-  // f following the tilt. Down end is fire-trail's, with f snapped to the heel, the middle, or
+  // a front each way along both, skipping any with no room to move. Down point is rainbow-pool's, with
+  // f following the tilt. Down end is fire-stomp's, with f snapped to the heel, the middle, or
   // the toe, so a trail runs from the end that's down to the other one.
   private trailSpawns(from: TrailLayer["from"], flatZone: number): Pick<Front, "head" | "dir" | "lo" | "hi">[] {
     const { toe, heel } = this.layout;

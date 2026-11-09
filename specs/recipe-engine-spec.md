@@ -1,5 +1,10 @@
 # Recipe engine, built-in recipes, and upload
 
+> FOX-281 update: every pattern now uses the recipe engine. `rainbow-pool` and `fire-stomp`
+> replace the native renderers; saved `flow` and `fire-trail` selections resume as those recipes.
+> Only `off` remains reserved, and all selectable recipes share one alphabetical list. These
+> decisions supersede the native-pattern and retirement sections of this implementation plan.
+
 Status: Approved by foxy on 2026-11-04, with `starfield` and `lava-pour` taken out of the built-ins.
 Recipe format version 1 froze on 2026-11-05 at the limits in `spec.ts`, after measuring on boot `3EB5`.
 Firmware work starts on the `recipe-engine` branch, cut from `main` once PR #9 merges.

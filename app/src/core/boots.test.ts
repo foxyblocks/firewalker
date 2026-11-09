@@ -83,7 +83,7 @@ describe("knowing the boots", () => {
   });
 
   it("remembers labels across launches and reconnects on its own", async () => {
-    const { left, right, storage } = await pair({ pattern: "fire-trail" });
+    const { left, right, storage } = await pair({ pattern: "fire-stomp" });
     left.detach();
     right.detach();
 
@@ -92,7 +92,7 @@ describe("knowing the boots", () => {
     await settle();
 
     expect(relaunched.sides()).toEqual(["left", "right"]);
-    expect(relaunched.client("left")?.getState().status?.pattern).toBe("fire-trail");
+    expect(relaunched.client("left")?.getState().status?.pattern).toBe("fire-stomp");
     expect(left.connected && right.connected).toBe(true);
   });
 
@@ -194,24 +194,24 @@ describe("choosing what a tap controls", () => {
 
   it("sends a Both command to each boot", async () => {
     const { left, right, store } = await pair();
-    store.selectPattern("fire-trail");
+    store.selectPattern("fire-stomp");
     await settle();
-    expect(left.pattern).toBe("fire-trail");
-    expect(right.pattern).toBe("fire-trail");
+    expect(left.pattern).toBe("fire-stomp");
+    expect(right.pattern).toBe("fire-stomp");
   });
 
   it("never touches the other boot from a single tab", async () => {
     const { left, right, store } = await pair();
     store.setTarget("left");
 
-    store.selectPattern("fire-trail");
+    store.selectPattern("fire-stomp");
     store.setPower(false);
     store.setBrightness(40);
     await settle();
 
     expect(left.pattern).toBe("off");
     expect(left.brightness).toBe(40);
-    expect(right.pattern).toBe("flow");
+    expect(right.pattern).toBe("rainbow-pool");
     expect(right.brightness).toBe(24);
     expect(right.received.filter((line) => line !== "status" && line !== "patterns" && line !== "audio")).toEqual([]);
   });
@@ -222,86 +222,86 @@ describe("choosing what a tap controls", () => {
     right.dropLink();
     await settle();
 
-    store.selectPattern("fire-trail");
+    store.selectPattern("fire-stomp");
     await settle();
 
-    expect(left.pattern).toBe("fire-trail");
+    expect(left.pattern).toBe("fire-stomp");
     expect(store.view().offline).toEqual(["right"]);
   });
 });
 
 describe("the pattern tiles", () => {
   it("shows every pattern, and which boots are running each", async () => {
-    const { store } = await pair({ pattern: "flow" }, { pattern: "fire-trail" });
+    const { store } = await pair({ pattern: "rainbow-pool" }, { pattern: "fire-stomp" });
     expect(store.view().tiles).toEqual([
-      { id: "flow", runningOn: ["left"], missingOn: [] },
-      { id: "fire-trail", runningOn: ["right"], missingOn: [] },
+      { id: "rainbow-pool", runningOn: ["left"], missingOn: [] },
+      { id: "fire-stomp", runningOn: ["right"], missingOn: [] },
     ]);
   });
 
   it("marks a pattern only one boot has", async () => {
     const { store } = await pair(
-      { patterns: ["flow", "fire-trail", "pattern-3"] },
-      { patterns: ["flow", "fire-trail"] },
+      { patterns: ["rainbow-pool", "fire-stomp", "pattern-3"] },
+      { patterns: ["rainbow-pool", "fire-stomp"] },
     );
     expect(store.view().tiles.at(-1)).toEqual({ id: "pattern-3", runningOn: [], missingOn: ["right"] });
   });
 
   it("only shows the chosen boot's patterns on its own tab", async () => {
     const { store } = await pair(
-      { patterns: ["flow", "fire-trail", "pattern-3"] },
-      { patterns: ["flow", "fire-trail"] },
+      { patterns: ["rainbow-pool", "fire-stomp", "pattern-3"] },
+      { patterns: ["rainbow-pool", "fire-stomp"] },
     );
     store.setTarget("right");
-    expect(store.view().tiles.map((tile) => tile.id)).toEqual(["flow", "fire-trail"]);
+    expect(store.view().tiles.map((tile) => tile.id)).toEqual(["rainbow-pool", "fire-stomp"]);
   });
 
   it("sends a one-boot pattern to that boot and names the one that can't run it", async () => {
     const { left, right, store } = await pair(
-      { patterns: ["flow", "pattern-3"] },
-      { patterns: ["flow"] },
+      { patterns: ["rainbow-pool", "pattern-3"] },
+      { patterns: ["rainbow-pool"] },
     );
     store.selectPattern("pattern-3");
     await settle();
 
     expect(left.pattern).toBe("pattern-3");
-    expect(right.pattern).toBe("flow");
+    expect(right.pattern).toBe("rainbow-pool");
     expect(right.received).not.toContain("pattern pattern-3");
     expect(store.view().needsUpdate).toEqual({ pattern: "pattern-3", sides: ["right"] });
   });
 
   it("clears that message once you choose something both can run", async () => {
-    const { store } = await pair({ patterns: ["flow", "pattern-3"] }, { patterns: ["flow"] });
+    const { store } = await pair({ patterns: ["rainbow-pool", "pattern-3"] }, { patterns: ["rainbow-pool"] });
     store.selectPattern("pattern-3");
     await settle();
-    store.selectPattern("flow");
+    store.selectPattern("rainbow-pool");
     expect(store.view().needsUpdate).toBeUndefined();
   });
 
   it("keeps showing the patterns of a boot that went offline", async () => {
-    const { left, store } = await pair({ patterns: ["flow", "pattern-3"] });
+    const { left, store } = await pair({ patterns: ["rainbow-pool", "pattern-3"] });
     store.setTarget("left");
     left.reachable = false;
     left.dropLink();
     await settle();
 
-    expect(store.view().tiles.map((tile) => tile.id)).toEqual(["flow", "pattern-3"]);
+    expect(store.view().tiles.map((tile) => tile.id)).toEqual(["rainbow-pool", "pattern-3"]);
     expect(store.view().controllable).toBe(false);
   });
 
   it("shows which pattern turning on will bring back, before the boot confirms", async () => {
-    const { store } = await pair({ pattern: "off", lastLit: "fire-trail" }, { pattern: "off", lastLit: "flow" });
+    const { store } = await pair({ pattern: "off", lastLit: "fire-stomp" }, { pattern: "off", lastLit: "rainbow-pool" });
     store.setPower(true);
     expect(store.view().tiles).toEqual([
-      { id: "flow", runningOn: ["right"], missingOn: [] },
-      { id: "fire-trail", runningOn: ["left"], missingOn: [] },
+      { id: "rainbow-pool", runningOn: ["right"], missingOn: [] },
+      { id: "fire-stomp", runningOn: ["left"], missingOn: [] },
     ]);
   });
 
   it("shows a pending choice right away", async () => {
     const { store } = await pair();
-    store.selectPattern("fire-trail");
-    expect(store.view().tiles.find((tile) => tile.id === "fire-trail")?.runningOn).toEqual(["left", "right"]);
+    store.selectPattern("fire-stomp");
+    expect(store.view().tiles.find((tile) => tile.id === "fire-stomp")?.runningOn).toEqual(["left", "right"]);
   });
 });
 
@@ -320,7 +320,7 @@ describe("calibrating and naming", () => {
 
 describe("power and brightness on Both", () => {
   it("reads as on if either boot is lit, and turns both off", async () => {
-    const { left, right, store } = await pair({ pattern: "off" }, { pattern: "flow" });
+    const { left, right, store } = await pair({ pattern: "off" }, { pattern: "rainbow-pool" });
     expect(store.view().on).toBe(true);
 
     store.setPower(false);
@@ -442,7 +442,7 @@ describe("the save and warning summary", () => {
   it("names a boot that didn't answer", async () => {
     const { right, store } = await pair();
     right.unresponsive = true;
-    store.selectPattern("fire-trail");
+    store.selectPattern("fire-stomp");
     await vi.advanceTimersByTimeAsync(2100);
     expect(store.view().noAnswer).toEqual(["right"]);
   });

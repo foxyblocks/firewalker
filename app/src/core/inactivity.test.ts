@@ -79,10 +79,10 @@ it("releases a polling remote, then reads another client's changes on wake", asy
   await vi.advanceTimersByTimeAsync(120250);
   expect(client.getState().link).toBe("sleeping");
   expect(boot.connected).toBe(false);
-  boot.pattern = "fire-trail";
+  boot.pattern = "fire-stomp";
   idle.activity();
   await vi.advanceTimersByTimeAsync(400);
-  expect(client.getState().status?.pattern).toBe("fire-trail");
+  expect(client.getState().status?.pattern).toBe("fire-stomp");
   stopPolling();
   idle.stop();
   await client.disconnect();

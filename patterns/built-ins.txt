@@ -1,6 +1,7 @@
 # Recipes compiled into the firmware, so every boot ships with them. One name per line.
 # Everything else in this folder can still be uploaded to a boot.
 # After changing this by hand, run `bun run build-recipes` in designer/ and flash the boots.
+bass-ripple
 comet
 fire-stomp
 rainbow-pool

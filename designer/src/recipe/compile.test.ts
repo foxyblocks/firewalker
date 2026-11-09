@@ -88,7 +88,7 @@ describe("compileRecipe", () => {
   });
 
   it("refuses an invalid recipe, using the validator's words", () => {
-    expect(compileRecipe(recipe("flow", newLayer("fill")))).toMatchObject({ ok: false, errors: ['"flow" is reserved.'] });
+    expect(compileRecipe(recipe("off", newLayer("fill")))).toMatchObject({ ok: false, errors: ['"off" is reserved.'] });
   });
 
   it("refuses a recipe over the limit, saying how far over, and still reports its size", () => {

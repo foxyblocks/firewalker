@@ -20,7 +20,7 @@ func TestCacheRemembersABoardAcrossRuns(t *testing.T) {
 	err := OpenCache(path).Update("99C817E5", func(r *Record) {
 		r.ID = "3ED8"
 		r.Layout = &SavedLayout{LEDs: 94, Toe: 86, Heel: 48}
-		r.LastFlashed = "bench flow"
+		r.LastFlashed = "bench rainbow-pool"
 		r.FlashedAt = flashed
 	})
 	if err != nil {
@@ -31,7 +31,7 @@ func TestCacheRemembersABoardAcrossRuns(t *testing.T) {
 	if !ok {
 		t.Fatal("expected the board to be remembered")
 	}
-	if got.ID != "3ED8" || got.LastFlashed != "bench flow" || !got.FlashedAt.Equal(flashed) {
+	if got.ID != "3ED8" || got.LastFlashed != "bench rainbow-pool" || !got.FlashedAt.Equal(flashed) {
 		t.Fatalf("got %+v", got)
 	}
 	if got.Layout == nil || *got.Layout != (SavedLayout{LEDs: 94, Toe: 86, Heel: 48}) {
@@ -46,11 +46,11 @@ func TestCacheUpdateKeepsEverythingElse(t *testing.T) {
 	cache := OpenCache(path)
 	mustUpdate(t, cache, "LEFT", func(r *Record) { r.Layout = &SavedLayout{LEDs: 110, Toe: 36, Heel: 91} })
 	mustUpdate(t, cache, "RIGHT", func(r *Record) { r.ID = "3ED8" })
-	mustUpdate(t, cache, "LEFT", func(r *Record) { r.LastFlashed = "bench flow" })
+	mustUpdate(t, cache, "LEFT", func(r *Record) { r.LastFlashed = "bench rainbow-pool" })
 
 	reopened := OpenCache(path)
 	left, _ := reopened.Get("LEFT")
-	if left.Layout == nil || left.LastFlashed != "bench flow" {
+	if left.Layout == nil || left.LastFlashed != "bench rainbow-pool" {
 		t.Fatalf("left = %+v", left)
 	}
 	if right, _ := reopened.Get("RIGHT"); right.ID != "3ED8" {

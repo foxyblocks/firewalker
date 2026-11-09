@@ -16,7 +16,7 @@ import (
 type Record struct {
 	ID          string       `json:"id,omitempty"` // the boot's own id, such as 3ED8
 	Layout      *SavedLayout `json:"layout,omitempty"`
-	LastFlashed string       `json:"lastFlashed,omitempty"` // such as "bench flow" or "imu_debug"
+	LastFlashed string       `json:"lastFlashed,omitempty"` // such as "bench rainbow-pool" or "imu_debug"
 	FlashedAt   time.Time    `json:"flashedAt,omitzero"`
 }
 

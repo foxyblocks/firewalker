@@ -290,8 +290,8 @@ static void test_checks_a_name_is_spelled_legally() {
 
 static void test_knows_the_reserved_names() {
   TEST_ASSERT_TRUE(recipeNameReserved("off"));
-  TEST_ASSERT_TRUE(recipeNameReserved("flow"));
-  TEST_ASSERT_TRUE(recipeNameReserved("fire-trail"));
+  TEST_ASSERT_FALSE(recipeNameReserved("flow"));
+  TEST_ASSERT_FALSE(recipeNameReserved("fire-trail"));
   TEST_ASSERT_FALSE(recipeNameReserved("comet"));
 }
 

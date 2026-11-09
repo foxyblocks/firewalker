@@ -57,7 +57,7 @@ function memoryStorage(initial: Record<string, string> = {}): KeyValueStore {
 function fakeSetup(params: URLSearchParams): { transport: Transport; storage: KeyValueStore } {
   const proto = params.get("proto") === null ? undefined : Number(params.get("proto"));
   const extraPatterns = Math.max(0, Number(params.get("patterns") ?? 2) - 2);
-  const patterns = ["flow", "fire-trail", ...Array.from({ length: extraPatterns }, (_, index) => `pattern-${index + 3}`)];
+  const patterns = ["rainbow-pool", "fire-stomp", ...Array.from({ length: extraPatterns }, (_, index) => `pattern-${index + 3}`)];
   // Current firmware: a new boot starts at its soft cap of 96, with the cap on.
   const brightness =
     params.get("cap") === "none" ? {} : { brightness: 96, maxBrightness: 255, capBrightness: 96 };

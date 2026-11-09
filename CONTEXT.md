@@ -12,21 +12,20 @@ code, issues, and docs rather than drifting to synonyms.
   `imu_debug`, `bench`). Distinguishes which **build** is compiled — the app, the
   IMU sensor-debug build, or a one-off strip test. Do **not** use "mode" for a
   visual behavior — that's a **Pattern**.
-- **Pattern** — a *runtime-selectable* visual behavior of the strip (**flow**,
-  **fire-trail**). One firmware holds the active pattern, and the **remote**
-  switches between them live or turns the strip off. _Avoid_: "light mode",
+- **Pattern** — a *runtime-selectable* visual behavior of the strip (**rainbow-pool**,
+  **fire-stomp**, **comet**). Every pattern is a **recipe**. One firmware holds the active
+  pattern, and the **remote** switches between them live or turns the strip off. _Avoid_: "light mode",
   "animation mode".
-- **Fire-trail** — the Pattern where each **stomp** spawns a **trail** from whichever
+- **Fire-stomp** — the Pattern where each **stomp** spawns a **trail** from whichever
   part of the boot is down, running along both sides of the foot to the opposite part;
   several stack at once.
-- **Flow** — the Pattern where the strip shares one hue that slowly rotates
+- **Rainbow-pool** — the Pattern where the strip shares one hue that slowly rotates
   through the spectrum and "pools": at level it glows a flat dim baseline, and
   as the foot tilts brightness drains from the up-end and concentrates into a
   tight pool at whichever end tilts down, tracking the shoe's **orientation**.
   A **stomp** launches **trail**
   fronts from the tilt-derived "down" point — up to 4 bands (2 per arc of the
-  strip ring) diverging to the heel and toe, each a white head → current hue →
-  previous hue.
+  strip ring) diverging to the heel and toe, each a white head → yellow → orange tail.
 - **Strip** — one addressable RGB LED strip on one data pin: a BTF FCOB strip with
   an XGB1338 controller, which is WS2812B-compatible. Routed as a closed **ring**
   around the foot perimeter: pixel 0 starts directly under the controller, runs
@@ -53,13 +52,13 @@ code, issues, and docs rather than drifting to synonyms.
   `LED_BRIGHTNESS_SOFT_CAP` (96), so a USB-fed strip stays inside what USB supplies. A new boot
   starts at it. Each boot saves whether its cap is on, and turning it back on brings brightness
   down to it. Off is for a dedicated 5 V supply.
-- **Trail** — the bands of fire one stomp spawns, each `FIRE_TRAIL_LEN` pixels long.
+- **Trail** — a moving band one stomp spawns, with a head-to-tail color gradient.
   Toe down runs one band per side from the toe to the heel, heel down runs them from the
   heel to the toe, and flat runs four outward from the middle of each side. Bands **wipe
-  in** at their origin and **out** at the far end (no hold). Several trails run at once
-  (`FIRE_TRAIL_MAX`).
-- **Fire gradient** — a trail's color ramp: a hot head cooling through the
-  `FIRE[]` stops to a red tail, precomputed once per `FIRE_TRAIL_LEN`.
+  in** at their origin and **out** at the far end (no hold). Several trails run at once,
+  up to the recipe's limit on simultaneous fronts.
+- **Fire gradient** — a trail's color ramp: a white-hot head cooling through yellow
+  and orange to a red tail.
 - **Stomp** — a trigger event: a foot impact. Detected from an **IMU**
   acceleration spike.
 - **IMU** — the MG24 Sense's onboard LSM6DS3TR-C accelerometer + gyroscope, the
@@ -67,7 +66,7 @@ code, issues, and docs rather than drifting to synonyms.
   above the ~9.81 m/s² gravity baseline.
 - **Orientation** — the shoe's tilt relative to gravity, estimated by fusing the
   accelerometer (absolute "down") with the gyroscope (rotation rate) in a
-  complementary filter. Drives the **flow** Pattern. In code this is the
+  complementary filter. Drives the **rainbow-pool** Pattern. In code this is the
   fore-aft **tilt** (`imuTiltFwd()`, `tiltFwd`, `IMU_TILT_*` — "tilt" is the
   code spelling of Orientation's fore-aft component). The pure fusion math
   lives in `include/firewalker_orientation.h` and is tested off-hardware
@@ -88,8 +87,6 @@ code, issues, and docs rather than drifting to synonyms.
 - **Recipe** — a pattern described as data rather than code: a JSON file of **layers**
   (`docs/recipe-format.md`). The **designer** makes them, and `patterns/` keeps them. A boot
   runs the compiled form, which a recipe has to fit in 254 bytes to have (ADR-0005).
-- **Native pattern** — a pattern written in C++: `flow` and `fire-trail`. A recipe can't take
-  one of their names.
 - **Kept recipe**, or **keeper** — any recipe in `patterns/`. It's in the repo, but it only
   reaches a boot by being built in or uploaded.
 - **Built-in recipe** — a keeper listed in `patterns/built-ins.txt`, compiled into the firmware
@@ -114,7 +111,7 @@ code, issues, and docs rather than drifting to synonyms.
 ## Scope guardrails (current phase)
 
 In scope now: one strip per shoe; the **IMU** as the sole stomp sensor; runtime
-**patterns** on the app, both native and **recipes**, built in or uploaded; the BLE and USB
+**patterns** on the app, all **recipes**, built in or uploaded; the BLE and USB
 **remote**; per-controller **settings**; the `imu_debug` build and the `cli` bench tool; and the
 **designer**. Still
 explicitly **out** of scope: the 2-D "perimeter bubble" flow (roll as well as pitch),

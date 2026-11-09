@@ -10,6 +10,10 @@ export interface PatternDisplay {
 }
 
 const KNOWN_PATTERNS: Record<string, PatternDisplay> = {
+  "rainbow-pool": { name: "Rainbow pool", description: "Tilt pools color" },
+  "fire-stomp": { name: "Fire stomp", description: "Stomps launch fire" },
+  comet: { name: "Comet", description: "Tilt speeds up neon comets" },
+  // Older firmware still reports these IDs when paired with the current remote.
   flow: { name: "Flow", description: "Tilt pools color" },
   "fire-trail": { name: "Fire-trail", description: "Stomps launch fire" },
 };

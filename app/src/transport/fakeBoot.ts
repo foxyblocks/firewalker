@@ -157,9 +157,9 @@ export class FakeBoot {
     this.deviceId = `fake-${this.id}`;
     this.name = `Firewalker-${this.id}`;
     this.proto = options.proto ?? ORIENTATION_PROTOCOL_VERSION;
-    this.availablePatterns = options.patterns ?? ["flow", "fire-trail"];
-    this.pattern = options.pattern ?? "flow";
-    this.lastLit = options.lastLit ?? (this.pattern === "off" ? "flow" : this.pattern);
+    this.availablePatterns = options.patterns ?? ["rainbow-pool", "fire-stomp"];
+    this.pattern = options.pattern ?? "rainbow-pool";
+    this.lastLit = options.lastLit ?? (this.pattern === "off" ? "rainbow-pool" : this.pattern);
     this.brightness = options.brightness ?? 24;
     this.hardMaxBrightness = options.maxBrightness ?? 64;
     this.capBrightness = options.capBrightness;

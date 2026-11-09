@@ -6,6 +6,8 @@
 //
 // Each loop pass reads the sensor, handles any remote commands, saves settings that
 // are due, and renders at most one frame. See docs/remote-protocol.md for commands.
+// firewalker_pattern_list.h resolves names and restores saved selections; RecipePattern
+// renders the chosen built-in or uploaded bytes through the shared recipe engine.
 
 #include "modes/final_app.h"
 
@@ -24,8 +26,6 @@
 #include "firewalker_settings.h"
 #include "firewalker_settings_store.h"
 #include "generated/recipe_builtins.h"
-#include "patterns/fire_trail.h"
-#include "patterns/flow.h"
 #include "patterns/pattern.h"
 #include "patterns/recipe_pattern.h"
 
@@ -46,8 +46,6 @@ static constexpr PoseCaptureLimits CAPTURE_LIMITS = {
     CALIBRATION_WINDOW_MS, CALIBRATION_NO_SAMPLE_MS, CALIBRATION_MIN_SAMPLES,
     CALIBRATION_MAX_SPREAD_DEG};
 
-static FlowPattern flow;
-static FireTrailPattern fireTrail;
 static RecipePattern recipePattern;
 static Pattern* activePattern = nullptr;  // null when the strip is off
 
@@ -151,9 +149,6 @@ static bool tryShowPattern(const char* name) {
       return false;
     case PatternSource::Off:
       break;
-    case PatternSource::Native:
-      next = found.index == 0 ? (Pattern*)&flow : (Pattern*)&fireTrail;
-      break;
     case PatternSource::BuiltIn: {
       const BuiltInRecipe& recipe = RECIPE_BUILTINS[found.index];
       if (recipePattern.load(recipe.bytes, recipe.size) != RecipeDecodeResult::Ok) return false;
@@ -181,13 +176,11 @@ static bool tryShowPattern(const char* name) {
   return true;
 }
 
-// Shows the saved pattern. A saved name can stop existing, because a recipe can be deleted, so the
-// boot then falls back to flow and saves that. It keeps its brightness, poses, and strip layout.
+// Restores both saved selections against the current catalog before showing the active one.
+// This also updates the remembered pattern while off. An unreadable recipe falls back to
+// rainbow-pool without disturbing brightness, poses, or strip layout.
 static void showSavedPattern() {
-  if (findPattern(CATALOG, settings.lastLitPattern).source == PatternSource::Unknown) {
-    copyPatternName(settings.lastLitPattern, PATTERN_DEFAULT);
-    saveScheduler.markChanged(millis());
-  }
+  if (restoreSavedPatterns(CATALOG, settings)) saveScheduler.markChanged(millis());
   if (tryShowPattern(settings.pattern)) return;
   Serial.print(F("[firewalker] can't show saved pattern: "));
   Serial.println(settings.pattern);
@@ -244,7 +237,7 @@ static void finishUpload() {
 }
 
 // Deletes an upload. If it was on the strip or what turning on returns to, a built-in of the same name
-// takes over if there is one, and otherwise the boot falls back to flow.
+// takes over if there is one, and otherwise the boot falls back to rainbow-pool.
 static void deleteUpload(const char* name) {
   int16_t slot = -1;
   for (uint8_t i = 0; i < RECIPE_SLOTS; i++) {
@@ -603,7 +596,6 @@ static void renderIfDue(unsigned long now) {
 
   PatternInput input;
   input.tiltFwd = imuTiltFwd();
-  input.tiltDeg = imuTiltDeg();
   input.stomp = stompPending;
   input.stompStrength = imuStompStrength();
   input.dt = patternStarting ? 0 : elapsed;

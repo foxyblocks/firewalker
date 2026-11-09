@@ -2,7 +2,7 @@ import { STRIP_PIXELS } from "./PixelSlider";
 
 /**
  * Live tilt as a strip: light pools from the center toward whichever end is down, which
- * is roughly what the flow pattern does on the boot itself.
+ * is roughly what the rainbow-pool pattern does on the boot itself.
  */
 export function TiltStrip({ tilt }: { tilt: number }) {
   const center = (STRIP_PIXELS - 1) / 2;

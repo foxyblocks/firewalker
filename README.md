@@ -4,14 +4,17 @@ Wearable LED-shoe firmware, inspired by Adafruit's Gemma LED Sneakers / Firewalk
 guide. Built with **PlatformIO + Arduino framework**.
 
 Each shoe is a Seeed Studio XIAO MG24 Sense driving one addressable LED strip. The
-board's onboard motion sensor drives two patterns:
+board's onboard motion sensor drives recipe patterns:
 
-- **flow**: the strip shares one hue that slowly rotates through the spectrum and
+- **rainbow-pool**: the strip shares one hue that slowly rotates through the spectrum and
   "pools" toward whichever end of the foot tilts down. A stomp launches trails from
   the down-point, or flashes the strip white if the foot is level.
-- **fire-trail**: each stomp launches fire-gradient bands from whichever part of the
+- **fire-stomp**: each stomp launches fire-gradient bands from whichever part of the
   boot is down. They run along both sides of the foot to the opposite part, or outward
   from the middle if the foot is level, and several can stack at once.
+
+`comet` also ships built in; other recipes can be uploaded from the designer.
+See [`patterns/`](patterns/) for the catalog. Every pattern uses the same recipe engine.
 
 Both shoes run the same firmware. Each one remembers its own pattern, brightness, and
 calibrated poses across power cycles, and can be controlled without reflashing
@@ -56,7 +59,7 @@ Type commands into the USB console, or send the same commands over BLE:
 ```text
 status
 patterns
-pattern fire-trail
+pattern fire-stomp
 pattern off
 brightness 32
 calibrate neutral
@@ -181,14 +184,14 @@ replacement. Uploads preserve the stored flash settings; an older app may not un
 The one-off strip tests live under `install` because they replace the running firmware:
 
 ```bash
-./cli install flow ABCD --brightness 16
-./cli install flow ABCD --tilt=-0.5
-./cli install flow ABCD --stomp-every 2s
-./cli install flow ABCD --motion --log-motion
-./cli install fire-trail ABCD --motion
+./cli install rainbow-pool ABCD --brightness 16
+./cli install rainbow-pool ABCD --tilt=-0.5
+./cli install rainbow-pool ABCD --stomp-every 2s
+./cli install rainbow-pool ABCD --motion --log-motion
+./cli install fire-stomp ABCD --motion
 ./cli install color ABCD --color '#ff8000' --lit 10
 ./cli install off ABCD
-./cli install flow --build-only
+./cli install rainbow-pool --build-only
 ```
 
 Pattern tests use each selected boot's saved strip layout, then its remembered layout, then
@@ -208,8 +211,8 @@ forms, build selection, boot information, raw protocol console, and searchable l
 `3`, and `5` select screens; `p` picks a boot, `a` installs the app, `:` opens the protocol
 console, and `q` exits. Its displayed shell commands use the `install` hierarchy.
 
-Older top-level `app`, `flow`, `fire-trail`, `color`, and `off` commands remain hidden aliases
-for existing scripts. `./cli web` still serves the phone remote; `./cli web --fake` uses
+Top-level recipe commands, `app`, `color`, and `off` remain hidden aliases for existing scripts.
+The old `flow` and `fire-trail` bench names also work as aliases for `rainbow-pool` and `fire-stomp`. `./cli web` still serves the phone remote; `./cli web --fake` uses
 pretend boots.
 
 ## Tests

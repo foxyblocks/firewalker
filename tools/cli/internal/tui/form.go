@@ -28,7 +28,7 @@ const (
 )
 
 // testOrder is the order the Test row offers its choices in.
-var testOrder = []int{bench.TestFlow, bench.TestFireTrail, bench.TestColor, bench.TestOff}
+var testOrder = []int{bench.TestRainbowPool, bench.TestFireStomp, bench.TestColor, bench.TestOff}
 
 var colorChoices = []string{"cycle", "white", "red", "green", "blue"}
 
@@ -54,7 +54,7 @@ type benchForm struct {
 func newBenchForm(config bench.StripLayout) *benchForm {
 	form := &benchForm{
 		config: config,
-		test:   bench.TestFlow,
+		test:   bench.TestRainbowPool,
 		values: map[fieldID]string{
 			fieldTilt:       "0",
 			fieldStomp:      "0s",
@@ -167,7 +167,7 @@ func (f *benchForm) nudgeDuration(field fieldID, step int, by, floor time.Durati
 	}
 }
 
-// setTest switches tests. Fire trails only appear on a stomp, so fire-trail starts with a
+// setTest switches tests. Fire trails only appear on a stomp, so fire-stomp starts with a
 // timer, the same default as its subcommand. A timer someone chose stays.
 func (f *benchForm) setTest(test int) {
 	previous := f.test
@@ -178,7 +178,7 @@ func (f *benchForm) setTest(test int) {
 }
 
 func defaultStomp(test int) string {
-	if test == bench.TestFireTrail {
+	if test == bench.TestFireStomp {
 		return "1s"
 	}
 	return "0s"
@@ -253,7 +253,7 @@ func (f *benchForm) build(serial string) (*bench.Options, *bench.Config, error) 
 		o.Brightness = number(fieldBrightness, "Brightness")
 	}
 	switch f.test {
-	case bench.TestFlow, bench.TestFireTrail:
+	case bench.TestRainbowPool, bench.TestFireStomp:
 		o.Pixels = number(fieldLEDs, "LEDs")
 		c.Toe = number(fieldToe, "Toe")
 		c.Heel = number(fieldHeel, "Heel")

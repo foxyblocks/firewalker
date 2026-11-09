@@ -29,8 +29,8 @@ type Options struct {
 
 // The values match BENCH_TEST in src/modes/bench.cpp.
 const (
-	TestFlow = iota
-	TestFireTrail
+	TestRainbowPool = iota
+	TestFireStomp
 	TestColor
 	TestOff
 )
@@ -53,7 +53,7 @@ type Config struct {
 
 // IsPattern says whether this test runs a real pattern on the ring, which is what makes
 // the toe and heel matter.
-func (c *Config) IsPattern() bool { return c.Test == TestFlow || c.Test == TestFireTrail }
+func (c *Config) IsPattern() bool { return c.Test == TestRainbowPool || c.Test == TestFireStomp }
 
 // StripLayout is the strip's size and ring positions. Toe and heel can come in either
 // order, because a mirrored boot runs the ring the other way around.
@@ -274,7 +274,7 @@ func bit(value bool) int {
 }
 
 // TestNames maps each test to its subcommand name.
-var TestNames = map[int]string{TestFlow: "flow", TestFireTrail: "fire-trail", TestColor: "color", TestOff: "off"}
+var TestNames = map[int]string{TestRainbowPool: "rainbow-pool", TestFireStomp: "fire-stomp", TestColor: "color", TestOff: "off"}
 
 // Args writes a validated test as `./cli` arguments, leaving out whatever a run would
 // work out by itself. saved is the layout a run would find on its own, so a test on the
@@ -323,9 +323,9 @@ func Args(o *Options, c *Config, saved StripLayout) []string {
 }
 
 // defaultStompEvery is the timer a test gets without motion when nothing says otherwise.
-// Fire trails only appear on a stomp, so a fire-trail test with no timer would stay dark.
+// Fire trails only appear on a stomp, so a fire-stomp test with no timer would stay dark.
 func defaultStompEvery(test int) time.Duration {
-	if test == TestFireTrail {
+	if test == TestFireStomp {
 		return time.Second
 	}
 	return 0

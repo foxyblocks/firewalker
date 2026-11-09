@@ -149,7 +149,9 @@ function Tile({
   const { name, description } = patternDisplay(tile.id);
   const running = tile.runningOn.length > 0;
   const hint = tile.missingOn.length > 0 ? `${names(tile.missingOn)} needs update` : description;
-  const previewClass = tile.id === "flow" ? "preview-flow" : tile.id === "fire-trail" ? "preview-fire" : "preview-other";
+  const previewClass = ["rainbow-pool", "flow"].includes(tile.id)
+    ? "preview-flow"
+    : ["fire-stomp", "fire-trail"].includes(tile.id) ? "preview-fire" : "preview-other";
 
   return (
     <button type="button" className={`tile${running ? " tile-on" : ""}`} aria-pressed={running} disabled={disabled} onClick={onSelect}>

@@ -8,7 +8,7 @@
 //
 //   > brightness 32
 //   < {"t":"ack","cmd":"brightness","ok":true}
-//   < {"t":"status","pattern":"flow","brightness":32,...}
+//   < {"t":"status","pattern":"rainbow-pool","brightness":32,...}
 //
 // Every formatter writes into a caller-owned buffer and truncates safely rather
 // than overflowing. Nothing here allocates. Numbers format without printf's float

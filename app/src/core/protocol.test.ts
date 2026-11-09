@@ -4,10 +4,10 @@ import { commands, LineSplitter, parseLine } from "./protocol";
 // change there that the app doesn't understand fails here first.
 const FIRMWARE_LINES = {
   status:
-    '{"t":"status","proto":2,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":96,"capped":true,"capBrightness":96,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}',
+    '{"t":"status","proto":2,"id":"3ED1","pattern":"off","lit":"rainbow-pool","brightness":24,"maxBrightness":96,"capped":true,"capBrightness":96,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}',
   ackOk: '{"t":"ack","cmd":"brightness","ok":true}',
   ackFail: '{"t":"ack","cmd":"brightness","ok":false,"error":"out-of-range"}',
-  patterns: '{"t":"patterns","list":["flow","fire-trail"]}',
+  patterns: '{"t":"patterns","list":["rainbow-pool","fire-stomp"]}',
   capturing: '{"t":"calibrate","pose":"heel","state":"capturing"}',
   captured: '{"t":"calibrate","pose":"heel","state":"ok","angleDeg":-18.40,"tilt":-1.00}',
   captureFailed: '{"t":"calibrate","pose":"heel","state":"failed","reason":"motion"}',
@@ -40,7 +40,7 @@ describe("parseLine", () => {
       preview: false,
       id: "3ED1",
       pattern: "off",
-      lit: "flow",
+      lit: "rainbow-pool",
       brightness: 24,
       maxBrightness: 96,
       sensor: "ok",
@@ -54,7 +54,7 @@ describe("parseLine", () => {
   it("reads acks, patterns, calibration progress, and motion lines", () => {
     expect(parseLine(FIRMWARE_LINES.ackOk)).toEqual({ t: "ack", cmd: "brightness", ok: true });
     expect(parseLine(FIRMWARE_LINES.ackFail)).toMatchObject({ ok: false, error: "out-of-range" });
-    expect(parseLine(FIRMWARE_LINES.patterns)).toEqual({ t: "patterns", list: ["flow", "fire-trail"] });
+    expect(parseLine(FIRMWARE_LINES.patterns)).toEqual({ t: "patterns", list: ["rainbow-pool", "fire-stomp"] });
     expect(parseLine(FIRMWARE_LINES.capturing)).toEqual({ t: "calibrate", pose: "heel", state: "capturing" });
     expect(parseLine(FIRMWARE_LINES.captured)).toMatchObject({ state: "ok", pose: "heel", angleDeg: -18.4 });
     expect(parseLine(FIRMWARE_LINES.captureFailed)).toMatchObject({ state: "failed", reason: "motion" });
@@ -106,7 +106,7 @@ describe("LineSplitter", () => {
 describe("commands", () => {
   it("spells each command the way the firmware parses it", () => {
     expect(commands.status()).toBe("status");
-    expect(commands.pattern("fire-trail")).toBe("pattern fire-trail");
+    expect(commands.pattern("fire-stomp")).toBe("pattern fire-stomp");
     expect(commands.power(true)).toBe("power on");
     expect(commands.power(false)).toBe("power off");
     expect(commands.cap(true)).toBe("cap on");
@@ -142,7 +142,7 @@ describe("commands", () => {
       commands.audio(),
       commands.audioGain(100),
       commands.audioCalibrate(),
-      commands.pattern("fire-trail"),
+      commands.pattern("fire-stomp"),
       commands.calibrate("neutral"),
       commands.clearCalibration("heel"),
       commands.brightness(255),

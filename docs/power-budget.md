@@ -34,11 +34,11 @@ The firmware applies brightness to every channel, so requested current scales ro
 
 ## What the patterns draw
 
-- **flow** cycles one hue through the spectrum, so a full strip passes through
+- **rainbow-pool** cycles one hue through the spectrum, so a full strip passes through
   2-channel colors (yellow, cyan, magenta). It rests at 80% per-pixel brightness when
   level, and a level stomp flashes the whole strip **white**, which is its worst case.
-- **fire-trail** uses red-through-yellow, so about 1 to 2 channels per pixel, and only
-  lights the bands that are moving.
+- **fire-stomp** lights moving bands with white heads cooling through yellow and orange
+  to red. Its white heads can use all three channels; overlapping bands can fill the strip.
 
 ## Power profiles
 
@@ -80,6 +80,6 @@ The final battery design is outside this budget, and is tracked in
 ## Levers to stay safe
 
 - Lower the brightness, which scales everything.
-- Shorten `FLOW_TRAIL_LEN` or `FIRE_TRAIL_LEN`, or drop `FIRE_TRAIL_MAX`.
+- Reduce the recipe trail's `length` or `maxFronts` in `patterns/`.
 - Estimate before raising anything: pixels lit × per-pixel current, against the real
   budget of the power source.

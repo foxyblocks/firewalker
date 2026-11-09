@@ -39,14 +39,17 @@ has a C++ recipe engine and commands that upload a recipe and store it on the bo
 
 ## Consequences
 
-- Flow and fire-trail stay in C++ for now. `rainbow-pool` and `fire-stomp` are recipe versions of
-  them, for comparing the two on a real boot before retiring either.
+- Every pattern runs through the recipe engine, including `rainbow-pool` and `fire-stomp`.
+  FOX-281 retires the native `flow` and `fire-trail` renderers in favor of these existing recipes.
+  Saved selections resume as the corresponding recipe, including the remembered selection while off.
+  The recipe names stay canonical; the retired names are available for new uploads.
 - Being in `patterns/` means a recipe is kept in the repo. `patterns/built-ins.txt` chooses which ones
   also get built into the firmware, so every boot ships with them: `rainbow-pool`, `fire-stomp`, and
   `comet`. The others reach a boot by upload.
 - The format is versioned, and a reader refuses a version it doesn't know. Version 1 is frozen, so
   changing a field, an option, or a limit means version 2.
-- Recipes see tilt from -1 to 1, not degrees, so a threshold like fire-trail's flat range
-  (`FIRE_TRAIL_FLAT_DEG`) is a fraction of the calibrated range in a recipe.
+- Recipes see tilt from -1 to 1, not degrees. `fire-stomp` uses a `flatZone` of 0.3, a fraction
+  of the calibrated range. `rainbow-pool` uses its existing warm trail palette instead of
+  following the fill's cycling hue. These recipe visuals are the accepted replacements.
 - The designer has to keep up with the firmware's strip map and patterns. Its strip math is
   a port of `include/firewalker_strip_map.h`, with its own tests.

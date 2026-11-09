@@ -244,7 +244,7 @@ describe("a connected boot", () => {
     const { client } = await connected();
     expect(client.getState().link).toBe("online");
     expect(client.getState().status?.id).toBe("3EB5");
-    expect(client.getState().patterns).toEqual(["flow", "fire-trail"]);
+    expect(client.getState().patterns).toEqual(["rainbow-pool", "fire-stomp"]);
   });
 
   it("ends each command with a newline", async () => {
