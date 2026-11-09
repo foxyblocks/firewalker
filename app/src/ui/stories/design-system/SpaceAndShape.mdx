@@ -1,0 +1,28 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+import { TokenTable } from "../docs/TokenDocs";
+import { RADIUS_TOKENS, SIZE_TOKENS, SPACE_TOKENS } from "../tokens";
+
+<Meta title="Design system/Space and shape" />
+
+# Space and shape
+
+## Space
+
+The phone layout is built on one gutter, `--gap`, at 16px. The steps below are for new work, such as the Studio's wider screens. The phone's styles still use raw values inside components, which is fine at this size.
+
+<TokenTable tokens={SPACE_TOKENS} kind="space" />
+
+## Radius
+
+Bigger things get rounder corners. Cards are the roundest thing on a screen, and pills are fully round.
+
+<TokenTable tokens={RADIUS_TOKENS} kind="radius" />
+
+Off the scale on purpose: pixels (3px), the tile strip (2px), the waveform plot (8px), the inner joined tab (9px), and a switch, whose radius is half its height.
+
+## Size
+
+<TokenTable tokens={SIZE_TOKENS} kind="size" />
+
+- Anything you tap is at least `--target` in both directions, even where it looks smaller, such as the Remote and Boots pills.
+- The phone layout stops growing at `--phone-column` and centers, so it never stretches on a tablet. The Studio has its own desktop layout instead.

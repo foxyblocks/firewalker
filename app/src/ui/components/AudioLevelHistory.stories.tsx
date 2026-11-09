@@ -8,7 +8,9 @@ const samples = Array.from({ length: 76 }, (_, index) => ({
 }));
 
 const meta = {
-  title: "Components/AudioLevelHistory",
+  title: "Components/Data/AudioLevelHistory",
+  tags: ["autodocs"],
+  parameters: { docs: { description: { component: "Fifteen seconds of the boot’s audio level after sensitivity and the quiet floor." } } },
   component: AudioLevelHistory,
   args: { samples, status: "live" },
   decorators: [(Story) => <div className="story-column panel"><Story /></div>],

@@ -1,0 +1,50 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+import { useState } from "react";
+import { PixelSlider } from "../../components/PixelSlider";
+import { TiltStrip } from "../../components/TiltStrip";
+import { DoDont, Specimen } from "../docs/TokenDocs";
+
+<Meta title="Design system/LED language" />
+
+export const Brightness = () => {
+  const [value, setValue] = useState(64);
+  return <PixelSlider label="Brightness" value={value} min={1} max={96} onStart={() => {}} onChange={setValue} onEnd={() => {}} />;
+};
+
+export const Toe = () => {
+  const [value, setValue] = useState(40);
+  return <div className="led-yellow"><PixelSlider label="Toe" shape="point" value={value} min={0} max={106} onStart={() => {}} onChange={setValue} onEnd={() => {}} /></div>;
+};
+
+# LED language
+
+The remote controls a strip of LEDs, so it draws its controls as LEDs. A row of square pixels, lit or dark, is the app's signature, and it should feel like the strip in your hand.
+
+## Three ways a row of pixels speaks
+
+**Fill** lights every pixel up to a value. Brightness uses it.
+
+<Specimen><Brightness /></Specimen>
+
+**Point** lights one pixel. A strip marker, such as the toe, uses it, in the marker's own strip color.
+
+<Specimen><Toe /></Specimen>
+
+**Pool** lights from the center toward a side. Tilt uses it, which is roughly what rainbow-pool does on the boot.
+
+<Specimen>
+  <TiltStrip tilt={0.45} />
+  <div className="strip-ends"><span>Heel down</span><span>Toe down</span></div>
+</Specimen>
+
+## Rules
+
+- A lit pixel glows in its own color. An unlit pixel is `--line` and never glows.
+- Ends are always labeled, such as Heel down and Toe down, because a row alone doesn't say which way is which.
+- A warning outlines pixels in `--wait` rather than coloring them, so the level still reads. The soft cap uses this.
+- Ember pixels are the app's own controls. Blue, yellow, and purple pixels are the strip's layout colors, and nothing else.
+
+<DoDont
+  good={<>Use a pixel row for anything that maps onto the strip: brightness, tilt, a pixel position, a sound level.</>}
+  bad={<>Don't use a pixel row for things that aren't on the strip, such as a progress bar or a count of saves.</>}
+/>

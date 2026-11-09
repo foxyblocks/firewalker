@@ -1,0 +1,125 @@
+/*
+ * Firewalker design tokens. Every color, type size, radius, glow, and duration the remote
+ * draws with is named here, and styles.css uses these names instead of raw values.
+ * Storybook's Design system pages read these at runtime, so they show what the app uses.
+ * src/ui/tokens.test.ts fails when a token here isn't documented in src/ui/stories/tokens.ts.
+ *
+ * Old names (--radius, --gap) stay as aliases so nothing that uses them has to change.
+ */
+
+:root {
+  /* ── Color: ground ─────────────────────────────────────────────────────
+     Darkest to lightest. The app is a night remote, so every surface is near black. */
+  --night: #0b0a09;
+  --surface: #151311;
+  --surface-raised: #1d1a17;
+  --surface-high: #26221e;
+  --line: #2e2a25;
+  --night-veil: rgb(11 10 9 / 82%);
+  --scrim: rgb(0 0 0 / 68%);
+  --hover-wash: rgb(255 255 255 / 5%);
+
+  /* ── Color: ink ────────────────────────────────────────────────────────── */
+  --ink: #f4ede2;
+  --ink-quiet: #a79d90;
+  --ink-faint: #6f675e;
+
+  /* ── Color: ember, the one accent ──────────────────────────────────────
+     Chosen, on, and primary. Never decoration. */
+  --ember: #ff6a1f;
+  --ember-pressed: #ff8440;
+  --ember-soft: rgb(255 106 31 / 16%);
+  --ember-wash: rgb(255 106 31 / 18%);
+
+  /* ── Color: status ─────────────────────────────────────────────────────
+     Good is connected or saved, wait is working or needs a step, bad has failed. */
+  --good: #63d48c;
+  --good-soft: rgb(99 212 140 / 10%);
+  --wait: #ffb52e;
+  --bad: #ff6257;
+  --bad-soft: rgb(255 98 87 / 10%);
+
+  /* ── Color: the strip's own colors ─────────────────────────────────────
+     Layout preview colors, matching STRIP_PREVIEW_*_COLOR in include/config.h, so the
+     screen and the real strip agree. */
+  --led-ring: #3d7dff;
+  --led-toe: #ffc800;
+  --led-heel: #a64dff;
+
+  /* ── Glow ──────────────────────────────────────────────────────────────
+     Lit things glow, like an LED does. Unlit things never glow. */
+  --glow-ember: rgb(255 106 31 / 75%);
+  --glow-ember-strong: rgb(255 106 31 / 70%);
+  --glow-ember-soft: rgb(255 106 31 / 60%);
+  --glow-good: rgb(99 212 140 / 70%);
+  --glow-ring: rgb(61 125 255 / 75%);
+  --glow-toe: rgb(255 200 0 / 75%);
+  --glow-heel: rgb(166 77 255 / 75%);
+
+  /* ── Elevation ─────────────────────────────────────────────────────────── */
+  --shadow-chosen: 0 0 18px var(--ember-wash);
+  --shadow-popover: 0 8px 24px rgb(0 0 0 / 50%);
+  --shadow-segment: 0 1px 4px rgb(0 0 0 / 25%);
+
+  /* ── Pattern previews ──────────────────────────────────────────────────
+     The tile strips that hint at a pattern family. Not used for anything else. */
+  --preview-rainbow: linear-gradient(90deg, #ff3d6e, #ffb52e, #63d48c, #39b6ff, #a56bff, #ff3d6e);
+  --preview-fire: linear-gradient(90deg, transparent 10%, #7a1500, #ff6a1f, #ffd46b, #fff3d0, #7a1500, transparent 90%);
+
+  /* ── Type ──────────────────────────────────────────────────────────────
+     A condensed signage face for names and controls, a mono face for everything read. */
+  --display: "Big Shoulders Display Variable", "Arial Narrow", sans-serif;
+  --mono: "Spline Sans Mono Variable", ui-monospace, Menlo, monospace;
+
+  /* Display sizes (Big Shoulders). */
+  --text-display: 40px;
+  --text-title: 28px;
+  --text-tile: 23px;
+  --text-card: 20px;
+  --text-control: 18px;
+  --text-control-compact: 16px;
+  --text-section: 15px;
+
+  /* Reading sizes (Spline Sans Mono). */
+  --text-body: 14px;
+  --text-small: 12.5px;
+  --text-caption: 12px;
+  --text-hint: 11.5px;
+  --text-label: 11px;
+  --text-micro: 10.5px;
+  --text-chart: 8px;
+
+  /* ── Space ─────────────────────────────────────────────────────────────
+     --gap is the screen gutter and the gap between cards. The steps are for new work. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --gap: var(--space-4);
+
+  /* ── Shape ─────────────────────────────────────────────────────────────── */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-sheet: 22px;
+  --radius-pill: 999px;
+  --radius: var(--radius-lg);
+
+  /* ── Size ──────────────────────────────────────────────────────────────── */
+  --target: 44px;
+  --phone-column: 430px;
+
+  /* ── Motion ────────────────────────────────────────────────────────────
+     Quick for feedback, slow only for things that mirror the boot. All of it stops under
+     prefers-reduced-motion. */
+  --duration-pixel: 90ms;
+  --duration-quick: 140ms;
+  --duration-pulse: 1.4s;
+  --duration-capture: 2s;
+  --ease-standard: ease;
+
+  color-scheme: dark;
+}

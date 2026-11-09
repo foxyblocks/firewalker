@@ -1,0 +1,34 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+import { TokenTable } from "../docs/TokenDocs";
+import { GLOW_TOKENS, MOTION_TOKENS, PREVIEW_TOKENS, SHADOW_TOKENS } from "../tokens";
+
+<Meta title="Design system/Glow and motion" />
+
+# Glow and motion
+
+## Glow
+
+Lit things glow, the way an LED does, and unlit things never do. A glow is always the color of the thing that's lit.
+
+<TokenTable tokens={GLOW_TOKENS} kind="glow" />
+
+## Elevation
+
+The app is mostly flat. Shadows are only for something that floats over content, or for the chosen tab.
+
+<TokenTable tokens={SHADOW_TOKENS} kind="shadow" />
+
+## Pattern previews
+
+<TokenTable tokens={PREVIEW_TOKENS} kind="preview" />
+
+## Motion
+
+Motion is feedback, never decoration. Quick things confirm a touch; slow things mirror something the boot is doing, such as the two-second pose capture.
+
+<TokenTable tokens={MOTION_TOKENS} kind="motion" />
+
+- A waiting dot breathes once every `--duration-pulse`. Anything waiting on you, rather than on its own, holds still.
+- The pose capture fills its button over `--duration-capture`, the same two seconds the firmware reads, so a hold has a visible end.
+- Pattern tile strips run slowly, faster for fire. They stop with everything else.
+- All motion stops under `prefers-reduced-motion`.

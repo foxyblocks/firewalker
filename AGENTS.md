@@ -49,8 +49,10 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
 - `test/` — host-native Unity tests for the pure logic (`pio test -e native`).
 - `app/` — the Capacitor iPhone remote (React + TypeScript, Bun). Each boot has one
   Configuration/Diagnostics detail screen. Shared controls live in `app/src/ui/components/`,
-  with their Storybook stories alongside them and config in `app/.storybook/`.
-  Reuse those controls when changing the remote. See `app/README.md`.
+  with their Storybook stories alongside them and config in `app/.storybook/`. Storybook is
+  the design system: tokens in `app/src/ui/tokens.css` (use them, never raw colors), guide
+  pages in `app/src/ui/stories/design-system/`. Reuse those controls when changing the remote.
+  See `app/README.md`.
 - `designer/` — the pattern designer: a web app that edits and simulates pattern recipes
   (React + TypeScript, Bun, port 5174). Its `src/engine/strip.ts` ports
   `firewalker_strip_map.h`, so a change to the strip map changes both. See `designer/README.md`.

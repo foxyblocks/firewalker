@@ -30,7 +30,7 @@ bun install
 bun run dev          # http://localhost:5173
 bun run test         # unit tests, no hardware needed
 bun run typecheck
-bun run storybook        # component and screen stories, http://localhost:6006
+bun run storybook        # the design system: guide, components, screens, http://localhost:6006
 bun run build-storybook  # static Storybook in storybook-static/
 ```
 
@@ -185,6 +185,8 @@ home.
 | `src/transport/setup.ts` | Chooses real or pretend boots at startup |
 | `src/ui/` | The screens: Remote, Boots, and one boot's detail screen |
 | `src/ui/components/` | The small component library the screens share, with Storybook stories |
+| `src/ui/tokens.css` | Every color, type size, radius, glow, and duration, by name |
+| `src/ui/stories/design-system/` | The design system's guide pages in Storybook: color, type, LEDs, writing, accessibility |
 
 Adding a pattern takes no app change: the boot reports it and a tile appears. Add it to
 `patternNames.ts` when you want a nicer name and a description.

@@ -1,0 +1,38 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+import { TokenTable, TypeScale } from "../docs/TokenDocs";
+import { FONT_TOKENS } from "../tokens";
+
+<Meta title="Design system/Typography" />
+
+# Typography
+
+Two faces, both bundled so the app needs no network. **Big Shoulders Display** is condensed signage type for names, controls, and titles, always uppercase. **Spline Sans Mono** is for everything you read, and every number, so digits line up as they change.
+
+<TokenTable tokens={FONT_TOKENS} kind="font" />
+
+## Scale
+
+Fourteen sizes, named for what they're for. Each sample is set in the size's own face.
+
+<TypeScale />
+
+## Rules
+
+- Display type is uppercase with a little letter spacing, and never runs longer than a line.
+- Readouts that change, such as brightness or tilt, stay in mono so they don't jitter.
+- Field labels (`--text-label`) are uppercase mono with wide letter spacing. Section labels (`--text-section`) are display type.
+- Line height is 1.4 for reading, about 1 for display type.
+
+## For review
+
+The scale was pulled from the sizes in use, without changing any. These are the places it could be simpler:
+
+| Today | Where | Could become |
+| --- | --- | --- |
+| 26px | The header wordmark and the Boots row arrow | `--text-title` (28px) or `--text-tile` (23px) |
+| 25px | A sheet's title | `--text-title` (28px) |
+| 17px | Small tabs | `--text-control` (18px) |
+| 12.5px and 12px | Banners and notices, small help | One size |
+| 11.5px, 11px, and 10.5px | Hints, labels, pose angles | Two sizes |
+
+Collapsing them would take the scale from 17 sizes in use to 12.

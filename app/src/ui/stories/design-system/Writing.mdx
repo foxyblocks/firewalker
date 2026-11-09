@@ -1,0 +1,40 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+import { DoDont } from "../docs/TokenDocs";
+
+<Meta title="Design system/Writing" />
+
+# Writing
+
+The app talks like a friend who knows the hardware: short, specific, and calm. These rules come from the words already in the app.
+
+## Rules
+
+1. **Name the boot.** "Not saved on Left", not "Save failed".
+2. **Say what still works.** "Motion sensor unavailable. Power and brightness still work."
+3. **Say what to do next.** "Pause music and keep Left still first."
+4. **Plain words, short sentences.** Under about 15 words, in sentence case. No "please", no "successfully", no "error".
+5. **Numbers with units, as the boot reports them.** "96 of 96", "9.88 m/s²", "-22.5°".
+6. **Buttons say what they do.** Capture, Blink, Reconnect, Calibrate quiet. "Tap again to forget" replaces a confirm dialog.
+7. **Reassure about the boots.** When the app loses touch, the boots keep running, so say so: "Connections paused while idle. Your boots keep running."
+
+<DoDont
+  good={<>Reconnecting to Right. Controls apply to the other boot for now.</>}
+  bad={<>Error: connection lost. Please try again.</>}
+/>
+
+<DoDont
+  good={<>Capture heel or toe too. Neutral alone doesn't tell the boot which way your foot points.</>}
+  bad={<>Calibration incomplete (orientation not set).</>}
+/>
+
+## Words we use
+
+| Use | Not | Why |
+| --- | --- | --- |
+| Boot | Shoe, device | It's what you wear. |
+| Pattern | Effect, animation, recipe | Recipe is the file format, not what people pick. |
+| Strip | LEDs, lights | The physical thing. "Lights" is the power switch. |
+| Neutral, heel down, toe down | Calibration points | The poses, as you stand in them. |
+| Stomp | Tap, impact | What the firmware detects. |
+| Soft cap, Cap | Limit, max | The switch is labeled Cap. |
+| Quiet threshold | Noise floor, gate | What you're setting, not how it works. |

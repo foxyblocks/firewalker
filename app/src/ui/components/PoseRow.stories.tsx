@@ -3,7 +3,9 @@ import { fn } from "storybook/test";
 import { PoseList, PoseRow } from "./PoseRow";
 
 const meta = {
-  title: "Components/PoseRow",
+  title: "Components/Data/PoseRow",
+  tags: ["autodocs"],
+  parameters: { docs: { description: { component: "One calibration pose: its name, what to do, its saved angle, and a clear button once saved. A capture fills the row over the firmware’s two seconds." } } },
   component: PoseRow,
   args: {
     name: "Heel down",

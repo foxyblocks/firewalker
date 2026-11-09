@@ -16,6 +16,7 @@ import { BootDetail } from "./BootDetail";
 import { FindBoots, withFound } from "./FindBoots";
 import { Remote } from "./Remote";
 import { AppNavigation } from "./components/AppNavigation";
+import { Banner } from "./components/Banner";
 
 type Screen = { kind: "remote" } | { kind: "find" } | { kind: "boot"; deviceId: string };
 
@@ -62,10 +63,9 @@ export function App({ store }: { store: BootsStore }) {
         }}
       />
       {store.paused() && (
-        <div className="banner banner-warn banner-action" role="status">
-          <span>Connections paused while idle. Your boots keep running.</span>
-          <button type="button" className="button" onClick={() => store.activity()}>Reconnect</button>
-        </div>
+        <Banner tone="warn" action={{ label: "Reconnect", onClick: () => store.activity() }}>
+          Connections paused while idle. Your boots keep running.
+        </Banner>
       )}
       <section className="app-content" id={`main-panel-${mainTab}`} role="tabpanel" aria-labelledby={`main-tab-${mainTab}`}>
         {screen.kind === "find" && (

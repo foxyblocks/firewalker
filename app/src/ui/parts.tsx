@@ -4,7 +4,6 @@
  * imports keep working.
  */
 
-import type { Side } from "../core/boots";
 import type { LinkState } from "../core/boot";
 
 export { Toggle } from "./components/Toggle";
@@ -34,10 +33,6 @@ export function linkWords(link: LinkState | undefined): string {
     default:
       return "Reconnecting";
   }
-}
-
-export function SideBadge({ side }: { side: Side }) {
-  return <span className="badge">{side === "left" ? "L" : "R"}</span>;
 }
 
 /** Joins boot names for a sentence, such as "Left and Right". */

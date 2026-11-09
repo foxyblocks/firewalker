@@ -12,7 +12,9 @@ const fixture = (peak: number, count = 64) =>
   });
 
 const meta = {
-  title: "Components/AudioWaveform",
+  title: "Components/Data/AudioWaveform",
+  tags: ["autodocs"],
+  parameters: { docs: { description: { component: "The microphone’s raw signal with RMS and level, or a message when it’s waiting, unavailable, or needs a firmware update." } } },
   component: AudioWaveform,
   args: { status: "live", samples: fixture(0.42), level: 0.42, rms: 24.8 },
   argTypes: {

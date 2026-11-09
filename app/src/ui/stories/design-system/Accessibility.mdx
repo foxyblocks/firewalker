@@ -1,0 +1,29 @@
+import { Meta } from "@storybook/addon-docs/blocks";
+import { ContrastTable } from "../docs/TokenDocs";
+
+<Meta title="Design system/Accessibility" />
+
+# Accessibility
+
+The app is used one-handed, at night, often while moving. That's the same list a screen reader user or someone with low vision needs: big targets, strong contrast, and words for everything.
+
+## Contrast
+
+Every text color on every ground, graded against WCAG 2.2 AA: 4.5 for text, 3 for large text.
+
+<ContrastTable />
+
+## What we do
+
+- **Focus** is a 2px ember ring, offset 2px, on everything you can reach by keyboard.
+- **Targets** are at least 44 × 44px, even when they look smaller.
+- **Switches** are `role="switch"` with a label. Tab bars are `tablist` with `tab` and `tabpanel`, and a set of choices is a `radiogroup`. Pixel sliders are `slider` with a value and a label.
+- **Status** messages are `role="status"`, and failures that block you are `alert`.
+- **Dots and icons** are hidden from screen readers and always sit beside words.
+- **Motion** stops under `prefers-reduced-motion`.
+
+## For review
+
+- `--ink-faint` is 3.1 to 3.6 on our grounds, below AA for text. It's used as text in quiet fact labels, pose angles, the waveform key, and graph scales at 8px. Moving those to `--ink-quiet` (6.5 or more) would pass.
+- `--line` is 1.3 to 1.4 against our grounds. As an unlit pixel that's fine, but as the only edge of a control, such as a button's outline, it's below the 3:1 that WCAG asks of control edges. Controls also differ by fill, which helps.
+- The back link on a boot's screen is 30px tall, and compact buttons are 40px, under the 44px target.

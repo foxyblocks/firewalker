@@ -17,8 +17,10 @@
 import { SIDE_NAMES, type BootsStore, type PatternTile, type RemoteView, type Side, type Target } from "../core/boots";
 import { patternDisplay } from "../core/patternNames";
 import { AudioPanel } from "./AudioSetup";
+import { Banner } from "./components/Banner";
+import { PatternTile as PatternTileView, type PatternPreview } from "./components/PatternTile";
 import { Segmented } from "./components/Segmented";
-import { joinNames, LinkDot, PixelSlider, SideBadge, Toggle, type SliderWarning } from "./parts";
+import { joinNames, LinkDot, PixelSlider, Toggle, type SliderWarning } from "./parts";
 
 const CAP_OFF_MESSAGE = "Past this line, full white can draw more than USB gives, about 1 A.";
 
@@ -147,25 +149,22 @@ function Tile({
   onSelect: () => void;
 }) {
   const { name, description } = patternDisplay(tile.id);
-  const running = tile.runningOn.length > 0;
-  const hint = tile.missingOn.length > 0 ? `${names(tile.missingOn)} needs update` : description;
-  const previewClass = ["rainbow-pool", "flow"].includes(tile.id)
-    ? "preview-flow"
-    : ["fire-stomp", "fire-trail"].includes(tile.id) ? "preview-fire" : "preview-other";
+  const missing = tile.missingOn.length > 0;
+  const preview: PatternPreview = ["rainbow-pool", "flow"].includes(tile.id)
+    ? "flow"
+    : ["fire-stomp", "fire-trail"].includes(tile.id) ? "fire" : "other";
 
   return (
-    <button type="button" className={`tile${running ? " tile-on" : ""}`} aria-pressed={running} disabled={disabled} onClick={onSelect}>
-      <span className="tile-head">
-        <span className="tile-name">{name}</span>
-        <span className="tile-badges">
-          {tile.runningOn.map((side) => (
-            <SideBadge key={side} side={side} />
-          ))}
-        </span>
-      </span>
-      {hint && <span className={`tile-hint${tile.missingOn.length > 0 ? " tile-hint-warn" : ""}`}>{hint}</span>}
-      <span className={`tile-preview ${previewClass}`} aria-hidden="true" />
-    </button>
+    <PatternTileView
+      name={name}
+      hint={missing ? `${names(tile.missingOn)} needs update` : description}
+      hintWarn={missing}
+      running={tile.runningOn.length > 0}
+      badges={tile.runningOn.map((side) => (side === "left" ? "L" : "R"))}
+      preview={preview}
+      disabled={disabled}
+      onSelect={onSelect}
+    />
   );
 }
 
@@ -217,17 +216,14 @@ function Banners({
   return (
     <div className="banners">
       {view.accessLost.length > 0 && (
-        <div className="banner banner-warn banner-action" role="status">
-          <span>This browser can't reach {names(view.accessLost)} since the page reloaded. Pick each boot once to get it back.</span>
-          <button type="button" className="button" onClick={onRestoreAccess}>
-            Reconnect
-          </button>
-        </div>
+        <Banner tone="warn" action={{ label: "Reconnect", onClick: onRestoreAccess }}>
+          This browser can't reach {names(view.accessLost)} since the page reloaded. Pick each boot once to get it back.
+        </Banner>
       )}
       {banners.map((banner) => (
-        <p key={banner.text} className={`banner banner-${banner.tone}`} role="status">
+        <Banner key={banner.text} tone={banner.tone}>
           {banner.text}
-        </p>
+        </Banner>
       ))}
     </div>
   );
