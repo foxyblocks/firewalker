@@ -33,8 +33,8 @@ constexpr size_t REMOTE_LINE_MAX = 520;
 // Reported in status, so an app can tell when a boot's firmware needs updating. Raise it
 // when a change would break a client written against the current protocol, or when clients
 // start relying on something earlier firmware doesn't have. 2 added the strip layout, and 3 added
-// recipes. Protocol 4 adds per-boot microphone tuning and quiet calibration.
-constexpr uint8_t REMOTE_PROTOCOL_VERSION = 4;
+// recipes. Protocol 4 adds microphone tuning; 5 adds clearing saved pose calibration.
+constexpr uint8_t REMOTE_PROTOCOL_VERSION = 6;
 
 enum class CommandType : uint8_t {
   Invalid,
@@ -45,6 +45,7 @@ enum class CommandType : uint8_t {
   Brightness,
   Cap,
   Calibrate,
+  CalibrationClear,
   Debug,
   Identify,
   StripSet,
@@ -70,6 +71,7 @@ struct Command {
   char pattern[PATTERN_NAME_SIZE] = "";
   char hex[REMOTE_RECIPE_HEX_MAX + 1] = "";  // for RecipeData
   CalibrationPose pose = CalibrationPose::Neutral;  // for Calibrate
+  CalibrationClear clearTarget = CalibrationClear::All;  // for CalibrationClear
   bool on = false;                      // for Power, Debug, Cap, and StripPreview
   int32_t value = 0;                    // for Brightness, StripSet, RecipeBegin (size), and RecipeData (offset)
   StripField stripField = StripField::Count;   // for StripSet
@@ -97,7 +99,8 @@ inline const char* commandName(CommandType type) {
     case CommandType::Power: return "power";
     case CommandType::Brightness: return "brightness";
     case CommandType::Cap: return "cap";
-    case CommandType::Calibrate: return "calibrate";
+    case CommandType::Calibrate:
+    case CommandType::CalibrationClear: return "calibrate";
     case CommandType::Debug: return "debug";
     case CommandType::StripSet: return "strip";
     case CommandType::StripPreview: return "strip";
@@ -313,6 +316,23 @@ inline Command parseCommand(const char* line) {
 
   // A bare `calibrate` means neutral, the pose every boot needs first.
   if (strcmp(verb, "calibrate") == 0) {
+    // Explicit targets avoid accidentally erasing neutral when clearing a side.
+    // Even the longest spelling, `calibrate clear heel`, fits one BLE write.
+    if (arg && strcmp(arg, "clear") == 0) {
+      if (count != 3) {
+        command.error = count > 3 ? "too-many-arguments" : "expected-clear-target";
+        return command;
+      }
+      if (strcmp(words[2], "heel") == 0) command.clearTarget = CalibrationClear::Heel;
+      else if (strcmp(words[2], "toe") == 0) command.clearTarget = CalibrationClear::Toe;
+      else if (strcmp(words[2], "all") == 0) command.clearTarget = CalibrationClear::All;
+      else {
+        command.error = "unknown-clear-target";
+        return command;
+      }
+      command.type = CommandType::CalibrationClear;
+      return command;
+    }
     if (count > 2) {
       command.error = "too-many-arguments";
       return command;
@@ -498,6 +518,7 @@ struct StatusReport {
   bool capped;            // the soft cap is on
   uint8_t capBrightness;  // the soft cap's level, whether or not it's on
   bool sensorReady;
+  bool orientationCalibrated = false;
   float tilt;
   TiltCalibration calibration;
   const char* calibrationState;  // "idle", "capturing", "ok", or a failure reason
@@ -534,7 +555,7 @@ inline void formatStatus(char* out, size_t size, const StatusReport& report) {
            "{\"t\":\"status\",\"proto\":%u,\"id\":\"%s\",\"pattern\":\"%s\",\"lit\":\"%s\","
            "\"brightness\":%u,\"maxBrightness\":%u,\"capped\":%s,\"capBrightness\":%u,"
            "\"sensor\":\"%s\",\"tilt\":%s,"
-           "\"calibrated\":%s,\"neutralDeg\":%s,\"heelDeg\":%s,\"toeDeg\":%s,"
+           "\"calibrated\":%s,\"orientationCalibrated\":%s,\"neutralDeg\":%s,\"heelDeg\":%s,\"toeDeg\":%s,"
            "\"calibration\":\"%s\",\"saved\":%s,\"saveFailed\":%s,\"saves\":%lu,"
            "\"debug\":%s,\"ble\":%s,\"leds\":%u,\"maxLeds\":%u,\"toe\":%u,\"heel\":%u,"
            "\"preview\":%s}",
@@ -542,7 +563,7 @@ inline void formatStatus(char* out, size_t size, const StatusReport& report) {
            report.lit, (unsigned)report.brightness, (unsigned)report.maxBrightness,
            report.capped ? "true" : "false", (unsigned)report.capBrightness,
            report.sensorReady ? "ok" : "unavailable", tiltText,
-           report.calibration.neutralSet ? "true" : "false", neutralText, heelText, toeText,
+           report.calibration.neutralSet ? "true" : "false", report.orientationCalibrated ? "true" : "false", neutralText, heelText, toeText,
            report.calibrationState, report.saved ? "true" : "false",
            report.saveFailed ? "true" : "false", (unsigned long)report.saves,
            report.debug ? "true" : "false", report.bleConnected ? "true" : "false",

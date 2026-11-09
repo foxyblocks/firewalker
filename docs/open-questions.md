@@ -19,13 +19,12 @@ decided deliberately. Once one is resolved, move the decision into `wiring.md`,
 
 ## Mount and motion calibration
 
-Both shoes mount the controller in the same orientation and share one axis map in
-`include/firewalker_mg24_mount.h`. That map has only been confirmed on the bench mount,
-so check each mounted shoe:
+Each controller learns its own 3D mounting reference from neutral and a heel/toe pose
+(ADR-0006). Check each mounted shoe after recapturing its poses:
 
 - **Axes and signs:** does the fused angle follow the foot, both on a slow static tilt and a
   quick movement? Check with `./cli flow --motion --log-motion`. Captured heel and toe poses
-  correct a reversed direction, but they can't repair a wrong axis or gyro sign.
+  teach both the direction and the rotation plane; verify the mount stays stable on the cloth.
 - **Stomp thresholds:** what does a real stomp and an ordinary step produce on a mounted
   shoe? Tune `IMU_STOMP_ACCEL_THRESHOLD`, `IMU_RELEASE_ACCEL_THRESHOLD`,
   `IMU_REFRACTORY_MS`, and `IMU_STOMP_FORCE_FULL`.

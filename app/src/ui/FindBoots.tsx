@@ -1,33 +1,19 @@
 /**
- * Finding boots and labeling them Left and Right. It's the first screen on a new phone.
- *
- * The iPhone scans and lists boots as they appear. A browser only offers its own picker, so
- * there this shows an Add button instead, and each pick joins the same list. A desktop browser
- * can reach a boot over Bluetooth or USB, so it gets a button for each. A boot with a
- * connection stops advertising, so boots you've already labeled are listed from the store
- * rather than the scan.
- *
- * The same boot can be listed twice with the same name, once per way of reaching it, so a row
- * says when it's the USB one. Labeling that row moves the boot to USB (`BootsStore.assign`).
- *
- * Calibrate sits under the labeled boots. It opens the Calibrate sheet for the boots chosen on
- * the Remote screen's tabs, as Both, Left, or Right, and its hint says which still need a
- * neutral pose.
+ * The Boots tab lists saved and explicitly selected boots. Add opens a connection
+ * sheet; it starts scanning or opens the system picker only after a method is chosen.
+ * Each row opens one physical boot's detail screen. App owns the found list so returning
+ * from a detail screen keeps the boot that was just selected. Main navigation replaces
+ * the old Done action.
  */
 
-import { useEffect, useState } from "react";
-import { SIDE_NAMES, type BootsStore, type RemoteView, type Side } from "../core/boots";
-import { isUsbBoot, type FoundBoot, type PickMethod } from "../transport/transport";
-import { joinNames } from "./parts";
-
-const PICK_LABELS: Record<PickMethod | "only", string> = {
-  only: "Add a boot",
-  bluetooth: "Add over Bluetooth",
-  usb: "Add over USB",
-};
-
-const NO_USB_PICK =
-  "No boot picked. If no list of boots appeared, this browser can't show the USB picker, so open this page in Chrome or Arc.";
+import { useState } from "react";
+import { SIDE_NAMES, type BootsStore } from "../core/boots";
+import { isUsbBoot, type FoundBoot } from "../transport/transport";
+import { calibrationNeed, sideOf } from "./bootFacts";
+import { LinkDot, linkWords } from "./parts";
+import { AddBootSheet } from "./AddBootSheet";
+import { Button } from "./components/Button";
+import { Icon } from "./components/Icon";
 
 const signalWord = (rssi?: number) => {
   if (rssi === undefined) return "";
@@ -36,98 +22,48 @@ const signalWord = (rssi?: number) => {
   return "Weak signal";
 };
 
+/** Adds a found boot to a list, or refreshes its entry, such as its signal. */
+export function withFound(current: FoundBoot[], boot: FoundBoot): FoundBoot[] {
+  return current.some((candidate) => candidate.deviceId === boot.deviceId)
+    ? current.map((candidate) => (candidate.deviceId === boot.deviceId ? boot : candidate))
+    : [...current, boot];
+}
+
 export function FindBoots({
   store,
-  onDone,
-  onCalibrate,
+  found,
+  onFound,
+  onOpen,
 }: {
   store: BootsStore;
-  onDone: () => void;
-  onCalibrate: () => void;
+  found: FoundBoot[];
+  onFound: (boot: FoundBoot) => void;
+  onOpen: (boot: FoundBoot) => void;
 }) {
-  const [found, setFound] = useState<FoundBoot[]>([]);
-  const [picking, setPicking] = useState(false);
-  const [pickProblem, setPickProblem] = useState<string | null>(null);
-  const { finding, pickers } = store.transport;
-  const offersUsb = pickers.includes("usb");
-
-  const addFound = (boot: FoundBoot) => {
-    setFound((current) =>
-      current.some((candidate) => candidate.deviceId === boot.deviceId)
-        ? current.map((candidate) => (candidate.deviceId === boot.deviceId ? boot : candidate))
-        : [...current, boot],
-    );
-  };
-
-  useEffect(() => {
-    if (finding !== "scan") return;
-    void store.transport.startScan(addFound);
-    return () => void store.transport.stopScan();
-  }, [store, finding]);
-
-  const pick = async (method: PickMethod) => {
-    setPicking(true);
-    setPickProblem(null);
-    try {
-      const boot = await store.transport.pick(method);
-      if (boot) addFound(boot);
-      // A browser with no USB picker, such as an embedded one, reports the same thing as
-      // someone cancelling, so this can't tell them apart and covers both.
-      else setPickProblem(method === "usb" ? NO_USB_PICK : "No boot picked. Tap Add to try again.");
-    } catch (error) {
-      setPickProblem(error instanceof Error ? error.message : "Couldn't reach that boot.");
-    } finally {
-      setPicking(false);
-    }
-  };
+  const [adding, setAdding] = useState(false);
+  const offersUsb = store.transport.pickers.includes("usb");
 
   // Labeled boots first, then anything the scan found that isn't labeled yet.
   const labeled: FoundBoot[] = store.sides().map((side) => {
     return { deviceId: store.known(side)!.deviceId, name: store.bootName(side) };
   });
   const rows = [...labeled, ...found.filter((boot) => !labeled.some((known) => known.deviceId === boot.deviceId))];
-  const view = store.view();
-  const names = (sides: Side[]) => joinNames(sides.map((side) => store.displayName(side)));
 
   return (
     <>
-      <header className="topbar">
-        <h1 className="screen-title">Find your boots</h1>
-        {finding === "scan" && <span className="scanning">Scanning</span>}
+      <header className="topbar boots-heading">
+        <h2 className="screen-title">Boots</h2>
+        <Button variant="primary" className="button-compact add-boot" onClick={() => setAdding(true)}>
+          <Icon name="plus" size={16} /> Add
+        </Button>
       </header>
 
       <main className="scroll">
         {rows.map((boot) => (
-          <BootRow key={boot.deviceId} store={store} boot={boot} />
+          <BootRow key={boot.deviceId} store={store} boot={boot} onOpen={() => onOpen(boot)} />
         ))}
 
-        {labeled.length > 0 && (
-          <button
-            type="button"
-            className="dock-card dock-button calibrate-card"
-            disabled={!view.controllable}
-            onClick={onCalibrate}
-          >
-            <span className="card-name">Calibrate</span>
-            <CalibrateHint view={view} names={names} />
-          </button>
-        )}
-
-        {rows.length === 0 && finding === "scan" && (
-          <p className="empty">Looking for boots. Make sure they're powered on and nearby.</p>
-        )}
-
-        {finding === "picker" &&
-          pickers.map((method) => (
-            <button key={method} type="button" className="button button-wide" disabled={picking} onClick={() => void pick(method)}>
-              {PICK_LABELS[pickers.length > 1 ? method : "only"]}
-            </button>
-          ))}
-        {pickProblem && (
-          <p className="empty" role="status">
-            {pickProblem}
-          </p>
-        )}
+        {rows.length === 0 && <p className="empty">Add a boot to connect it and set it up.</p>}
 
         <section className="help">
           <h2>Don't see a boot?</h2>
@@ -141,65 +77,56 @@ export function FindBoots({
         </section>
       </main>
 
-      <footer className="dock">
-        <button type="button" className="button button-primary button-wide" disabled={store.sides().length === 0} onClick={onDone}>
-          Done
-        </button>
-      </footer>
+      {adding && (
+        <AddBootSheet
+          transport={store.transport}
+          onClose={() => setAdding(false)}
+          onChoose={(boot) => {
+            onFound(boot);
+            setAdding(false);
+            onOpen(boot);
+          }}
+        />
+      )}
     </>
   );
 }
 
-function CalibrateHint({ view, names }: { view: RemoteView; names: (sides: Side[]) => string }) {
-  if (view.uncalibrated.length === 0) return <span className="card-hint">Neutral set</span>;
-  return (
-    <span className="card-hint">
-      <span className="dot dot-wait" aria-hidden="true" />
-      {names(view.uncalibrated)} not set
-    </span>
-  );
-}
-
-function BootRow({ store, boot }: { store: BootsStore; boot: FoundBoot }) {
-  const [blinking, setBlinking] = useState(false);
-  const currentSide = store.sides().find((side) => store.known(side)?.deviceId === boot.deviceId);
-  const online = currentSide && store.client(currentSide)?.getState().link === "online";
+function BootRow({ store, boot, onOpen }: { store: BootsStore; boot: FoundBoot; onOpen: () => void }) {
+  const side = sideOf(store, boot.deviceId);
+  const state = side ? store.client(side)?.getState() : undefined;
+  const online = state?.link === "online";
   const usb = isUsbBoot(boot.deviceId);
-  const linkWord = online ? "Connected" : "Reconnecting";
-  const hint = currentSide ? `${linkWord}${usb ? " over USB" : ""}` : usb ? "On USB" : signalWord(boot.rssi);
-
-  const label = (side: Side) => (
-    <button
-      type="button"
-      className={`button${currentSide === side ? " button-on" : ""}`}
-      aria-pressed={currentSide === side}
-      onClick={() => store.assign(boot, side)}
-    >
-      {SIDE_NAMES[side]}
-    </button>
-  );
+  const linkWord = linkWords(state?.link);
+  const hint = side ? `${linkWord}${usb && online ? " over USB" : ""}` : usb ? "On USB" : signalWord(boot.rssi);
+  const need = calibrationNeed(state);
 
   return (
-    <article className="boot-card">
-      <div className="boot-head">
-        <span className="card-name">{boot.name}</span>
-        <span className="card-hint">{hint}</span>
-      </div>
-      <div className="actions">
-        <button
-          type="button"
-          className="button"
-          disabled={blinking}
-          onClick={() => {
-            setBlinking(true);
-            void store.blinkFound(boot).finally(() => setBlinking(false));
-          }}
-        >
-          {blinking ? "Blinking" : "Blink"}
-        </button>
-        {label("left")}
-        {label("right")}
-      </div>
-    </article>
+    <button type="button" className="boot-card boot-row" onClick={onOpen}>
+      <span className="boot-row-main">
+        <span className="boot-row-title">
+          <span className="card-name">{side ? store.displayName(side) : boot.name}</span>
+          {/* A boot named after its side needs no tag saying so again. */}
+          {!side ? (
+            <span className="side-tag side-tag-none">Not labeled</span>
+          ) : store.displayName(side) !== SIDE_NAMES[side] ? (
+            <span className="side-tag">{SIDE_NAMES[side]}</span>
+          ) : null}
+        </span>
+        <span className="card-hint">
+          {side && <LinkDot link={state?.link} />}
+          {side ? `${store.bootName(side)} · ${hint}` : hint}
+        </span>
+        {need && (
+          <span className="card-hint tone-warn">
+            <span className="dot dot-wait" aria-hidden="true" />
+            {need}
+          </span>
+        )}
+      </span>
+      <span className="boot-row-go" aria-hidden="true">
+        ›
+      </span>
+    </button>
   );
 }

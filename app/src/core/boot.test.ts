@@ -294,6 +294,165 @@ describe("the brightness slider", () => {
 });
 
 describe("calibrating", () => {
+  it("requires 3D firmware before capturing a pose on an older boot", async () => {
+    const { client, boot } = setup({ proto: 5, calibrated: true, neutralDeg: -2, toeDeg: 84.1 });
+    client.connect();
+    await settle();
+
+    await expect(client.calibrate("heel")).resolves.toEqual({
+      ok: false, pose: "heel", reason: "orientation-update-required",
+    });
+    expect(boot.received).not.toContain("calibrate heel");
+    expect(state(client).capture).toBeUndefined();
+    expect(state(client).status).toMatchObject({ neutralDeg: -2, toeDeg: 84.1 });
+  });
+
+  it("accepts a confirmed saved clear even when its acknowledgement is lost", async () => {
+    const { client, transport } = setup({ calibrated: true, neutralDeg: 90, heelDeg: 65, notificationBytes: 1024 });
+    const open = transport.open.bind(transport);
+    vi.spyOn(transport, "open").mockImplementation((id, events) => open(id, {
+      ...events,
+      onData: (text) => {
+        if (text.includes('"t":"ack"') && text.includes('"cmd":"calibrate"')) return;
+        events.onData(text);
+      },
+    }));
+    client.connect();
+    await settle();
+    const finished = vi.fn();
+    void client.clearCalibration("heel").then(finished);
+    await settle();
+    expect(state(client).status).toMatchObject({ heelDeg: null, saved: true });
+    expect(finished).toHaveBeenCalledWith({ ok: true });
+  });
+
+  it("resets all poses without changing strip, brightness, pattern, or audio tuning", async () => {
+    const { boot, client } = setup({ calibrated: true, neutralDeg: 90, heelDeg: 65, toeDeg: 120, pattern: "fire-trail", brightness: 32 });
+    client.connect();
+    await settle();
+    const before = { ...state(client).status };
+    const audio = { ...state(client).audio };
+    const cleared = client.clearCalibration("all");
+    await settle();
+    await expect(cleared).resolves.toEqual({ ok: true });
+    expect(state(client).status).toMatchObject({
+      calibrated: false, neutralDeg: 0, heelDeg: null, toeDeg: null, saved: true,
+      pattern: before.pattern, brightness: before.brightness, leds: before.leds, toe: before.toe, heel: before.heel,
+    });
+    expect(state(client).audio).toEqual(audio);
+    expect(boot.received).toContain("calibrate clear all");
+  });
+
+  it("waits for the boot's confirmed status before finishing a clear", async () => {
+    const { boot, client } = setup({ calibrated: true, neutralDeg: 90, heelDeg: 65, toeDeg: 120 });
+    client.connect();
+    await settle();
+    boot.replyDelayMs = 400;
+    const finished = vi.fn();
+    const cleared = client.clearCalibration("heel");
+    void cleared.then(finished);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(finished).not.toHaveBeenCalled();
+    expect(state(client).status?.heelDeg).toBe(65);
+    expect(client.busy()).toBe(true);
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(cleared).resolves.toEqual({ ok: true });
+    expect(state(client).status).toMatchObject({ heelDeg: null, toeDeg: 120, neutralDeg: 90 });
+    expect(state(client).clearingCalibration).toBeUndefined();
+  });
+
+  it("reports a clear that changes the pose but fails to save", async () => {
+    const { client } = setup({ saveFails: true, calibrated: true, neutralDeg: 90, heelDeg: 65 });
+    client.connect();
+    await settle();
+    const cleared = client.clearCalibration("heel");
+    await settle();
+    await expect(cleared).resolves.toEqual({ ok: false, reason: "save-failed" });
+    expect(state(client).status).toMatchObject({ heelDeg: null, saveFailed: true });
+  });
+
+  it("finishes a clear if the boot disconnects before answering", async () => {
+    const { boot, client } = setup({ calibrated: true, neutralDeg: 90, heelDeg: 65 });
+    client.connect();
+    await settle();
+    boot.unresponsive = true;
+    const cleared = client.clearCalibration("all");
+    boot.dropLink();
+    await expect(cleared).resolves.toEqual({ ok: false, reason: "offline" });
+    expect(state(client).clearingCalibration).toBeUndefined();
+  });
+
+  it("keeps poses on older firmware and while capturing", async () => {
+    const old = setup({ proto: 4, calibrated: true, neutralDeg: 90, heelDeg: 65 });
+    old.client.connect();
+    await settle();
+    await expect(old.client.clearCalibration("all")).resolves.toEqual({ ok: false, reason: "needs-update" });
+    expect(old.boot.received).not.toContain("calibrate clear all");
+
+    const { boot, client } = setup({ calibrated: true, neutralDeg: 90, heelDeg: 65 });
+    client.connect();
+    await settle();
+    const capture = client.calibrate("neutral");
+    await expect(client.clearCalibration("all")).resolves.toEqual({ ok: false, reason: "already-capturing" });
+    expect(boot.received).not.toContain("calibrate clear all");
+    await vi.advanceTimersByTimeAsync(2100);
+    await capture;
+  });
+
+  it("clears a stale toe before recapturing heel and toe in the opposite direction", async () => {
+    const { client } = setup({
+      calibrated: true, neutralDeg: -40.6, heelDeg: -80, toeDeg: 84.1,
+      poseAngles: { neutral: -40.6, heel: -15.6, toe: -65.6 },
+    });
+    client.connect();
+    await settle();
+    const blocked = client.calibrate("heel");
+    await vi.advanceTimersByTimeAsync(2100);
+    await expect(blocked).resolves.toMatchObject({ ok: false, reason: "wrong-side" });
+
+    const cleared = client.clearCalibration("toe");
+    await settle();
+    await expect(cleared).resolves.toEqual({ ok: true });
+    expect(state(client).status).toMatchObject({ calibrated: true, neutralDeg: -40.6, heelDeg: -80, toeDeg: null, saved: true });
+    for (const pose of ["heel", "toe"] as const) {
+      const captured = client.calibrate(pose);
+      await vi.advanceTimersByTimeAsync(2100);
+      await expect(captured).resolves.toMatchObject({ ok: true, pose });
+    }
+  });
+
+  it.each([
+    { neutral: 90, heel: 65, toe: 120 },
+    { neutral: 179, heel: 154, toe: -151 },
+    { neutral: -179, heel: -154, toe: 151 },
+  ])("calibrates mounted poses at $neutral degrees", async (angles) => {
+    const { boot, client } = setup({ poseAngles: angles });
+    client.connect();
+    await settle();
+
+    for (const pose of ["neutral", "heel", "toe"] as const) {
+      const captured = client.calibrate(pose);
+      await vi.advanceTimersByTimeAsync(2100);
+      await expect(captured).resolves.toEqual({ ok: true, pose, angleDeg: angles[pose] });
+    }
+    expect(state(client).status).toMatchObject({
+      neutralDeg: angles.neutral,
+      heelDeg: angles.heel,
+      toeDeg: angles.toe,
+    });
+
+    // Read tilt through status, just as the remote does, including a backwards
+    // mount whose toe pose crosses the sensor's angle boundary.
+    boot.angleDeg = angles.toe;
+    client.requestStatus();
+    await settle();
+    expect(state(client).status?.tilt).toBe(1);
+    boot.angleDeg = angles.heel;
+    client.requestStatus();
+    await settle();
+    expect(state(client).status?.tilt).toBe(-1);
+  });
+
   it("captures neutral and reports the angle", async () => {
     const { boot, client } = setup();
     client.connect();
@@ -510,6 +669,47 @@ describe("losing the connection", () => {
 });
 
 describe("debug and live tilt", () => {
+  it("starts history with current acceleration, not an impact saved before streaming", async () => {
+    const { client, transport } = setup();
+    const open = transport.open.bind(transport);
+    let receive: ((text: string) => void) | undefined;
+    vi.spyOn(transport, "open").mockImplementation((id, events) => {
+      receive = events.onData;
+      return open(id, events);
+    });
+    client.connect();
+    await settle();
+    client.setDebug(true);
+    const sample = { t: "motion", tilt: 0, angleDeg: 0, accel: 9.8, gyro: 0, strength: .5, stomp: true };
+    receive?.(`${JSON.stringify({ ...sample, accelPeak: 35 })}\n${JSON.stringify({ ...sample, accelPeak: 24 })}\n`);
+    expect(state(client).motionHistory.map(({ peak, stomp }) => ({ peak, stomp }))).toEqual([
+      { peak: 9.8, stomp: false }, { peak: 24, stomp: true },
+    ]);
+  });
+
+  it("keeps every stomp when several motion reports arrive in one notification", async () => {
+    const { client, transport } = setup();
+    const open = transport.open.bind(transport);
+    let receive: ((text: string) => void) | undefined;
+    vi.spyOn(transport, "open").mockImplementation((id, events) => {
+      receive = events.onData;
+      return open(id, events);
+    });
+    client.connect();
+    await settle();
+    client.setDebug(true);
+    await settle();
+    const packets = [
+      { accelPeak: 24, stomp: true },
+      { accelPeak: 31, stomp: true },
+      { accelPeak: 10, stomp: false },
+    ].map((reading) => JSON.stringify({ t: "motion", tilt: 0, angleDeg: 0, accel: 9.8, gyro: 0, strength: .5, ...reading }));
+    receive?.(`${packets.join("\n")}\n`);
+    expect(state(client).motionHistory.slice(-3).map(({ peak, stomp }) => ({ peak, stomp }))).toEqual([
+      { peak: 24, stomp: true }, { peak: 31, stomp: true }, { peak: 10, stomp: false },
+    ]);
+  });
+
   it("streams motion while debug is on, and stops when it's off", async () => {
     const { client } = setup();
     client.connect();
@@ -524,6 +724,21 @@ describe("debug and live tilt", () => {
     await settle();
     expect(state(client).status?.debug).toBe(false);
     expect(state(client).motion).toBeUndefined();
+    expect(state(client).motionHistory).toEqual([]);
+  });
+
+  it("keeps a recent bounded history during a long debug session", async () => {
+    const { client, boot } = setup();
+    client.connect();
+    await settle();
+    client.setDebug(true);
+    await vi.advanceTimersByTimeAsync(20_000);
+    const history = state(client).motionHistory;
+    expect(history.length).toBeGreaterThan(50);
+    expect(history.length).toBeLessThanOrEqual(150);
+    expect(history.every((point) => history.at(-1)!.time - point.time <= 15_000)).toBe(true);
+    boot.dropLink();
+    expect(state(client).motionHistory).toEqual([]);
   });
 
   it("includes the peak reading in motion lines", async () => {
@@ -887,5 +1102,67 @@ describe("microphone tuning", () => {
     expect(state(client).pending.audioSensitivity).toBeUndefined();
     expect(state(client).audio?.sensitivity).toBe(65);
     expect(state(client).notice).toBe("no-answer");
+  });
+});
+
+describe("audio debug samples", () => {
+  it("keeps each volume reading when audio reports arrive together", async () => {
+    const { client, transport } = setup();
+    const open = transport.open.bind(transport);
+    let receive: ((text: string) => void) | undefined;
+    vi.spyOn(transport, "open").mockImplementation((id, events) => {
+      receive = events.onData;
+      return open(id, events);
+    });
+    client.connect();
+    await settle();
+    client.setDebug(true);
+    await settle();
+    const packets = [.2, .8, .1].map((level) => JSON.stringify({ t: "audio", ready: true, level, rms: 12, waveform: [0, .1, -.1] }));
+    receive?.(`${packets.join("\n")}\n`);
+    expect(state(client).audioHistory.slice(-3).map((point) => point.level)).toEqual([.2, .8, .1]);
+    expect(state(client).audioSignal?.level).toBe(.1);
+    client.setDebug(false);
+    receive?.(`${packets.join("\n")}\n`);
+    expect(state(client).audioHistory).toEqual([]);
+  });
+
+  it("bounds volume history to 15 seconds and clears it when the connection drops", async () => {
+    const { client, boot } = setup();
+    client.connect();
+    await settle();
+    client.setDebug(true);
+    await vi.advanceTimersByTimeAsync(20_000);
+    const history = state(client).audioHistory;
+    expect(history.length).toBeGreaterThan(50);
+    expect(history.length).toBeLessThanOrEqual(150);
+    expect(history.every((point) => history.at(-1)!.time - point.time <= 15_000)).toBe(true);
+    boot.dropLink();
+    expect(state(client).audioHistory).toEqual([]);
+  });
+
+  it("does not plot volume from an unavailable microphone", async () => {
+    const { client, boot } = setup();
+    boot.audioReady = false;
+    client.connect();
+    await settle();
+    client.setDebug(true);
+    await vi.advanceTimersByTimeAsync(700);
+    expect(state(client).audioSignal?.ready).toBe(false);
+    expect(state(client).audioHistory).toEqual([]);
+  });
+
+  it("shows measured waveform telemetry only while debug is live", async () => {
+    const { client } = setup();
+    client.connect();
+    await settle();
+    expect(state(client).audioSignal).toBeUndefined();
+    client.setDebug(true);
+    await vi.advanceTimersByTimeAsync(700);
+    expect(state(client).audioSignal?.waveform).toHaveLength(24);
+    expect(state(client).audioSignal?.rms).toBeGreaterThan(0);
+    client.setDebug(false);
+    await settle();
+    expect(state(client).audioSignal).toBeUndefined();
   });
 });

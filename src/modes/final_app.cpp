@@ -34,7 +34,7 @@ namespace FinalAppMode {
 using namespace Firewalker;
 
 static constexpr SettingsBounds SETTINGS_BOUNDS = {LED_BRIGHTNESS_MIN, LED_BRIGHTNESS_MAX,
-                                                   TILT_LIMITS.maxNeutralDeg, STRIP_MAX_PIXELS,
+                                                   STRIP_MAX_PIXELS,
                                                    LED_BRIGHTNESS_SOFT_CAP};
 // Every file in src/modes/ compiles into every build, and bench builds set their own brightness
 // with a build flag (up to 255, from ./cli --brightness), so this check is for the app build only.
@@ -61,7 +61,7 @@ static Settings settings = defaultSettings(LED_BRIGHTNESS, STRIP_DEFAULT_LAYOUT)
 static SaveScheduler saveScheduler(SETTINGS_SAVE_QUIET_MS, SETTINGS_SAVE_MAX_MS);
 static bool saveFailed = false;
 
-static PoseCalibrator calibrator(CAPTURE_LIMITS, TILT_LIMITS);
+static OrientationCalibrator calibrator(CAPTURE_LIMITS, ORIENTATION_LIMITS);
 
 static bool identifying = false;
 static unsigned long identifyStartMs = 0;
@@ -91,7 +91,8 @@ static void sendStatus() {
   report.capBrightness = LED_BRIGHTNESS_SOFT_CAP;
   report.sensorReady = imuReady();
   report.tilt = imuTiltFwd();
-  report.calibration = settings.calibration;
+  report.calibration = orientationReport(settings.orientation);
+  report.orientationCalibrated = orientationCalibrated(settings.orientation);
   report.calibrationState = calibrator.statusText();
   report.saved = !saveScheduler.dirty() && !saveFailed;
   report.saveFailed = saveFailed;
@@ -389,7 +390,7 @@ static void handleCommand(const Command& command) {
       handleRecipeCommand(command);
       return;
 
-    // Blinks the strip so you can see which boot this is. It changes no settings, so
+    // Blinks the strip and onboard user LED together. It changes no settings, so
     // there's nothing new to report and nothing to save.
     case CommandType::Identify:
       identifying = true;
@@ -446,6 +447,20 @@ static void handleCommand(const Command& command) {
       break;
     }
 
+    case CommandType::CalibrationClear: {
+      const char* refusal = calibrator.clear(command.clearTarget, settings.orientation);
+      if (refusal) {
+        sendAck(command.type, false, refusal);
+        return;
+      }
+      // Clearing is a saved calibration change, just like a completed capture.
+      // Patterns use it immediately; status reports any flash-write failure.
+      imuSetCalibration(settings.orientation);
+      saveNow();
+      sendAck(command.type, true);
+      break;
+    }
+
     case CommandType::Debug:
       debugEnabled = command.on;
       sendAck(command.type, true);
@@ -481,7 +496,7 @@ static void handleCommand(const Command& command) {
 // calibration is worth more than the wear of one write. A failure has changed nothing, in use
 // or in flash.
 static void updatePoseCapture() {
-  const CaptureReport report = calibrator.update(millis(), settings.calibration);
+  const CaptureReport report = calibrator.update(millis(), settings.orientation);
   if (report.kind == CaptureReportKind::None) return;
 
   char line[REMOTE_LINE_MAX];
@@ -490,7 +505,7 @@ static void updatePoseCapture() {
   } else if (report.kind == CaptureReportKind::Failed) {
     formatCalibrationFailed(line, sizeof(line), report.pose, report.reason);
   } else {
-    imuSetCalibration(settings.calibration);
+    imuSetCalibration(settings.orientation);
     saveNow();
     formatCalibrationOk(line, sizeof(line), report.pose, report.angleDeg, imuTiltFwd());
   }
@@ -504,19 +519,28 @@ static void sendMotionIfDue(unsigned long now) {
   lastMotionMs = now;
 
   char line[REMOTE_LINE_MAX];
-  formatMotion(line, sizeof(line), imuTiltFwd(), imuRawAngleDeg(), imuLatest().mag, accelPeak,
+  formatMotion(line, sizeof(line), imuTiltFwd(), imuTiltDeg(), imuLatest().mag, accelPeak,
                imuGyroMagnitude(), stompSinceReport, imuStompStrength(), slowestFrameUs);
   remoteSend(line, RemotePriority::Telemetry);
   const AudioSample& audio = audioLatest();
+  char waveform[AUDIO_WAVEFORM_SIZE * 7 + 3];
+  size_t used = 0;
+  waveform[used++] = '[';
+  for (size_t i = 0; i < AUDIO_WAVEFORM_SIZE; i++) {
+    char sample[16];
+    formatFixed2(sample, sizeof(sample), audioReady() ? (float)audio.waveform[i] / 127.0f : 0);
+    used += snprintf(waveform + used, sizeof(waveform) - used, "%s%s", i ? "," : "", sample);
+  }
+  snprintf(waveform + used, sizeof(waveform) - used, "]");
   char levelText[16], rmsText[16], meanText[16];
   formatFixed2(levelText, sizeof(levelText), audio.level);
   formatFixed2(rmsText, sizeof(rmsText), audio.block.rms);
   formatFixed2(meanText, sizeof(meanText), audio.block.mean);
   snprintf(line, sizeof(line),
-      "{\"t\":\"audio\",\"ready\":%s,\"level\":%s,\"rms\":%s,\"mean\":%s,\"low\":%u,\"high\":%u,\"blocks\":%lu,\"captureUs\":%lu}",
+      "{\"t\":\"audio\",\"ready\":%s,\"level\":%s,\"rms\":%s,\"mean\":%s,\"low\":%u,\"high\":%u,\"blocks\":%lu,\"captureUs\":%lu,\"waveform\":%s}",
       audioReady() ? "true" : "false", levelText, rmsText, meanText,
       (unsigned)audio.block.low, (unsigned)audio.block.high,
-      (unsigned long)audio.blocks, (unsigned long)audio.captureUs);
+      (unsigned long)audio.blocks, (unsigned long)audio.captureUs, waveform);
   remoteSend(line, RemotePriority::Telemetry);
   stompSinceReport = false;
   accelPeak = 0.0f;
@@ -539,7 +563,7 @@ static void drawStripPreview() {
 // loop's time from the sensor and the radio. With the strip off, a black frame now
 // and then keeps it dark if the strip's power was cycled separately.
 static void renderIfDue(unsigned long now) {
-  // An identify blink takes over the strip briefly, then the pattern starts back up.
+  // Identify owns both lights briefly, then the saved pattern and normal status return.
   if (identifying) {
     stompPending = false;
     const unsigned long elapsed = now - identifyStartMs;
@@ -548,9 +572,9 @@ static void renderIfDue(unsigned long now) {
       showSavedPattern();
     } else if ((now - lastFrameMs) >= APP_FRAME_MS) {
       lastFrameMs = now;
-      const uint32_t color = ((elapsed / IDENTIFY_BLINK_MS) % 2 == 0) ? 0xFFFFFF : 0x000000;
-      for (uint16_t i = 0; i < strip.numPixels(); i++) strip.setPixelColor(i, color);
-      strip.show();
+      // Start dark so Blink immediately changes the normally solid onboard light.
+      // One phase drives both outputs, including when the saved strip pattern is Off.
+      renderIdentifyBlink((elapsed / IDENTIFY_BLINK_MS) % 2 != 0);
     }
     return;
   }
@@ -602,7 +626,7 @@ void setup() {
   audioConfigure(settings.audioNoiseFloor, settings.audioSensitivity);
   audioBegin();
   imuBegin();
-  imuSetCalibration(settings.calibration);
+  imuSetCalibration(settings.orientation);
 
   recipeStoreLoad(uploads, RECIPE_SLOTS);
 
@@ -628,7 +652,7 @@ void loop() {
       stompSinceReport = true;
     }
     if (imuLatest().mag > accelPeak) accelPeak = imuLatest().mag;
-    calibrator.addSample(millis(), imuRawAngleDeg());
+    calibrator.addSample(millis(), imuGravity());
   }
   updatePoseCapture();
 
@@ -656,9 +680,13 @@ void loop() {
 
   renderIfDue(now);
 
-  updateStatusLight((calibrator.capturing() || identifying) ? StatusLight::Calibrating
-                    : imuReady()                             ? StatusLight::Running
-                                                             : StatusLight::SensorMissing);
+  // Identify renders the onboard LED with the strip. Do not overwrite it with a
+  // status blink on the same pass; normal status resumes as soon as identify ends.
+  if (!identifying) {
+    updateStatusLight(calibrator.capturing() ? StatusLight::Calibrating
+                      : imuReady()          ? StatusLight::Running
+                                            : StatusLight::SensorMissing);
+  }
   remoteUpdate();
 }
 

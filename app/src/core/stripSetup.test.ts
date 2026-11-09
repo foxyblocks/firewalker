@@ -5,7 +5,7 @@ import type { StatusReply } from "./protocol";
 const VALUES: StripValues = { leds: 110, maxLeds: 160, toe: 40, heel: 90 };
 
 const reporting = (status: Partial<StatusReply>, pending: BootState["pending"] = {}): BootState =>
-  ({ link: "online", patterns: [], pending, status: { t: "status", proto: 2, ...status } }) as BootState;
+  ({ link: "online", patterns: [], pending, motionHistory: [], audioHistory: [], status: { t: "status", proto: 2, ...status } }) as BootState;
 
 describe("shownStrip", () => {
   it("is what the boot reports", () => {
@@ -23,7 +23,7 @@ describe("shownStrip", () => {
   });
 
   it("has nothing to show before a boot's first report", () => {
-    expect(shownStrip({ link: "connecting", patterns: [], pending: {} })).toBeUndefined();
+    expect(shownStrip({ link: "connecting", patterns: [], pending: {}, motionHistory: [], audioHistory: [] })).toBeUndefined();
   });
 });
 

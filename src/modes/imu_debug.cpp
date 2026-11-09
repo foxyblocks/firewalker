@@ -1,8 +1,6 @@
-// imu_debug is the bench calibration build for the onboard sensor. It logs raw
-// accel and gyro, the fused fore-aft angle, and stomp events over USB serial, and
-// mirrors the live tilt as strip brightness so the axis mapping can be confirmed by
-// eye. Use it to check firewalker_mg24_mount.h and the stomp thresholds in config.h.
-// It applies no saved calibration, so tilt here is relative to sensor level.
+// Logs raw motion, learned boot tilt, and stomps over USB. This build loads the
+// same saved 3D mounting reference as the app, so its strip preview works with a
+// controller mounted at any angle. Capture neutral and a side in final_app first.
 
 #include "modes/imu_debug.h"
 
@@ -25,7 +23,8 @@ static uint8_t tiltBrightness(float tilt) {
 
 void setup() {
   Firewalker::setupCore(F("imu_debug"));
-  Firewalker::imuBegin();  // prints the sensor, threshold, and axis banner
+  Firewalker::imuBegin();
+  Firewalker::imuLoadSavedCalibration();
 }
 
 void loop() {

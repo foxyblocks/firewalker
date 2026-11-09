@@ -1,7 +1,7 @@
 /**
  * The pair of boots, and what a tap applies to. It owns one `BootClient` per side, the
  * Both, Left, or Right choice, and the labels saved on this phone. The Remote screen reads
- * from `view()` and calls the actions here. Status and Calibrate are about one boot at a
+ * from `view()` and calls the actions here. Boot details are about one boot at a
  * time, so they use its `BootClient` from `client(side)` directly.
  *
  * Left and Right exist only on the phone. Both boots run the same firmware and don't
@@ -331,16 +331,6 @@ export class BootsStore {
   /** The sides the current tab controls. */
   targetSides(): Side[] {
     return this.target === "both" ? this.sides() : this.sides().filter((side) => side === this.target);
-  }
-
-  /**
-   * The boots Calibrate can walk through: chosen, online, and with a working sensor. A boot
-   * that can't capture would otherwise block the flow for the one that can.
-   */
-  calibrationSides(): Side[] {
-    return this.onlineTargets()
-      .filter(({ state }) => state.status?.sensor === "ok")
-      .map(({ side }) => side);
   }
 
   private onlineTargets(): { side: Side; client: BootClient; state: BootState }[] {

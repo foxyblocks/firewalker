@@ -4,6 +4,8 @@
  * own queue and timers, so one boot can never affect the other. `boots.ts` owns the
  * pair and decides which of them a tap goes to. Microphone tuning uses audio-config
  * replies alongside status, through the same queue as pattern and strip controls.
+ * Diagnostics also keeps bounded motion and volume histories here, where every incoming
+ * report is recorded even when React combines several notifications into one render.
  *
  * The boot is the source of truth. A tap sets a `pending` value, which the UI shows
  * until a status line settles it, so a control can never claim something the boot
@@ -19,17 +21,23 @@
 import {
   commands,
   AUDIO_PROTOCOL_VERSION,
+  CALIBRATION_CLEAR_PROTOCOL_VERSION,
+  ORIENTATION_PROTOCOL_VERSION,
   type AudioConfigReply,
+  type AudioSignalReply,
   LineSplitter,
   parseLine,
   type BootReply,
   type CalibrateReply,
+  type CalibrationClearTarget,
   type MotionReply,
   type Pose,
   type StatusReply,
   type StripSetting,
 } from "./protocol";
 import { AccessLostError, type BootLink, type Transport } from "../transport/transport";
+import { appendMotion, type MotionHistoryPoint } from "./motionHistory";
+import { appendAudio, type AudioHistoryPoint } from "./audioHistory";
 
 const COMMAND_TIMEOUT_MS = 2000;
 const FIRST_STATUS_WAIT_MS = 2000;
@@ -65,14 +73,22 @@ export type CaptureResult =
   | { ok: true; pose: Pose; angleDeg: number }
   | { ok: false; pose: Pose; reason: string };
 
+export type ClearCalibrationResult = { ok: true } | { ok: false; reason: string };
+
 export interface BootState {
   link: LinkState;
   /** The latest status line. Survives a dropped link, so the UI can show what it knew. */
   status?: StatusReply;
   /** The latest motion line, while debug is on. */
   motion?: MotionReply;
+  /** Recent reports retained individually, including stomp flags between renders. */
+  motionHistory: readonly MotionHistoryPoint[];
   /** Saved microphone tuning, reported by protocol 4+ boots. */
   audio?: AudioConfigReply;
+  /** Actual microphone samples, only while debug output is streaming. */
+  audioSignal?: AudioSignalReply;
+  /** Reported audio volume over time, retained before rendering just like motion. */
+  audioHistory: readonly AudioHistoryPoint[];
   audioCalibrating?: boolean;
   /** The patterns this boot can run. */
   patterns: string[];
@@ -80,6 +96,8 @@ export interface BootState {
   pending: Pending;
   /** The capture in progress. */
   capture?: { pose: Pose };
+  /** A clear is pending until status confirms both removal and saving. */
+  clearingCalibration?: CalibrationClearTarget;
   /** Why the last command failed: a firmware error code, or "no-answer". */
   notice?: string;
 }
@@ -94,10 +112,11 @@ interface Job {
   quiet?: boolean;
   onFail?: (reason: string) => void;
   onAck?: () => void;
+  onSent?: () => void;
 }
 
 export class BootClient {
-  private state: BootState = { link: "idle", patterns: [], pending: {} };
+  private state: BootState = { link: "idle", patterns: [], pending: {}, motionHistory: [], audioHistory: [] };
   private readonly listeners = new Set<() => void>();
   private readonly splitter = new LineSplitter();
 
@@ -108,9 +127,17 @@ export class BootClient {
   /** A released USB port must finish closing before another attempt opens it. */
   private closing: Promise<void> = Promise.resolve();
   private wantDebug = false;
+  private motionBaselinePending = true;
   private dragging = false;
   private desiredBrightness = 0;
   private desiredAudioSensitivity = 65;
+  private calibrationClear: {
+    target: CalibrationClearTarget;
+    sent: boolean;
+    job?: Job;
+    resolve: (result: ClearCalibrationResult) => void;
+    timer: ReturnType<typeof setTimeout> | null;
+  } | null = null;
   private audioCapture: {
     acked: boolean; started: boolean; fallback: boolean;
     resolve: (result: { ok: boolean; reason?: string }) => void;
@@ -181,7 +208,7 @@ export class BootClient {
   busy(): boolean {
     // Pose and microphone calibration both continue after their initial ack. Keep
     // the link until the result arrives or their existing recovery timers finish.
-    return this.capture !== null || this.audioCapture !== null || this.inFlight?.expect === "ack" || this.queue.some((job) => job.expect === "ack");
+    return this.capture !== null || this.calibrationClear !== null || this.audioCapture !== null || this.inFlight?.expect === "ack" || this.queue.some((job) => job.expect === "ack");
   }
 
   private async endConnection(state: "idle" | "sleeping"): Promise<void> {
@@ -330,6 +357,7 @@ export class BootClient {
 
   /** Drops everything tied to the current link. Nothing queued survives a disconnect. */
   private teardown(): void {
+    this.motionBaselinePending = true;
     this.link = null;
     if (this.firstStatusTimer) clearTimeout(this.firstStatusTimer);
     this.firstStatusTimer = null;
@@ -340,8 +368,9 @@ export class BootClient {
     this.dragging = false;
     this.firstStatusAsks = 0;
     this.finishCapture({ reason: "offline" });
+    this.finishCalibrationClear("offline");
     this.finishAudioCapture("offline");
-    this.update({ pending: {}, motion: undefined });
+    this.update({ pending: {}, motion: undefined, audioSignal: undefined, motionHistory: [], audioHistory: [] });
   }
 
   // ── Replies ────────────────────────────────────────────────────────────
@@ -355,6 +384,9 @@ export class BootClient {
 
   private onReply(reply: BootReply): void {
     switch (reply.t) {
+      case "audio":
+        if (!this.wantDebug) return;
+        return this.update({ audioSignal: reply, audioHistory: appendAudio(this.state.audioHistory, reply, Date.now()) });
       case "audio-config":
         this.update({ audio: reply, pending: this.settlePending(true) });
         if (this.inFlight?.expect === "audio-config") this.finishJob();
@@ -366,8 +398,15 @@ export class BootClient {
         return;
       case "status":
         return this.onStatus(reply);
-      case "motion":
-        return this.update({ motion: reply });
+      case "motion": {
+        if (!this.wantDebug) return;
+        // The first report's peak/stomp may cover time before streaming began.
+        // Start from its current acceleration; subsequent intervals are known
+        // to belong to this session, including consecutive reports with stomps.
+        const reading = this.motionBaselinePending ? { ...reply, accelPeak: reply.accel, stomp: false } : reply;
+        this.motionBaselinePending = false;
+        return this.update({ motion: reply, motionHistory: appendMotion(this.state.motionHistory, reading, Date.now()) });
+      }
       case "calibrate":
         return this.onCalibrate(reply);
       case "patterns":
@@ -405,6 +444,9 @@ export class BootClient {
       link: "online",
       notice: this.state.notice === "no-answer" ? undefined : this.state.notice,
       motion: status.debug ? this.state.motion : undefined,
+      motionHistory: status.debug ? this.state.motionHistory : [],
+      audioSignal: status.debug ? this.state.audioSignal : undefined,
+      audioHistory: status.debug ? this.state.audioHistory : [],
       // Audio tuning shares the same saved record, so this also settles its
       // save indicator after the Audio tab stops polling.
       audio: this.state.audio ? { ...this.state.audio, saved: status.saved } : undefined,
@@ -428,6 +470,7 @@ export class BootClient {
 
     if (this.inFlight?.expect === "status") this.finishJob();
     this.checkCaptureInStatus(status);
+    this.checkCalibrationClearInStatus(status);
   }
 
   /**
@@ -466,6 +509,7 @@ export class BootClient {
     if (!job) return;
     this.inFlight = job;
     this.commandTimer = setTimeout(() => this.failJob("no-answer"), COMMAND_TIMEOUT_MS);
+    job.onSent?.();
     this.link.write(job.line()).catch(() => {
       if (this.inFlight === job) this.failJob("no-answer");
     });
@@ -674,7 +718,9 @@ export class BootClient {
   }
 
   setDebug(on: boolean): void {
+    if (on && !this.wantDebug) this.motionBaselinePending = true;
     this.wantDebug = on;
+    if (!on) this.update({ motion: undefined, audioSignal: undefined, motionHistory: [], audioHistory: [] });
     if (!this.online) return;
     this.setPending({ debug: on });
     this.enqueue({ line: () => commands.debug(on), field: "debug", expect: "ack" });
@@ -705,12 +751,72 @@ export class BootClient {
     return () => clearInterval(timer);
   }
 
-  /** Blinks the strip so you can tell which physical boot this is. It changes no settings. */
+  /** Blinks the onboard user LED and strip together to identify this boot. Changes no settings. */
   blink(): void {
     if (this.online) this.enqueue({ line: commands.identify, expect: "ack" });
   }
 
   // ── Calibration ────────────────────────────────────────────────────────
+
+  /**
+   * Removes one saved side, or resets neutral and both sides, without taking a
+   * capture. Waits for the boot's status to confirm the removal was saved, so a
+   * dropped reply or a flash failure cannot make the sheet claim it was cleared.
+   * Refuses while capturing; an in-flight capture could otherwise restore a pose.
+   */
+  clearCalibration(target: CalibrationClearTarget): Promise<ClearCalibrationResult> {
+    if (!this.online) return Promise.resolve({ ok: false, reason: "offline" });
+    if ((this.state.status?.proto ?? 0) < CALIBRATION_CLEAR_PROTOCOL_VERSION) {
+      return Promise.resolve({ ok: false, reason: "needs-update" });
+    }
+    if (this.capture) return Promise.resolve({ ok: false, reason: "already-capturing" });
+    if (this.calibrationClear) return Promise.resolve({ ok: false, reason: "already-clearing" });
+    return new Promise((resolve) => {
+      const pending: NonNullable<BootClient["calibrationClear"]> = { target, sent: false, resolve, timer: null };
+      this.calibrationClear = pending;
+      this.update({ clearingCalibration: target, notice: undefined });
+      pending.job = {
+        line: () => commands.clearCalibration(target), expect: "ack", quiet: true,
+        onSent: () => {
+          pending.sent = true;
+          pending.timer = setTimeout(() => {
+            if (this.calibrationClear === pending) this.finishCalibrationClear("no-answer");
+          }, CAPTURE_RESULT_WAIT_MS + COMMAND_TIMEOUT_MS);
+          this.requestStatus();
+        },
+        onFail: (reason) => {
+          if (this.calibrationClear !== pending) return;
+          // A missing ack does not mean the flash write failed. The queued status
+          // read still confirms the actual result after this command times out.
+          if (reason !== "no-answer") this.finishCalibrationClear(reason);
+          else this.requestStatus();
+        },
+      };
+      this.enqueue(pending.job);
+    });
+  }
+
+  private checkCalibrationClearInStatus(status: StatusReply): void {
+    const pending = this.calibrationClear;
+    if (!pending?.sent) return;
+    const cleared = pending.target === "heel" ? status.heelDeg === null
+      : pending.target === "toe" ? status.toeDeg === null
+      : !status.calibrated && status.heelDeg === null && status.toeDeg === null;
+    if (!cleared || (!status.saved && !status.saveFailed)) return;
+    // Status is authoritative even when BLE lost the acknowledgement. Consume
+    // only this clear's job; a queued read or an unrelated command owns itself.
+    this.finishCalibrationClear(status.saveFailed ? "save-failed" : undefined);
+    if (this.inFlight === pending.job) this.finishJob();
+  }
+
+  private finishCalibrationClear(reason?: string): void {
+    const pending = this.calibrationClear;
+    if (!pending) return;
+    if (pending.timer) clearTimeout(pending.timer);
+    this.calibrationClear = null;
+    this.update({ clearingCalibration: undefined });
+    pending.resolve(reason ? { ok: false, reason } : { ok: true });
+  }
 
   /**
    * Captures one pose, resolving when the boot reports the outcome. Normally that's an
@@ -719,7 +825,13 @@ export class BootClient {
    */
   calibrate(pose: Pose): Promise<CaptureResult> {
     if (!this.online) return Promise.resolve({ ok: false, pose, reason: "offline" });
+    // Older firmware calibrates one fixed chip axis. Letting this screen capture
+    // against it would look like the new mounting-aware flow while saving different data.
+    if ((this.state.status?.proto ?? 0) < ORIENTATION_PROTOCOL_VERSION) {
+      return Promise.resolve({ ok: false, pose, reason: "orientation-update-required" });
+    }
     if (this.capture) return Promise.resolve({ ok: false, pose, reason: "already-capturing" });
+    if (this.calibrationClear) return Promise.resolve({ ok: false, pose, reason: "already-clearing" });
 
     return new Promise((resolve) => {
       this.capture = { pose, acked: false, resolve, timer: null, askedStatus: false };

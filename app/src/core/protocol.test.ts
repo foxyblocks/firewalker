@@ -16,6 +16,13 @@ const FIRMWARE_LINES = {
 };
 
 describe("parseLine", () => {
+  it("reads real audio waveform samples and refuses malformed telemetry", () => {
+    const sample = { t: "audio", ready: true, level: .4, rms: 18.5, waveform: [0, -.25, .5, 0] };
+    expect(parseLine(JSON.stringify(sample))).toEqual(sample);
+    expect(parseLine(JSON.stringify({ ...sample, waveform: ["bad"] }))).toBeNull();
+    expect(parseLine(JSON.stringify({ ...sample, level: 1.5 }))).toBeNull();
+  });
+
   it("reads the soft cap, and leaves it out for firmware that has none", () => {
     expect(parseLine(FIRMWARE_LINES.status)).toMatchObject({ maxBrightness: 96, capped: true, capBrightness: 96 });
     const beforeTheCap = FIRMWARE_LINES.status.replace('"capped":true,"capBrightness":96,', "");
@@ -116,6 +123,12 @@ describe("commands", () => {
     expect(commands.calibrate("toe")).toBe("calibrate toe");
   });
 
+  it("clears one saved side or explicitly resets all poses", () => {
+    expect(commands.clearCalibration("heel")).toBe("calibrate clear heel");
+    expect(commands.clearCalibration("toe")).toBe("calibrate clear toe");
+    expect(commands.clearCalibration("all")).toBe("calibrate clear all");
+  });
+
   it("names the strip setting it's changing", () => {
     expect(commands.strip("leds", 110)).toBe("strip leds 110");
     expect(commands.strip("toe", 0)).toBe("strip toe 0");
@@ -131,6 +144,7 @@ describe("commands", () => {
       commands.audioCalibrate(),
       commands.pattern("fire-trail"),
       commands.calibrate("neutral"),
+      commands.clearCalibration("heel"),
       commands.brightness(255),
       commands.strip("leds", 160),
       commands.stripPreview(false),

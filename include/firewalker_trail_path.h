@@ -26,7 +26,7 @@ namespace Firewalker {
 enum class TrailOrigin : uint8_t { Heel, Middle, Toe };
 
 // Picks the origin from the stomp's angle in degrees from the neutral pose, with toe-down
-// positive (degreesFromNeutral). Anything within flatDeg either way counts as flat, because
+// positive (orientationDegrees). Anything within flatDeg either way counts as flat, because
 // a foot is rarely level when it lands, and further than that picks the end that's down.
 // Example: with a flatDeg of 8, an angle of -6 is flat and -9 is heel down.
 constexpr TrailOrigin trailOriginFromTilt(float tiltDeg, float flatDeg) {

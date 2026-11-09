@@ -58,8 +58,10 @@ aren't JSON.
 | `brightness <n>` | Sets brightness, from 1 to `maxBrightness`, which the soft cap lowers while it's on |
 | `cap on`, `cap off` | Turns the soft brightness cap on or off and remembers it. On brings a brightness over the cap down to it. See [Soft brightness cap](#soft-brightness-cap) |
 | `calibrate neutral`, `calibrate heel`, `calibrate toe` | Captures one pose; hold it for two seconds. A bare `calibrate` means neutral |
-| `debug on`, `debug off` | Starts or stops live motion lines |
-| `identify` | Blinks the strip for about 1.5 seconds, to show which boot this is. Changes no settings |
+| `calibrate clear heel`, `calibrate clear toe` | Removes that saved side pose, keeping neutral and the other side; requires protocol 5 |
+| `calibrate clear all` | Resets neutral, heel, and toe to uncalibrated defaults; requires protocol 5 |
+| `debug on`, `debug off` | Starts or stops live motion and audio lines |
+| `identify` | Blinks the strip and MG24 Sense onboard user LED together for about 1.5 seconds, starting dark. Restores the pattern and status light afterward. Changes no settings |
 | `strip leds <n>`, `strip toe <n>`, `strip heel <n>` | Sets the pixel count, or the pixel at the toe or heel, and remembers it. See [Strip layout](#strip-layout) |
 | `strip preview on`, `strip preview off` | Shows the layout on the strip in place of the pattern, or returns to the pattern. Changes no settings |
 | `recipes` | Lists uploaded recipes, free slots, and the recipe versions this firmware can read. See [Recipes](#recipes) |
@@ -109,7 +111,7 @@ Sent in reply to `status`, when a client subscribes, and after any change. Chang
 are reported at most every 250 ms, so a slider drag gets one line per interval.
 
 ```json
-{"t":"status","proto":4,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":96,"capped":true,"capBrightness":96,"sensor":"ok","tilt":0.00,"calibrated":true,"neutralDeg":1.56,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}
+{"t":"status","proto":6,"id":"3ED1","pattern":"off","lit":"flow","brightness":24,"maxBrightness":96,"capped":true,"capBrightness":96,"sensor":"ok","tilt":0.00,"calibrated":true,"orientationCalibrated":true,"neutralDeg":0.00,"heelDeg":-18.40,"toeDeg":null,"calibration":"idle","saved":true,"saveFailed":false,"saves":0,"debug":false,"ble":true,"leds":110,"maxLeds":160,"toe":40,"heel":90,"preview":false}
 ```
 
 | Field | Meaning |
@@ -122,13 +124,14 @@ are reported at most every 250 ms, so a slider drag gets one line per interval.
 | `capped`, `capBrightness` | Whether the soft cap is on, and its level. Firmware from before the cap leaves both out |
 | `sensor` | `ok` or `unavailable` |
 | `tilt` | Fused fore-aft tilt: -1 at the heel pose, 0 at neutral, +1 at the toe pose |
-| `calibrated`, `neutralDeg` | Whether a neutral has been captured, and its angle in degrees |
+| `calibrated`, `neutralDeg` | Whether neutral has been captured; its boot-relative angle is zero in protocol 6 |
+| `orientationCalibrated` | Protocol 6: neutral plus at least one side has taught the 3D mounting reference |
 | `heelDeg`, `toeDeg` | Those poses' angles in degrees, or `null` until captured |
 | `calibration` | The latest capture: `idle`, `capturing`, `ok`, or a failure reason |
 | `saved` | Every current setting is in flash, so it will survive a power cycle |
 | `saveFailed` | The latest flash write failed |
 | `saves` | Flash writes since boot |
-| `debug` | Whether motion lines are on |
+| `debug` | Whether motion and audio lines are on |
 | `ble` | Whether a BLE client is subscribed |
 | `leds`, `maxLeds` | How many pixels the ring has, and the most this build can drive |
 | `toe`, `heel` | The pixels at the toe and heel, counting from 0 |
@@ -153,13 +156,25 @@ Reports a capture's progress. `angleDeg` is the angle the firmware saved for tha
 | `motion` | The boot never settled into one pose during the capture |
 | `no-samples` | The sensor stopped delivering fresh samples |
 | `sensor-unavailable` | The motion sensor isn't available |
-| `out-of-range` | A neutral pose too far from level, more than 45 degrees |
+| `out-of-range` | An invalid sensor angle (non-finite or outside its -180..+180 degree representation) |
 | `too-close` | A heel or toe pose less than 10 degrees from neutral |
 | `wrong-side` | Heel and toe on the same side of neutral |
+| `neutral-required` | A side pose needs a saved neutral reference first |
+| `off-axis` | The side poses disagree on the fore-aft plane, or a pose is too close to opposite gravity to determine its direction |
 
 A failed capture leaves the previous calibration in place, both in use and in flash.
 
 #### How the poses work
+
+If a saved pose blocks its replacement with `wrong-side`, clear that side first or
+use `calibrate clear all` to start over. If the other side is still saved, clearing a side
+uses its default range until it is captured again. Clearing the last side leaves tilt at
+zero until a new side teaches its direction. Clearing all also removes neutral; there is no neutral-only
+clear because the side poses depend on that reference. Both operations apply and
+save immediately, leave strip and audio settings untouched, and refuse with
+`already-capturing` while a capture is running. They return a `calibrate` ack and
+an updated status; `saveFailed` still reports a flash-write failure. Protocol 5 adds
+these commands so the app can offer them only on firmware that supports them.
 
 Take them while wearing the boot, so they capture what that foot really does. Capture
 neutral first, because heel and toe are checked against it. Each controller stores its own,
@@ -167,23 +182,30 @@ and the firmware never captures on its own at startup, because a boot may be til
 
 - Tilt maps heel to -1, neutral to 0, and toe to +1, so patterns don't need to know about
   calibration. Each side scales on its own range.
-- Heel and toe are optional. A side with no captured pose reaches full tilt 30 degrees from
-  neutral, so a neutral-only boot works.
-- Direction comes from the poses, so a controller mounted backward corrects itself once
-  heel or toe is captured.
-- Retaking neutral keeps heel and toe, unless the new neutral lands past one of them or
-  within 10 degrees of it. That side then returns to its default.
-- Tilt reads exactly 0 within 3 degrees of neutral, so a calibrated boot rests flat.
+- Neutral captures the resting 3D gravity direction at any controller mounting angle.
+  A heel or toe pose teaches which combination of chip axes is along the foot. All three
+  gyro axes track motion; no sensor axis is assumed to match the boot.
+- Capture neutral and at least one side. Until that direction is known, tilt stays at zero.
+  The uncaptured side uses a 30-degree default range.
+- Capturing neutral again resets both side poses, because they belonged to the previous
+  mounting reference. Heel/toe need at least 10 degrees of separation from neutral and
+  must agree on a fore-aft plane within the configured tolerance.
+- Tilt reads exactly 0 within 3 degrees of neutral. Heel/toe angles in status are signed,
+  boot-relative degrees; the boot saves gravity vectors rather than those display values.
+- Protocol 6/settings version 6 require fresh pose capture after updating older firmware.
+  Pattern, brightness, strip layout, and microphone settings are preserved.
 
 A capture sets where tilt lands. It doesn't change the strip's toe and heel pixels (see
 [Strip layout](#strip-layout)) or the stomp thresholds, because steps and stomps are quick
 spikes rather than held angles. Watch `accelPeak` in motion lines to tune those.
 
-A capture collects the whole two seconds and judges it at the end, using only the middle
-half of the samples. Tremor, a slow sag, a brief stumble, or settling in late all still work.
-It only fails with `motion` if that middle half is spread too wide, such as a foot rocking
-from heel to toe. The window and limits are in [`config.h`](../include/config.h)
-(`CALIBRATION_*` and `TILT_LIMITS`).
+A capture collects two seconds of fused gravity vectors. It discards the furthest quarter
+from their center, then requires the retained vectors to fit within the angular spread
+limit. This tolerates a brief stumble while rejecting continuous rocking. The window,
+spread, side separation, and axis agreement are configured in `config.h`.
+
+`neutral-required` means capture neutral before a side. `off-axis` means the side poses
+don't describe the same fore-aft movement; retake the side while keeping sideways lean small.
 
 ### Soft brightness cap
 
@@ -308,7 +330,7 @@ Sent about five times a second while debug is on.
 | Field | Meaning |
 |---|---|
 | `tilt` | Same as in status |
-| `angleDeg` | Fused fore-aft angle before calibration |
+| `angleDeg` | Fused boot-relative angle in the learned fore-aft plane; zero until neutral and a side are captured |
 | `accel` | Total acceleration at this moment, m/s², including gravity |
 | `accelPeak` | The highest total acceleration since the previous motion line, which catches a step's spike |
 | `gyro` | Total rotation rate, rad/s |
@@ -343,7 +365,7 @@ report. These lines are best-effort telemetry, so clients may skip them while a 
 
 ### Microphone tuning
 
-The boot remote exposes these controls under **Calibrate → Audio**, one boot at a time.
+The boot remote exposes these controls under **Remote → Audio**, one boot at a time.
 Protocol 4 adds per-boot settings shared by every audio-reactive recipe. USB and BLE use the
 same commands. Sensitivity and quiet calibration are saved with the boot's other settings,
 using the same delayed save that combines slider changes into one flash write.
@@ -369,3 +391,11 @@ can be adopted by a retry, while a gain change during calibration is refused. Co
 also arrive when calibration finishes; `saved` becomes true after the quiet save delay.
 Settings version 5 reads version 4 records with default audio tuning and preserves their
 pattern, brightness, poses, and layout.
+
+### Audio waveform telemetry (protocol 6)
+
+Debug `audio` lines also include `waveform`: 24 measured, signed samples in -1..1 from
+the latest microphone block. Each sample retains the largest excursion in its time bucket.
+The waveform is scaled to the configured full-volume amplitude; `rms` is the raw measured
+level and `level * 100` is its normalized percent of maximum. These are live readings, not
+calibrated sound-pressure decibels. Telemetry is dropped before command replies when BLE is busy.

@@ -31,6 +31,18 @@ static void test_calibrate_takes_an_optional_pose() {
   TEST_ASSERT_EQUAL_STRING("too-many-arguments", parseCommand("calibrate heel now").error);
 }
 
+static void test_clear_calibration_names_a_side_or_all_poses() {
+  const Command heel = parseCommand("calibrate clear heel");
+  TEST_ASSERT_EQUAL(CommandType::CalibrationClear, heel.type);
+  TEST_ASSERT_EQUAL(CalibrationClear::Heel, heel.clearTarget);
+  TEST_ASSERT_EQUAL(CalibrationClear::Toe, parseCommand("calibrate clear toe").clearTarget);
+  TEST_ASSERT_EQUAL(CalibrationClear::All, parseCommand("calibrate clear all").clearTarget);
+  TEST_ASSERT_EQUAL_STRING("expected-clear-target", parseCommand("calibrate clear").error);
+  TEST_ASSERT_EQUAL_STRING("unknown-clear-target", parseCommand("calibrate clear neutral").error);
+  TEST_ASSERT_EQUAL_STRING("too-many-arguments", parseCommand("calibrate clear heel now").error);
+  TEST_ASSERT_EQUAL_STRING("calibrate", commandName(CommandType::CalibrationClear));
+}
+
 static void test_strip_commands_name_a_setting_and_a_value() {
   const Command leds = parseCommand("strip leds 110");
   TEST_ASSERT_EQUAL(CommandType::StripSet, leds.type);
@@ -80,7 +92,7 @@ static void test_strip_commands_ack_as_strip() {
 
 static void test_every_command_fits_a_default_ble_write() {
   const char* longest[] = {"calibrate neutral", "pattern fire-trail", "brightness 255",
-                           "strip preview off", "strip leds 160", "cap off"};
+                           "strip preview off", "strip leds 160", "cap off", "calibrate clear heel"};
   for (const char* command : longest) {
     TEST_ASSERT_TRUE(strlen(command) <= 20);
   }
@@ -342,9 +354,9 @@ static void test_status_reports_the_actual_state() {
   char line[REMOTE_LINE_MAX];
   formatStatus(line, sizeof(line), sampleStatus());
   TEST_ASSERT_EQUAL_STRING(
-      "{\"t\":\"status\",\"proto\":4,\"id\":\"A1B2\",\"pattern\":\"off\",\"lit\":\"fire-trail\","
+      "{\"t\":\"status\",\"proto\":6,\"id\":\"A1B2\",\"pattern\":\"off\",\"lit\":\"fire-trail\","
       "\"brightness\":32,\"maxBrightness\":48,\"capped\":true,\"capBrightness\":48,\"sensor\":\"ok\","
-      "\"tilt\":-0.25,\"calibrated\":true,"
+      "\"tilt\":-0.25,\"calibrated\":true,\"orientationCalibrated\":false,"
       "\"neutralDeg\":4.50,\"heelDeg\":null,\"toeDeg\":34.00,\"calibration\":\"ok\",\"saved\":true,"
       "\"saveFailed\":false,\"saves\":3,\"debug\":false,\"ble\":true,\"leds\":110,\"maxLeds\":160,"
       "\"toe\":40,\"heel\":90,\"preview\":true}",
@@ -415,6 +427,7 @@ int main(int, char**) {
   RUN_TEST(test_audio_commands);
   RUN_TEST(test_commands_with_no_arguments);
   RUN_TEST(test_calibrate_takes_an_optional_pose);
+  RUN_TEST(test_clear_calibration_names_a_side_or_all_poses);
   RUN_TEST(test_strip_commands_name_a_setting_and_a_value);
   RUN_TEST(test_strip_commands_reject_bad_input);
   RUN_TEST(test_strip_preview_turns_on_or_off);

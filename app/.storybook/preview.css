@@ -1,0 +1,19 @@
+/* The app locks the page to the phone screen. Stories of single components need to scroll
+   and size to their content instead, so this undoes that inside Storybook only. */
+body.sb-show-main {
+  overflow: auto;
+  user-select: auto;
+  -webkit-user-select: auto;
+}
+
+/* Sizes a component story like a phone's content column. */
+.story-column {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 398px);
+}
+
+/* A full screen, filling the chosen viewport the way the app fills the phone. */
+.story-phone {
+  height: 100vh;
+}

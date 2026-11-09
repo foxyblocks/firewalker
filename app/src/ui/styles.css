@@ -216,7 +216,22 @@ dd {
   display: flex;
   flex: none;
   gap: 6px;
+}
+
+/* A screen-wide row of tabs under the top bar. */
+.tabs-bar {
+  flex: none;
   padding: 0 var(--gap);
+}
+
+/* Tabs nested inside a screen, such as Poses and Strip. */
+.tabs-small .tab {
+  min-height: 40px;
+  font-size: 17px;
+}
+
+.tabs-inline {
+  margin-bottom: 10px;
 }
 
 .tab {
@@ -730,7 +745,55 @@ dd {
 
 .button-danger {
   border-color: var(--bad);
+  background: transparent;
   color: var(--bad);
+}
+
+.button-danger:active {
+  background: rgb(255 98 87 / 10%);
+}
+
+/* A running action stays readable rather than fading like a disabled one. */
+.button-busy:disabled {
+  opacity: 0.75;
+  cursor: progress;
+}
+
+.button-compact {
+  flex: none;
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 16px;
+}
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-quiet);
+}
+
+.icon-button:not(:disabled):hover,
+.icon-button:not(:disabled):active {
+  color: var(--ink);
+  background: rgb(255 255 255 / 5%);
+}
+
+.icon-button[aria-busy="true"] {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.chevron {
+  transition: transform 140ms ease;
+}
+
+.chevron-open {
+  transform: rotate(180deg);
 }
 
 .button-wide {
@@ -746,14 +809,69 @@ dd {
   gap: 8px;
 }
 
-/* ── Status ────────────────────────────────────────────────────────────── */
+/* ── Boot detail ───────────────────────────────────────────────────────── */
 
-.boot-head {
+.detail-back-row {
   display: flex;
+  flex: none;
+  padding: 0 var(--gap);
+}
+
+.detail-back { min-height: 30px; padding: 0 2px; font-size: 12px; }
+
+.detail-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  flex: none;
   align-items: center;
-  justify-content: space-between;
+  gap: 5px 10px;
+  padding: 3px var(--gap) 14px;
+}
+
+.detail-head .screen-title { min-width: 0; font-size: clamp(22px, 6.5vw, 28px); overflow-wrap: anywhere; }
+.detail-meta { grid-column: 1 / -1; flex-wrap: wrap; }
+.detail-actions { display: flex; align-items: center; gap: 6px; }
+.detail-actions .button { min-width: 66px; padding: 0 8px; font-size: 16px; }
+.detail-blink { flex: none; }
+.section-disabled > .section-head { color: var(--ink-faint); }
+.section-disabled > .setup-actions { opacity: .65; }
+
+.stack {
+  display: grid;
+  gap: 10px;
+}
+
+.stack-loose {
+  gap: 22px;
+}
+
+/* A stack spaces its own children, so a panel inside one drops its usual margin. */
+.stack > .panel {
+  margin-bottom: 0;
+}
+
+.help-text {
+  color: var(--ink-quiet);
+}
+
+.help-small {
+  font-size: 12px;
+}
+
+.side-card { display: grid; gap: 8px; }
+
+.danger-zone {
+  display: grid;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-top: 8px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.debug-audio {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
 }
 
 .facts {
@@ -797,6 +915,19 @@ dd {
   font-size: 12.5px;
 }
 
+/* Secondary rows, such as saved microphone tuning, read quieter than the rest. */
+.fact-quiet {
+  font-size: 12.5px;
+}
+
+.fact-quiet dt {
+  color: var(--ink-faint);
+}
+
+.fact-quiet dd {
+  color: var(--ink-quiet);
+}
+
 .panel {
   margin-bottom: var(--gap);
   padding: 12px;
@@ -813,12 +944,37 @@ dd {
 }
 
 .rename {
-  display: flex;
-  gap: 8px;
+  display: grid;
+  gap: 10px;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+}
+
+.field-label {
+  color: var(--ink-quiet);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.field-note {
+  color: var(--ink-quiet);
+  font-size: 11.5px;
+}
+
+.field-error .input {
+  border-color: var(--bad);
+}
+
+.field-error .field-note {
+  color: var(--bad);
 }
 
 .input {
-  flex: 2;
+  width: 100%;
   min-width: 0;
   min-height: 48px;
   padding: 0 12px;
@@ -832,17 +988,61 @@ dd {
 
 /* ── Find boots ────────────────────────────────────────────────────────── */
 
-.calibrate-card {
-  width: 100%;
-  margin-bottom: 10px;
-}
-
 .boot-card {
   margin-bottom: 10px;
   padding: 14px 12px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+}
+
+.boot-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+}
+
+.boot-row:active {
+  background: var(--surface-raised);
+}
+
+.boot-row-main {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+}
+
+.boot-row-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.side-tag {
+  flex: none;
+  padding: 1px 7px;
+  border: 1px solid var(--ember);
+  border-radius: 999px;
+  color: var(--ember);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.side-tag-none {
+  border-color: var(--line);
+  color: var(--ink-quiet);
+}
+
+.boot-row-go {
+  flex: none;
+  color: var(--ink-faint);
+  font-size: 26px;
+  line-height: 1;
 }
 
 .scanning {
@@ -870,34 +1070,26 @@ dd {
   text-transform: uppercase;
 }
 
-/* ── Calibrate sheet ───────────────────────────────────────────────────── */
+/* ── Calibration ───────────────────────────────────────────────────────── */
 
-.sheet-backdrop {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  display: flex;
-  align-items: flex-end;
-  background: rgb(0 0 0 / 62%);
-  animation: fade-in 160ms ease;
-}
-
-.sheet {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
-  max-height: calc(100% - env(safe-area-inset-top) - 24px);
-  overflow-y: auto;
-  padding: 18px var(--gap) calc(env(safe-area-inset-bottom) + 12px);
-  border-top: 1px solid var(--line);
-  border-radius: 22px 22px 0 0;
+/* A short message inside a screen, with a colored edge for warnings and failures. */
+.notice {
+  padding: 10px 12px;
+  border-left: 3px solid var(--line);
+  border-radius: 6px;
   background: var(--surface);
-  animation: rise 200ms ease;
+  color: var(--ink-quiet);
+  font-size: 12.5px;
 }
 
-.sheet-help {
-  color: var(--ink-quiet);
+.notice-warn {
+  border-color: var(--wait);
+  color: var(--ink);
+}
+
+.notice-bad {
+  border-color: var(--bad);
+  color: var(--ink);
 }
 
 .steps {
@@ -907,6 +1099,14 @@ dd {
 }
 
 .step {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-raised);
+}
+
+.step-select {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -914,14 +1114,25 @@ dd {
   min-height: 52px;
   padding: 10px 12px;
   justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface-raised);
+  border: 0;
+  border-radius: inherit;
+  background: none;
   text-align: left;
 }
 
-.step:disabled {
+.step-select:disabled {
   opacity: 1;
+}
+
+/* The icon stays small while its tap target fills the right end of the card. */
+.step-with-clear .step-select {
+  padding-right: 52px;
+}
+
+.step-clear {
+  position: absolute;
+  top: 4px;
+  right: 4px;
 }
 
 .step-line {
@@ -929,6 +1140,37 @@ dd {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+/* The status reads quietly, and a saved angle quieter still, beside the pose's name. */
+.pose-state {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.pose-summary {
+  color: var(--ink-quiet);
+  font-size: 12px;
+}
+
+.pose-degrees {
+  color: var(--ink-faint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.step-active .pose-summary {
+  color: var(--ember);
+}
+
+.step-good .pose-summary {
+  color: var(--good);
+}
+
+.step-bad .pose-summary {
+  color: var(--bad);
 }
 
 .step-active {
@@ -953,15 +1195,6 @@ dd {
 
 .strip-block {
   padding: 2px 2px 4px;
-}
-
-.tabs-sheet {
-  padding: 0;
-}
-
-.tabs-sheet .tab {
-  min-height: 40px;
-  font-size: 17px;
 }
 
 .strip-cards {
@@ -1018,18 +1251,6 @@ dd {
   gap: 16px;
 }
 
-@keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes rise {
-  from {
-    transform: translateY(24px);
-  }
-}
-
 /* The Capture button fills over the firmware's two-second window, so a hold has a visible end. */
 .button-capturing:disabled {
   opacity: 1;
@@ -1042,6 +1263,118 @@ dd {
   to {
     background-position: left;
   }
+}
+
+/* ── Audio ─────────────────────────────────────────────────────────────── */
+
+.audio-panel {
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.audio-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  text-align: left;
+}
+
+.audio-panel-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12.5px;
+}
+
+.audio-panel-who {
+  overflow: hidden;
+  color: var(--ink-quiet);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audio-panel-body {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 10px;
+}
+
+.audio-panel-body .tab {
+  min-height: 36px;
+  font-size: 16px;
+}
+
+.audio-slider .section-head {
+  margin-bottom: 0;
+}
+
+.audio-slider .strip {
+  height: 36px;
+}
+
+.audio-quiet {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.audio-quiet-notes {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.waveform {
+  display: grid;
+  gap: 4px;
+}
+
+.waveform-plot {
+  display: block;
+  width: 100%;
+  height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--night);
+}
+
+.waveform-axis {
+  stroke: var(--line);
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.waveform-line {
+  fill: none;
+  stroke: var(--ember);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 3px rgb(255 106 31 / 60%));
+}
+
+.waveform-readouts {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-quiet);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.waveform-key {
+  color: var(--ink-faint);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* ── Prompt ────────────────────────────────────────────────────────────── */
@@ -1078,3 +1411,110 @@ dd {
     transition: none !important;
   }
 }
+
+/* Persistent top-level navigation; the little visual pills retain 44px hit areas. */
+.app-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px var(--gap);
+}
+
+.app-header .wordmark { font-size: 26px; letter-spacing: 0; }
+.main-tabs { display: flex; align-items: center; gap: 4px; }
+.main-pill {
+  position: relative;
+  z-index: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-quiet);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.main-pill::before {
+  content: "";
+  position: absolute;
+  inset: 4px 0;
+  z-index: -1;
+  border: 1px solid var(--line);
+  border-radius: inherit;
+  background: var(--surface);
+}
+.main-pill-on { color: var(--ink); }
+.main-pill-on::before { border-color: var(--ember); background: var(--ember-soft); }
+.app-content { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.boots-heading { min-height: 52px; }
+.add-boot { display: inline-flex; align-items: center; gap: 6px; }
+
+/* A single track makes Configuration/Diagnostics read as one segmented control. */
+.tabs-joined {
+  gap: 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--night);
+}
+.tabs-joined .tab {
+  min-height: 40px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--ink-quiet);
+  box-shadow: none;
+  font-size: 18px;
+}
+.tabs-joined .tab-on { background: var(--surface-raised); color: var(--ink); box-shadow: 0 1px 4px rgb(0 0 0 / 25%); }
+
+.setup-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.setup-action { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-height: 72px; padding: 12px; text-align: left; }
+.setup-action .card-hint { font-family: var(--mono); font-size: 10.5px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+/* All overlays share one sheet: scroll the contents, keep its close action reachable. */
+.sheet-dialog {
+  position: fixed;
+  inset: auto 0 0;
+  width: 100%;
+  max-width: 430px;
+  max-height: calc(100dvh - 24px);
+  margin: 0 auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 22px 22px 0 0;
+  background: var(--surface);
+  color: var(--ink);
+}
+.sheet-dialog[open] { display: flex; flex-direction: column; }
+.sheet-dialog::backdrop { background: rgb(0 0 0 / 68%); }
+.sheet-header { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 12px 8px var(--gap); }
+.sheet-header .screen-title { font-size: 25px; }
+.sheet-content { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px var(--gap) 16px; }
+.sheet-footer { flex: none; padding: 12px var(--gap) calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.connection-option { display: flex; align-items: center; gap: 14px; width: 100%; min-height: 78px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-raised); text-align: left; }
+.connection-option > span { display: grid; gap: 5px; }
+.connection-option > svg { flex: none; color: var(--ember); }
+.connection-option:not(:disabled):active { border-color: var(--ember); }
+.step-good .pose-degrees { color: var(--ink-quiet); }
+
+
+/* The diagnostics are always live while open; each signal has a label and visual. */
+.debug-panel { display: grid; gap: 16px; }
+.debug-panel h2 { margin: 0; }
+.debug-signal { display: grid; gap: 8px; }
+.signal-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.signal-heading .readout { font-size: 12px; }
+.signal-history { display: grid; gap: 6px; }
+.history-plot { display: block; width: 100%; height: 80px; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--night); }
+.stomp-marker { stroke: var(--good); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.history-scale { fill: var(--ink-faint); font-size: 8px; font-family: var(--mono); }
+.stomp-key { display: inline-block; height: 10px; border-left: 1px solid var(--good); margin-right: 3px; vertical-align: -1px; }

@@ -14,7 +14,7 @@ the down-end by fused fore-aft tilt, where a stomp launches diverging trail fron
 `fire-trail` (stomp-spawned fire bands), and **recipes**, built in or uploaded
 (`specs/recipe-engine-spec.md`). A stomp is an IMU acceleration spike. Both
 shoes run one identical firmware binary. Each controller saves its own pattern,
-brightness, soft brightness cap, calibrated poses (neutral, heel, toe), and strip layout in flash. A **remote** controls running firmware
+brightness, soft brightness cap, calibrated 3D poses (neutral, heel, toe), and strip layout in flash. A **remote** controls running firmware
 over BLE or the USB console with one line protocol. Out of scope: the 2-D "perimeter
 bubble" flow, multiple strips per shoe, synchronization between shoes, and the final
 battery and enclosure. Don't over-engineer ahead of working hardware.
@@ -22,7 +22,7 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
 ## Project map
 
 - `include/config.h` — all hardware/behavior knobs, named by owning module (`STRIP_*`, `IMU_*`,
-  `CALIBRATION_*`, `TILT_LIMITS`, `SETTINGS_*`, `REMOTE_*`, `FLOW_*`, `FIRE_TRAIL_*`). Never hard-code
+  `CALIBRATION_*`, `ORIENTATION_LIMITS`, `SETTINGS_*`, `REMOTE_*`, `FLOW_*`, `FIRE_TRAIL_*`). Never hard-code
   these in source files.
 - `src/main.cpp` — tiny Arduino dispatcher into the selected mode.
 - `src/modes/` — compile-time builds (`final_app`, `imu_debug`, `bench`), chosen by
@@ -38,7 +38,7 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
   interface. The commands and replies are in `docs/remote-protocol.md`.
 - `src/firewalker_settings_store.cpp` — saves settings to flash (NVM3).
 - `src/firewalker_core.cpp` — shared hardware services: strip, status light, idle fill.
-- `include/firewalker_fusion.h`, `firewalker_mg24_mount.h`, `firewalker_strip_map.h`,
+- `include/firewalker_fusion.h`, `firewalker_orientation.h`, `firewalker_strip_map.h`,
   `firewalker_calibration.h`, `firewalker_settings.h`, `firewalker_remote_protocol.h` — pure,
   Arduino-free logic that `test/` exercises off-hardware.
 - `tools/pio/mg24_stack.py` — PlatformIO build step: picks the core's radio stack, pins
@@ -48,7 +48,10 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
   test is, `boards` is which board, `link` talks to it, `flash` runs PlatformIO, and `webapp`
   serves the phone remote.
 - `test/` — host-native Unity tests for the pure logic (`pio test -e native`).
-- `app/` — the Capacitor iPhone remote (React + TypeScript, Bun). See `app/README.md`.
+- `app/` — the Capacitor iPhone remote (React + TypeScript, Bun). Each boot has one
+  Configuration/Diagnostics detail screen. Shared controls live in `app/src/ui/components/`,
+  with their Storybook stories alongside them and config in `app/.storybook/`.
+  Reuse those controls when changing the remote. See `app/README.md`.
 - `designer/` — the pattern designer: a web app that edits and simulates pattern recipes
   (React + TypeScript, Bun, port 5174). Its `src/engine/strip.ts` ports
   `firewalker_strip_map.h`, so a change to the strip map changes both. See `designer/README.md`.
@@ -100,7 +103,7 @@ adapter. Over SWD, `pio run -t upload` also recovers a board whatever it's runni
 - Hardware smoke tests are verified via serial / eyeball, not unit tests. A successful
   upload doesn't verify the LED signal, so check changes to the strip driver on the real
   strip. Use TDD (`/tdd`) for pure logic (the `pio test -e native` env exists for this —
-  see `test/test_fusion/`), not bring-up.
+  see `test/test_orientation/`), not bring-up.
 - Use `/diagnose` for build / upload / serial / LED-behavior failures.
 
 ## Agent skills

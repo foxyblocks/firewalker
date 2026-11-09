@@ -10,7 +10,8 @@
 
 #include "config.h"
 #include "firewalker_fusion.h"
-#include "firewalker_mg24_mount.h"
+#include "firewalker_orientation.h"
+#include "firewalker_settings_store.h"
 
 namespace Firewalker {
 
@@ -21,10 +22,10 @@ static LSM6DS3 sensor(I2C_MODE, IMU_I2C_ADDR);
 static bool ready = false;
 static ImuSample latest = {0, 0, 0, 0, 0, 0, IMU_GRAVITY};
 
-// Fused fore-aft angle in radians. Zero is sensor level, not the boot's neutral.
-static float fusedAngle = 0.0f;
+// Gravity stays in chip coordinates until the calibrated boot frame projects it.
+static GravityFusion fusion;
 static bool firstSample = true;
-static TiltCalibration tiltCalibration;
+static OrientationCalibration tiltCalibration;
 
 static StompState stomp;
 
@@ -56,13 +57,7 @@ bool imuBegin() {
   Serial.print(IMU_STOMP_ACCEL_THRESHOLD);
   Serial.print(F(" release<="));
   Serial.print(IMU_RELEASE_ACCEL_THRESHOLD);
-  Serial.print(F(" mount(fwd="));
-  Serial.print(Mg24Mount::FOREAFT_AXIS);
-  Serial.print(F(" up="));
-  Serial.print(Mg24Mount::VERTICAL_AXIS);
-  Serial.print(F(" gyro="));
-  Serial.print(Mg24Mount::PITCH_GYRO_AXIS);
-  Serial.println(F(")"));
+  Serial.println(F(" orientation=learned-3d"));
   return ready;
 }
 
@@ -85,18 +80,11 @@ bool imuUpdate() {
   latest.mag = sqrtf(latest.ax * latest.ax + latest.ay * latest.ay +
                      latest.az * latest.az);
 
-  // The accelerometer gives the absolute angle and the gyro tracks fast motion
-  // without drift. The first sample seeds the filter so tilt is right at boot.
-  float aFwd = Mg24Mount::foreAftAcceleration(latest.ax, latest.ay, latest.az);
-  float aUp = Mg24Mount::verticalAcceleration(latest.ax, latest.ay, latest.az);
-  float accAngle = accelTiltAngle(aFwd, aUp);
-  float gyroRate = Mg24Mount::pitchAngularRate(latest.gx, latest.gy, latest.gz);
-  if (firstSample) {
-    fusedAngle = accAngle;
-    firstSample = false;
-  } else {
-    fusedAngle = fuseTiltStep(fusedAngle, accAngle, gyroRate, dt, IMU_FILTER_ALPHA);
-  }
+  // All gyro axes rotate the gravity estimate. Impacts still trigger stomps,
+  // but their non-gravity acceleration cannot pull the orientation off-course.
+  fusion.update({latest.ax,latest.ay,latest.az}, {latest.gx,latest.gy,latest.gz},
+                dt, IMU_FILTER_ALPHA, IMU_GRAVITY, IMU_ACCEL_GRAVITY_TOLERANCE);
+  firstSample = false;
 
   stompStep(stomp, latest.mag, now,
             {IMU_STOMP_ACCEL_THRESHOLD, IMU_RELEASE_ACCEL_THRESHOLD,
@@ -109,21 +97,32 @@ const ImuSample& imuLatest() { return latest; }
 
 float imuTiltFwd() {
   if (!ready) return 0.0f;
-  return tiltFromAngle(imuRawAngleDeg(), tiltCalibration, TILT_LIMITS);
+  return orientationTilt(fusion.gravity(), tiltCalibration, ORIENTATION_LIMITS);
 }
 
 float imuTiltDeg() {
   if (!ready) return 0.0f;
-  return degreesFromNeutral(imuRawAngleDeg(), tiltCalibration);
+  return orientationDegrees(fusion.gravity(), tiltCalibration);
 }
 
-float imuRawAngleDeg() { return fusedAngle * 57.2957795f; }
+Vec3 imuGravity() { return fusion.gravity(); }
 
 float imuGyroMagnitude() {
   return sqrtf(latest.gx * latest.gx + latest.gy * latest.gy + latest.gz * latest.gz);
 }
 
-void imuSetCalibration(const TiltCalibration& calibration) { tiltCalibration = calibration; }
+void imuSetCalibration(const OrientationCalibration& calibration) { tiltCalibration = calibration; }
+
+void imuLoadSavedCalibration() {
+  Settings saved{};
+  const SettingsBounds bounds = {LED_BRIGHTNESS_MIN, LED_BRIGHTNESS_MAX, STRIP_MAX_PIXELS, LED_BRIGHTNESS_SOFT_CAP};
+  loadSettings(bounds, saved);
+  imuSetCalibration(saved.orientation);
+  if (!orientationCalibrated(saved.orientation)) {
+    Serial.println(F("[imu] capture neutral and a side pose in the app before testing mounted tilt"));
+  }
+}
+
 
 bool imuTakeStomp() {
   if (!stomp.pending) return false;
@@ -159,7 +158,7 @@ void imuLog() {
   Serial.print(',');
   Serial.print(latest.gz, 2);
   Serial.print(F(") angle="));
-  Serial.print(imuRawAngleDeg(), 2);
+  Serial.print(imuTiltDeg(), 2);
   Serial.print(F(" tilt="));
   Serial.print(imuTiltFwd(), 2);
   Serial.print(F(" armed="));

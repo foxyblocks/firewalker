@@ -9,25 +9,20 @@
  * at the soft cap while the cap is on, and the same level reads 38% with it off (96 of 255).
  * The cap's toggle sits beside the percent. With the cap off, the slider outlines the levels
  * past the cap, because a full-white strip can then draw more than USB supplies, and the
- * outline's warning sign says so on a tap. Calibrate lives on the Boots
- * screen, so the Boots link carries a dot while a chosen boot isn't calibrated.
+ * outline's warning sign says so on a tap. Audio tuning sits just above brightness, for one
+ * boot's microphone at a time (AudioSetup.tsx). Each boot's calibration, status, and debug
+ * output live on its own screen under the app's Boots tab. The app frame owns main navigation.
  */
 
 import { SIDE_NAMES, type BootsStore, type PatternTile, type RemoteView, type Side, type Target } from "../core/boots";
 import { patternDisplay } from "../core/patternNames";
+import { AudioPanel } from "./AudioSetup";
+import { Segmented } from "./components/Segmented";
 import { joinNames, LinkDot, PixelSlider, SideBadge, Toggle, type SliderWarning } from "./parts";
 
 const CAP_OFF_MESSAGE = "Past this line, full white can draw more than USB gives, about 1 A.";
 
-export function Remote({
-  store,
-  onStatus,
-  onBoots,
-}: {
-  store: BootsStore;
-  onStatus: () => void;
-  onBoots: () => void;
-}) {
+export function Remote({ store, onBoots }: { store: BootsStore; onBoots: () => void }) {
   const view = store.view();
   const names = (sides: Side[]) => joinNames(sides.map((side) => store.displayName(side)));
   const percent = view.maxBrightness > 0 ? Math.round((view.brightness / view.maxBrightness) * 100) : 0;
@@ -40,21 +35,6 @@ export function Remote({
 
   return (
     <>
-      <header className="topbar">
-        <h1 className="wordmark">Firewalker</h1>
-        <nav className="topbar-links">
-          <button type="button" className="link" onClick={onBoots}>
-            Boots
-            {view.uncalibrated.length > 0 && (
-              <span className="dot dot-wait link-dot" role="img" aria-label={`${names(view.uncalibrated)} not calibrated`} />
-            )}
-          </button>
-          <button type="button" className="link" onClick={onStatus}>
-            Status
-          </button>
-        </nav>
-      </header>
-
       <TargetTabs store={store} onBoots={onBoots} />
 
       <main className="scroll">
@@ -77,6 +57,7 @@ export function Remote({
       </main>
 
       <footer className="dock">
+        <AudioPanel store={store} />
         <div className="section-head">
           <span className="section-label">Brightness</span>
           <span className="brightness-head">
@@ -130,37 +111,25 @@ function TargetTabs({ store, onBoots }: { store: BootsStore; onBoots: () => void
     if (target !== "both" && !known.includes(target)) onBoots();
     else store.setTarget(target);
   };
-  const tab = (target: Side) => {
-    const link = store.client(target)?.getState().link;
-    const dimmed = store.known(target) && link !== "online";
-    return (
-      <button
-        type="button"
-        role="tab"
-        aria-selected={store.target === target}
-        className={`tab${store.target === target ? " tab-on" : ""}${dimmed ? " tab-offline" : ""}`}
-        onClick={() => select(target)}
-      >
-        <LinkDot link={link} />
-        <span className="tab-name">{store.known(target) ? store.displayName(target) : SIDE_NAMES[target]}</span>
-      </button>
-    );
+  const sideOption = (side: Side) => {
+    const link = store.client(side)?.getState().link;
+    return {
+      value: side,
+      label: store.known(side) ? store.displayName(side) : SIDE_NAMES[side],
+      lead: <LinkDot link={link} />,
+      dimmed: Boolean(store.known(side) && link !== "online"),
+    };
   };
 
   return (
-    <div className="tabs" role="tablist">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={store.target === "both"}
-        className={`tab${store.target === "both" ? " tab-on" : ""}`}
-        disabled={known.length < 2}
-        onClick={() => select("both")}
-      >
-        <span className="tab-name">Both</span>
-      </button>
-      {tab("left")}
-      {tab("right")}
+    <div className="tabs-bar">
+      <Segmented<Target>
+        label="What a tap controls"
+        size="large"
+        value={store.target}
+        onChange={select}
+        options={[{ value: "both", label: "Both", disabled: known.length < 2 }, sideOption("left"), sideOption("right")]}
+      />
     </div>
   );
 }

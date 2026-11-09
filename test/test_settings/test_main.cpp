@@ -11,22 +11,22 @@
 using namespace Firewalker;
 
 // A hard maximum of 64 and a soft cap of 48, so a test can place a brightness between them.
-static const SettingsBounds BOUNDS = {1, 64, 45.0f, 160, 48};
+static const SettingsBounds BOUNDS = {1, 64, 160, 48};
 static const StripLayout DEFAULT_STRIP = {160, 52, 132};
 
 void setUp() {}
 void tearDown() {}
 
+static Vec3 sensorPose(float degrees) { const float a=degrees*.0174532925f; return {sinf(a),0,cosf(a)}; }
+static OrientationCalibration mountedPoses(float neutral, float heel, float toe) {
+  OrientationCalibration c; c.neutralSet=c.heelSet=c.toeSet=true;
+  c.neutral=sensorPose(neutral); c.heel=sensorPose(heel); c.toe=sensorPose(toe); return c;
+}
 static Settings sampleSettings() {
   Settings settings = defaultSettings(32, DEFAULT_STRIP);
   copyPatternName(settings.pattern, "fire-trail");
   copyPatternName(settings.lastLitPattern, "fire-trail");
-  settings.calibration.neutralSet = true;
-  settings.calibration.neutralDeg = -3.5f;
-  settings.calibration.heelSet = true;
-  settings.calibration.heelDeg = -25.0f;
-  settings.calibration.toeSet = true;
-  settings.calibration.toeDeg = 60.0f;
+  settings.orientation = mountedPoses(0,-25,60);
   settings.strip = {110, 40, 90};
   return settings;
 }
@@ -41,10 +41,10 @@ static void test_defaults_are_flow_and_uncalibrated() {
   TEST_ASSERT_EQUAL_STRING("flow", settings.pattern);
   TEST_ASSERT_EQUAL_STRING("flow", settings.lastLitPattern);
   TEST_ASSERT_EQUAL(16, settings.brightness);
-  TEST_ASSERT_FALSE(settings.calibration.neutralSet);
-  TEST_ASSERT_FALSE(settings.calibration.heelSet);
-  TEST_ASSERT_FALSE(settings.calibration.toeSet);
-  TEST_ASSERT_EQUAL_FLOAT(0.0f, settings.calibration.neutralDeg);
+  TEST_ASSERT_FALSE(orientationReport(settings.orientation).neutralSet);
+  TEST_ASSERT_FALSE(orientationReport(settings.orientation).heelSet);
+  TEST_ASSERT_FALSE(orientationReport(settings.orientation).toeSet);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, orientationReport(settings.orientation).neutralDeg);
   TEST_ASSERT_EQUAL_UINT16(160, settings.strip.count);
 }
 
@@ -55,12 +55,12 @@ static void test_round_trip_keeps_every_field() {
   TEST_ASSERT_EQUAL_STRING("fire-trail", out.pattern);
   TEST_ASSERT_EQUAL_STRING("fire-trail", out.lastLitPattern);
   TEST_ASSERT_EQUAL(32, out.brightness);
-  TEST_ASSERT_TRUE(out.calibration.neutralSet);
-  TEST_ASSERT_EQUAL_FLOAT(-3.5f, out.calibration.neutralDeg);
-  TEST_ASSERT_TRUE(out.calibration.heelSet);
-  TEST_ASSERT_EQUAL_FLOAT(-25.0f, out.calibration.heelDeg);
-  TEST_ASSERT_TRUE(out.calibration.toeSet);
-  TEST_ASSERT_EQUAL_FLOAT(60.0f, out.calibration.toeDeg);
+  TEST_ASSERT_TRUE(orientationReport(out.orientation).neutralSet);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, orientationReport(out.orientation).neutralDeg);
+  TEST_ASSERT_TRUE(orientationReport(out.orientation).heelSet);
+  TEST_ASSERT_EQUAL_FLOAT(-25.0f, orientationReport(out.orientation).heelDeg);
+  TEST_ASSERT_TRUE(orientationReport(out.orientation).toeSet);
+  TEST_ASSERT_EQUAL_FLOAT(60.0f, orientationReport(out.orientation).toeDeg);
   TEST_ASSERT_EQUAL_UINT16(110, out.strip.count);
   TEST_ASSERT_EQUAL_UINT16(40, out.strip.toe);
   TEST_ASSERT_EQUAL_UINT16(90, out.strip.heel);
@@ -121,7 +121,7 @@ static void test_a_garbled_name_reads_as_the_default_and_keeps_the_rest() {
   TEST_ASSERT_EQUAL_STRING("flow", out.pattern);
   TEST_ASSERT_EQUAL_STRING("flow", out.lastLitPattern);
   TEST_ASSERT_EQUAL(32, out.brightness);
-  TEST_ASSERT_EQUAL_FLOAT(-25.0f, out.calibration.heelDeg);
+  TEST_ASSERT_EQUAL_FLOAT(-25.0f, orientationReport(out.orientation).heelDeg);
   TEST_ASSERT_EQUAL_UINT16(110, out.strip.count);
 }
 
@@ -149,46 +149,91 @@ static void test_unusable_neutral_offset_reads_as_invalid() {
   Settings out = defaultSettings(16, DEFAULT_STRIP);
 
   Settings tooFar = sampleSettings();
-  tooFar.calibration.neutralDeg = 80.0f;
+  tooFar.orientation.neutral = {};
   TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(encodeSettings(tooFar), BOUNDS, out));
 
   Settings notANumber = sampleSettings();
-  notANumber.calibration.neutralDeg = NAN;
+  notANumber.orientation.neutral.x = NAN;
   TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(encodeSettings(notANumber), BOUNDS, out));
+}
+
+static void test_a_vertical_mounts_poses_survive_a_restart() {
+  Settings vertical = sampleSettings();
+  vertical.orientation = mountedPoses(90,65,120);
+  Settings out = defaultSettings(16, DEFAULT_STRIP);
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(encodeSettings(vertical), BOUNDS, out));
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, orientationReport(out.orientation).neutralDeg);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, -25.0f, orientationReport(out.orientation).heelDeg);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 30.0f, orientationReport(out.orientation).toeDeg);
+}
+
+static void test_cleared_poses_stay_cleared_after_a_restart_without_resetting_other_settings() {
+  const CalibrationClear targets[] = {CalibrationClear::Heel, CalibrationClear::Toe, CalibrationClear::All};
+  for (CalibrationClear target : targets) {
+    Settings settings = sampleSettings();
+    const Settings before = settings;
+    OrientationCalibrator calibrator({2000, 500, 50, 8.0f}, {30.0f, 3.0f, 10.0f, 30.0f});
+    TEST_ASSERT_NULL(calibrator.clear(target, settings.orientation));
+    Settings out = defaultSettings(16, DEFAULT_STRIP);
+    TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(encodeSettings(settings), BOUNDS, out));
+    TEST_ASSERT_EQUAL(target != CalibrationClear::All, orientationReport(out.orientation).neutralSet);
+    TEST_ASSERT_EQUAL(target == CalibrationClear::Toe, orientationReport(out.orientation).heelSet);
+    TEST_ASSERT_EQUAL(target == CalibrationClear::Heel, orientationReport(out.orientation).toeSet);
+    TEST_ASSERT_EQUAL_STRING(before.pattern, out.pattern);
+    TEST_ASSERT_EQUAL(before.brightness, out.brightness);
+    TEST_ASSERT_EQUAL(before.strip.count, out.strip.count);
+    TEST_ASSERT_EQUAL(before.strip.toe, out.strip.toe);
+    TEST_ASSERT_EQUAL(before.strip.heel, out.strip.heel);
+    TEST_ASSERT_EQUAL(before.audioNoiseFloor, out.audioNoiseFloor);
+    TEST_ASSERT_EQUAL(before.audioSensitivity, out.audioSensitivity);
+  }
+}
+
+static void test_poses_across_the_angle_boundary_survive_a_restart() {
+  const float directions[] = {-1.0f, 1.0f};
+  for (float direction : directions) {
+    Settings inverted = sampleSettings();
+    inverted.orientation = mountedPoses(direction*179, direction*154, -direction*151);
+    Settings out = defaultSettings(16, DEFAULT_STRIP);
+    TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(encodeSettings(inverted), BOUNDS, out));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 30.0f, orientationDegrees(out.orientation.toe, out.orientation));
+
+    // Both poses on the same physical side must still be rejected after wrapping.
+    inverted.orientation.heel = sensorPose(-direction*161);
+    TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(encodeSettings(inverted), BOUNDS, out));
+  }
 }
 
 static void test_unusable_heel_or_toe_pose_reads_as_invalid() {
   Settings out = defaultSettings(16, DEFAULT_STRIP);
 
   Settings notANumber = sampleSettings();
-  notANumber.calibration.toeDeg = NAN;
+  notANumber.orientation.toe.x = NAN;
   TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(encodeSettings(notANumber), BOUNDS, out));
 
   Settings pastHalfATurn = sampleSettings();
-  pastHalfATurn.calibration.heelDeg = -200.0f;
+  pastHalfATurn.orientation.heel = {};
   TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(encodeSettings(pastHalfATurn), BOUNDS, out));
 
   Settings sameSide = sampleSettings();
-  sameSide.calibration.heelDeg = 20.0f;
+  sameSide.orientation.heel = sensorPose(20);
   TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(encodeSettings(sameSide), BOUNDS, out));
 }
 
-static void test_heel_and_toe_may_be_steeper_than_the_neutral_limit() {
+static void test_a_steep_toe_pose_round_trips() {
   Settings steep = sampleSettings();
-  steep.calibration.toeDeg = 70.0f;
+  steep.orientation.toe = sensorPose(70);
   Settings out = defaultSettings(16, DEFAULT_STRIP);
   TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(encodeSettings(steep), BOUNDS, out));
-  TEST_ASSERT_EQUAL_FLOAT(70.0f, out.calibration.toeDeg);
+  TEST_ASSERT_EQUAL_FLOAT(70.0f, orientationReport(out.orientation).toeDeg);
 }
 
 static void test_a_backward_mounts_poses_round_trip() {
   Settings backward = sampleSettings();
-  backward.calibration.neutralDeg = 0.0f;
-  backward.calibration.heelDeg = 20.0f;
-  backward.calibration.toeDeg = -20.0f;
+  backward.orientation = mountedPoses(0,20,-20);
   Settings out = defaultSettings(16, DEFAULT_STRIP);
   TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(encodeSettings(backward), BOUNDS, out));
-  TEST_ASSERT_EQUAL_FLOAT(-20.0f, out.calibration.toeDeg);
+  TEST_ASSERT_FLOAT_WITHIN(.001f, 20.0f, orientationReport(out.orientation).toeDeg);
 }
 
 static void test_a_mirrored_strip_layout_round_trips() {
@@ -244,10 +289,10 @@ static void test_v3_record_keeps_everything_and_turns_numbers_into_names() {
   TEST_ASSERT_EQUAL_STRING("fire-trail", out.pattern);
   TEST_ASSERT_EQUAL_STRING("fire-trail", out.lastLitPattern);
   TEST_ASSERT_EQUAL(24, out.brightness);
-  TEST_ASSERT_TRUE(out.calibration.neutralSet);
-  TEST_ASSERT_EQUAL_FLOAT(1.5f, out.calibration.neutralDeg);
-  TEST_ASSERT_EQUAL_FLOAT(-18.0f, out.calibration.heelDeg);
-  TEST_ASSERT_EQUAL_FLOAT(34.0f, out.calibration.toeDeg);
+  TEST_ASSERT_FALSE(orientationReport(out.orientation).neutralSet);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, orientationReport(out.orientation).neutralDeg);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, orientationReport(out.orientation).heelDeg);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, orientationReport(out.orientation).toeDeg);
   TEST_ASSERT_EQUAL_UINT16(107, out.strip.count);
   TEST_ASSERT_EQUAL_UINT16(72, out.strip.toe);
   TEST_ASSERT_EQUAL_UINT16(19, out.strip.heel);
@@ -266,7 +311,7 @@ static void test_a_v3_record_rewrites_as_the_current_version() {
   TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(encodeSettings(out), BOUNDS, again));
   TEST_ASSERT_EQUAL_STRING("off", again.pattern);
   TEST_ASSERT_EQUAL_STRING("fire-trail", again.lastLitPattern);
-  TEST_ASSERT_EQUAL_FLOAT(34.0f, again.calibration.toeDeg);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, orientationReport(again.orientation).toeDeg);
   TEST_ASSERT_EQUAL_UINT16(107, again.strip.count);
 }
 
@@ -307,10 +352,10 @@ static void test_v2_record_keeps_its_settings_and_takes_the_default_strip() {
   TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettingsV2(sampleV2Record(), BOUNDS, out));
   TEST_ASSERT_EQUAL_STRING("fire-trail", out.pattern);
   TEST_ASSERT_EQUAL(40, out.brightness);
-  TEST_ASSERT_TRUE(out.calibration.neutralSet);
-  TEST_ASSERT_EQUAL_FLOAT(1.5f, out.calibration.neutralDeg);
-  TEST_ASSERT_EQUAL_FLOAT(-18.0f, out.calibration.heelDeg);
-  TEST_ASSERT_EQUAL_FLOAT(34.0f, out.calibration.toeDeg);
+  TEST_ASSERT_FALSE(orientationReport(out.orientation).neutralSet);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, orientationReport(out.orientation).neutralDeg);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, orientationReport(out.orientation).heelDeg);
+  TEST_ASSERT_EQUAL_FLOAT(0.0f, orientationReport(out.orientation).toeDeg);
   TEST_ASSERT_EQUAL_UINT16(160, out.strip.count);
   TEST_ASSERT_EQUAL_UINT16(52, out.strip.toe);
   TEST_ASSERT_EQUAL_UINT16(132, out.strip.heel);
@@ -413,8 +458,8 @@ static void test_a_record_saved_before_the_cap_existed_loads_capped() {
   out.capped = false;
   TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
   TEST_ASSERT_TRUE(out.capped);
-  TEST_ASSERT_TRUE(out.calibration.toeSet);
-  TEST_ASSERT_EQUAL_FLOAT(60.0f, out.calibration.toeDeg);
+  TEST_ASSERT_TRUE(orientationReport(out.orientation).toeSet);
+  TEST_ASSERT_EQUAL_FLOAT(60.0f, orientationReport(out.orientation).toeDeg);
   TEST_ASSERT_EQUAL_UINT16(110, out.strip.count);
 }
 
@@ -477,7 +522,7 @@ static void test_turning_the_cap_off_keeps_the_brightness() {
   TEST_ASSERT_FALSE(setBrightnessCap(settings, false, BOUNDS));
 }
 
-static void test_audio_settings_round_trip_and_v4_upgrade_keeps_poses() {
+static void test_audio_settings_round_trip_and_v4_upgrade_requires_new_poses() {
   Settings source = sampleSettings();
   source.audioNoiseFloor = 13;
   source.audioSensitivity = 42;
@@ -488,25 +533,27 @@ static void test_audio_settings_round_trip_and_v4_upgrade_keeps_poses() {
   TEST_ASSERT_EQUAL_UINT8(42, out.audioSensitivity);
 
   // Version 4 used these bytes as reserved padding, so ignore them during upgrade.
-  record.version = SETTINGS_VERSION_V4;
-  record.audioNoiseFloor = 0;
-  record.audioSensitivity = 255;
-  reseal(record);
-  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettings(record, BOUNDS, out));
+  SettingsRecordV5 legacy{};
+  memcpy(&legacy, &record, offsetof(SettingsRecordV5, crc));
+  legacy.version = SETTINGS_VERSION_V4;
+  legacy.audioNoiseFloor = 0;
+  legacy.audioSensitivity = 255;
+  legacy.crc = settingsCrc(&legacy, offsetof(SettingsRecordV5, crc));
+  TEST_ASSERT_EQUAL(SettingsDecode::Ok, decodeSettingsV5(legacy, BOUNDS, out));
   TEST_ASSERT_EQUAL_UINT8(AUDIO_DEFAULT_NOISE_FLOOR, out.audioNoiseFloor);
   TEST_ASSERT_EQUAL_UINT8(AUDIO_DEFAULT_SENSITIVITY, out.audioSensitivity);
-  TEST_ASSERT_EQUAL_FLOAT(source.calibration.neutralDeg, out.calibration.neutralDeg);
+  TEST_ASSERT_FALSE(orientationReport(out.orientation).neutralSet);
   TEST_ASSERT_EQUAL_UINT16(source.strip.toe, out.strip.toe);
   TEST_ASSERT_EQUAL_STRING(source.pattern, out.pattern);
 
-  record = encodeSettings(source);
-  record.audioNoiseFloor = 0;
-  reseal(record);
-  TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(record, BOUNDS, out));
-  record = encodeSettings(source);
-  record.audioSensitivity = 101;
-  reseal(record);
-  TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettings(record, BOUNDS, out));
+  legacy.version = SETTINGS_VERSION_V5;
+  legacy.audioNoiseFloor = 0;
+  legacy.crc = settingsCrc(&legacy, offsetof(SettingsRecordV5, crc));
+  TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettingsV5(legacy, BOUNDS, out));
+  legacy.audioNoiseFloor = 13;
+  legacy.audioSensitivity = 101;
+  legacy.crc = settingsCrc(&legacy, offsetof(SettingsRecordV5, crc));
+  TEST_ASSERT_EQUAL(SettingsDecode::Invalid, decodeSettingsV5(legacy, BOUNDS, out));
 }
 
 // The cap flag and the microphone tuning each have their own spare bytes, so both survive a save,
@@ -539,7 +586,7 @@ static void test_mic_tuning_and_the_cap_flag_keep_their_own_bytes() {
 
 int main(int, char**) {
   UNITY_BEGIN();
-  RUN_TEST(test_audio_settings_round_trip_and_v4_upgrade_keeps_poses);
+  RUN_TEST(test_audio_settings_round_trip_and_v4_upgrade_requires_new_poses);
   RUN_TEST(test_mic_tuning_and_the_cap_flag_keep_their_own_bytes);
   RUN_TEST(test_defaults_are_flow_and_uncalibrated);
   RUN_TEST(test_round_trip_keeps_every_field);
@@ -552,8 +599,11 @@ int main(int, char**) {
   RUN_TEST(test_off_is_not_a_pattern_to_return_to);
   RUN_TEST(test_brightness_outside_the_build_limits_reads_as_invalid);
   RUN_TEST(test_unusable_neutral_offset_reads_as_invalid);
+  RUN_TEST(test_a_vertical_mounts_poses_survive_a_restart);
+  RUN_TEST(test_cleared_poses_stay_cleared_after_a_restart_without_resetting_other_settings);
+  RUN_TEST(test_poses_across_the_angle_boundary_survive_a_restart);
   RUN_TEST(test_unusable_heel_or_toe_pose_reads_as_invalid);
-  RUN_TEST(test_heel_and_toe_may_be_steeper_than_the_neutral_limit);
+  RUN_TEST(test_a_steep_toe_pose_round_trips);
   RUN_TEST(test_a_backward_mounts_poses_round_trip);
   RUN_TEST(test_a_mirrored_strip_layout_round_trips);
   RUN_TEST(test_unusable_strip_layout_reads_as_invalid);
