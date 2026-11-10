@@ -58,6 +58,12 @@ export interface ConnectionsState {
   boots: ConnectedBoot[];
 }
 
+/** The designer's controls, supplied by either a standalone or shared desktop connection. */
+export type DesignerBoots = Pick<BootConnections,
+  "subscribe" | "getSnapshot" | "observeActivity" | "prepare" | "connect" |
+  "free" | "disconnect" | "reconnect" | "send" | "deleteUpload"
+>;
+
 interface LiveBoot {
   state: ConnectedBoot;
   session: BootSession;

@@ -36,6 +36,7 @@ import {
   type StripSetting,
 } from "./protocol";
 import { AccessLostError, type BootLink, type Transport } from "../transport/transport";
+import { LineSession, type LineExchange } from "../../../shared/lineSession";
 import { appendMotion, type MotionHistoryPoint } from "./motionHistory";
 import { appendAudio, type AudioHistoryPoint } from "./audioHistory";
 
@@ -107,7 +108,9 @@ export interface BootState {
 interface Job {
   line: () => string;
   field?: keyof Pending;
-  expect: "ack" | "status" | "patterns" | "audio-config";
+  expect: "ack" | "status" | "patterns" | "audio-config" | "exclusive";
+  /** A whole recipe exchange runs in this queue slot, until every line settles. */
+  run?: () => void;
   /** Quiet jobs fail without showing the person a notice. */
   quiet?: boolean;
   onFail?: (reason: string) => void;
@@ -151,6 +154,7 @@ export class BootClient {
 
   private queue: Job[] = [];
   private inFlight: Job | null = null;
+  private exclusive: LineSession | null = null;
 
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private firstStatusTimer: ReturnType<typeof setTimeout> | null = null;
@@ -206,9 +210,50 @@ export class BootClient {
 
   /** Read-only polling doesn't block sleep; pending writes and captures do. */
   busy(): boolean {
-    // Pose and microphone calibration both continue after their initial ack. Keep
-    // the link until the result arrives or their existing recovery timers finish.
-    return this.capture !== null || this.calibrationClear !== null || this.audioCapture !== null || this.inFlight?.expect === "ack" || this.queue.some((job) => job.expect === "ack");
+    // Calibration can still be collecting data or saving after its ack. Keep the
+    // link until the result arrives or its recovery timer finishes.
+    return this.capture !== null || this.calibrationClear !== null || this.audioCapture !== null ||
+      this.inFlight?.expect === "ack" || this.inFlight?.expect === "exclusive" ||
+      this.queue.some((job) => job.expect === "ack" || job.expect === "exclusive");
+  }
+
+  /**
+   * Runs a multi-line operation on this boot's existing connection. Remote controls
+   * wait in the same queue until it finishes, so an upload's acknowledgements can't
+   * be mistaken for brightness or calibration replies. Losing the link rejects both
+   * active and waiting operations; none survive into the next connection.
+   */
+  runExclusive<T>(operation: (session: LineExchange) => Promise<T>): Promise<T> {
+    if (!this.online) return Promise.reject(new Error("This boot isn't connected."));
+    return new Promise<T>((resolve, reject) => {
+      let session: LineSession | null = null;
+      const job: Job = {
+        line: () => "", expect: "exclusive", quiet: true,
+        onFail: (reason) => {
+          session?.fail(reason);
+          reject(new Error(reason));
+        },
+        run: () => {
+          const link = this.link!;
+          session = new LineSession((line) => {
+            if (this.exclusive !== session || this.link !== link) return Promise.reject(new Error("The connection changed."));
+            return link.write(line);
+          });
+          this.exclusive = session;
+          void Promise.resolve().then(() => operation(session!)).then(resolve, reject).finally(() => {
+            session?.fail("This operation has finished.");
+            if (this.exclusive === session) this.exclusive = null;
+            if (this.inFlight === job) {
+              this.finishJob();
+              // Uploading or deleting a recipe can change the remote's tiles.
+              this.requestStatus();
+              if (this.online) this.askForPatterns();
+            }
+          });
+        },
+      };
+      this.enqueue(job);
+    });
   }
 
   private async endConnection(state: "idle" | "sleeping"): Promise<void> {
@@ -359,6 +404,12 @@ export class BootClient {
   private teardown(): void {
     this.motionBaselinePending = true;
     this.link = null;
+    this.exclusive?.fail("The connection to the boot dropped.");
+    this.exclusive = null;
+    if (this.inFlight?.expect === "exclusive") this.inFlight.onFail?.("The connection to the boot dropped.");
+    for (const job of this.queue) {
+      if (job.expect === "exclusive") job.onFail?.("The connection to the boot dropped.");
+    }
     if (this.firstStatusTimer) clearTimeout(this.firstStatusTimer);
     this.firstStatusTimer = null;
     if (this.commandTimer) clearTimeout(this.commandTimer);
@@ -376,6 +427,7 @@ export class BootClient {
   // ── Replies ────────────────────────────────────────────────────────────
 
   private onData(text: string): void {
+    this.exclusive?.receive(text);
     for (const line of this.splitter.push(text)) {
       const reply = parseLine(line);
       if (reply) this.onReply(reply);
@@ -414,6 +466,9 @@ export class BootClient {
         if (this.inFlight?.expect === "patterns") this.finishJob();
         return;
       case "ack":
+        // Recipe uploads retry damaged lines themselves. Their "unknown" acks
+        // must stay inside that exchange instead of releasing the remote's queue.
+        if (this.inFlight?.expect === "exclusive") return;
         // Acks name a command but carry no request ID, so one arriving after its command
         // timed out mustn't settle whichever command came next. The firmware reports
         // anything it can't parse as "unknown".
@@ -505,9 +560,18 @@ export class BootClient {
    */
   private pump(): void {
     if (this.inFlight || !this.link) return;
-    const job = this.queue.shift();
+    // Captures and clears can still need status reads after the ack. Keep those
+    // reads moving until calibration settles before giving the queue to an upload.
+    const calibrating = this.capture || this.calibrationClear || this.audioCapture;
+    const index = calibrating ? this.queue.findIndex((job) => !job.run) : 0;
+    if (index < 0) return;
+    const [job] = this.queue.splice(index, 1);
     if (!job) return;
     this.inFlight = job;
+    if (job.run) {
+      job.run();
+      return;
+    }
     this.commandTimer = setTimeout(() => this.failJob("no-answer"), COMMAND_TIMEOUT_MS);
     job.onSent?.();
     this.link.write(job.line()).catch(() => {
@@ -613,6 +677,7 @@ export class BootClient {
     this.audioCapture = null;
     this.update({ audioCalibrating: false });
     capture.resolve(reason ? { ok: false, reason } : { ok: true });
+    this.pump();
   }
 
   setPattern(pattern: string): void {
@@ -816,6 +881,7 @@ export class BootClient {
     this.calibrationClear = null;
     this.update({ clearingCalibration: undefined });
     pending.resolve(reason ? { ok: false, reason } : { ok: true });
+    this.pump();
   }
 
   /**
@@ -906,6 +972,7 @@ export class BootClient {
         ? { ok: false, pose: capture.pose, reason: outcome.reason }
         : { ok: true, pose: capture.pose, angleDeg: outcome.angleDeg },
     );
+    this.pump();
   }
 }
 

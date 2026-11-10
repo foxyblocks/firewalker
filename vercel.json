@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "git": { "deploymentEnabled": true },
+  "installCommand": "bunx bun@1.4.0 install --cwd app --frozen-lockfile && bunx bun@1.4.0 install --cwd designer --frozen-lockfile",
+  "buildCommand": "bunx bun@1.4.0 run --cwd app build",
+  "outputDirectory": "app/dist",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Permissions-Policy", "value": "bluetooth=(self), serial=(self), microphone=(self), display-capture=(self)" }
+      ]
+    },
+    {
+      "source": "/patterns.json",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+    }
+  ]
+}

@@ -11,9 +11,10 @@
     "noUnusedParameters": true,
     "noUncheckedIndexedAccess": true,
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client", "vitest/globals", "web-bluetooth", "w3c-web-serial"]
+    "types": ["vite/client", "vitest/globals", "node", "web-bluetooth", "w3c-web-serial"]
   },
   "include": ["src", ".storybook", "vite.config.ts", "capacitor.config.ts"]
 }

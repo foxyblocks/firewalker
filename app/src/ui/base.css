@@ -1,0 +1,8 @@
+/* Document sizing is shared; each tool owns its controls inside its surface. */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background: #0b0a09;
+}
+body { overflow: hidden; }
+* { box-sizing: border-box; }

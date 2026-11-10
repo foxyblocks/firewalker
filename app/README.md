@@ -1,9 +1,52 @@
-# Firewalker remote
+# Firewalker app
 
-The iPhone app that controls the boots over Bluetooth, built with Capacitor, React, and
-TypeScript. It's bundled into the app, so it works with no network. Boots keep running
-whatever they're running if the phone goes away. The same app runs in a desktop browser,
-where it can also reach a boot plugged in over USB.
+One desktop workspace for the remote and pattern designer, plus an iPhone build that
+contains only the remote. The phone UI ships inside the Capacitor app and works without
+a network. Boots keep running when either app goes away.
+
+On your computer, switch between **Remote** and **Designer** at the top. Boot labels,
+connections, and upload progress are shared: connect once, edit a recipe, send it, then
+switch back to Remote. Recipe uploads finish before queued remote commands are sent.
+The designer also works without any boots connected.
+
+## Desktop and hosted app
+
+Live app: [Firewalker](https://firewalker.vercel.app/) (Vercel sign-in required).
+
+The Vercel project is `firewalker` in the `foxyblockscom` team, connected to
+`foxyblocks/firewalker` on GitHub. Pushes and merges to `main` deploy to production;
+pull-request branch pushes create preview deployments and Vercel posts the preview
+link on the PR. The project builds from the repository root.
+
+From a fresh checkout, run `bash tools/setup-worktree.sh` at the repo root. Then:
+
+```bash
+bun run --cwd app dev       # http://localhost:5173, both sections
+./cli web --dev            # same app, with the CLI managing the server
+```
+
+Local development saves recipes to `patterns/` through the designer's existing
+endpoints. A production build includes the repo's recipes, and **Save** keeps your own
+library in this browser on this device. **Download** and **Import** move recipes between
+devices or back to the repo. Clearing this site's browser data removes local edits.
+Existing drafts on localhost:5174 stay at that address; download them there and import
+them into the combined app. A Vercel URL also has its own labels, permissions, and library.
+
+`bun run build` creates the combined site in `dist/`. The root `vercel.json` installs
+both packages, runs that build, and serves `app/dist`. Use the repository root as the
+Vercel project root. The hosted app connects directly to nearby boots over USB or
+Bluetooth in Chrome/Arc; Vercel never proxies a boot connection. Local USB process
+troubleshooting is available only with the local dev server.
+
+The Vercel commands pin Bun 1.4.0: the committed lockfiles use its version 2 format,
+which older build-image Bun versions cannot read.
+
+## iPhone build
+
+`bun run build:native` uses a separate entry point and writes `dist-native/`, which
+Capacitor bundles. The designer and desktop navigation are excluded. `bun run sync`
+and `bun run ios` always select this build. `bun run dev:native` previews the remote
+alone in a browser; use `--port 5174` if the combined app is already running.
 
 It talks to each boot through the text protocol in
 [`docs/remote-protocol.md`](../docs/remote-protocol.md).
@@ -26,8 +69,8 @@ Use `bun run`, because a globally installed `bunx` can pick up an older Node tha
 accepts (it needs Node 22, and Xcode 26 for iOS).
 
 ```bash
-bun install
-bun run dev          # http://localhost:5173
+bash ../tools/setup-worktree.sh
+bun run dev          # combined desktop app at http://localhost:5173
 bun run test         # unit tests, no hardware needed
 bun run typecheck
 bun run storybook        # component and screen stories, http://localhost:6006
@@ -188,3 +231,8 @@ home.
 
 Adding a pattern takes no app change: the boot reports it and a tile appears. Add it to
 `patternNames.ts` when you want a nicer name and a description.
+
+The desktop frame is `src/desktop/App.tsx`. `SharedBootConnections` adapts the shared
+`BootsStore` for the designer, and `BootClient.runExclusive` holds its command queue
+for each recipe exchange. `build/desktop.ts` supplies local file endpoints and emits
+`patterns.json` for hosted builds. `src/native.tsx` is the remote-only iPhone entry.

@@ -65,6 +65,31 @@ async function library(): Promise<PatternLibrary> {
 }
 
 describe("PatternLibrary", () => {
+  it("restores browser-saved recipes even when the included catalog cannot load", async () => {
+    const options = { browserStorage: true, catalogUrl: "/patterns.json" };
+    const lib = new PatternLibrary(storage as unknown as Storage, options);
+    await lib.load();
+    await lib.save(lib.create(recipe("pocket")));
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
+    const restored = new PatternLibrary(storage as unknown as Storage, options);
+    await restored.load();
+    expect(restored.entry("pocket")).toMatchObject({ status: "saved" });
+  });
+
+  it("saves hosted edits in this browser and restores them without writing to the repo", async () => {
+    const fetch = fakeServer(files);
+    vi.stubGlobal("fetch", fetch);
+    const lib = new PatternLibrary(storage as unknown as Storage, { browserStorage: true, catalogUrl: "/patterns.json" });
+    await lib.load();
+    const name = lib.create(recipe("pocket", "Saved on this computer"));
+    expect(await lib.save(name)).toEqual([]);
+
+    const restored = new PatternLibrary(storage as unknown as Storage, { browserStorage: true, catalogUrl: "/patterns.json" });
+    await restored.load();
+    expect(restored.entry("pocket")).toMatchObject({ status: "saved", recipe: { description: "Saved on this computer" } });
+    expect(fetch.mock.calls.every(([, init]) => !init?.method || init.method === "GET")).toBe(true);
+  });
+
   it("opens a draft made before a field existed, with that field's default", async () => {
     const old = { ...recipe("comets"), layers: [{ ...newLayer("chase"), path: undefined }] };
     storage.setItem("firewalker-designer:drafts:v1", JSON.stringify({ comets: { recipe: old, savedAs: null, updatedAt: 0 } }));

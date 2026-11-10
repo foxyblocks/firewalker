@@ -4,7 +4,13 @@
  * laid out for a laptop or desktop screen.
  */
 
-:root {
+
+/* Keep this tool’s controls and theme inside its shared-app surface. */
+.designer-surface {
+  height: 100%;
+  min-width: 0;
+  overflow: auto;
+& {
   --ink: #f4ede2;
   --ink-quiet: #a79d90;
   --ink-faint: #6f675e;
@@ -29,15 +35,9 @@
   box-sizing: border-box;
 }
 
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-  background: var(--night);
-}
 
-body {
+
+& {
   color: var(--ink);
   font-family: var(--mono);
   font-size: 13px;
@@ -1080,4 +1080,6 @@ input[type="range"] {
 .control.playback select {
   width: auto;
   margin-left: auto;
+}
+
 }

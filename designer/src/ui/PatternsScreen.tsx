@@ -69,13 +69,15 @@ export function PatternsScreen() {
   };
 
   return (
-    <div className="page">
+    <main className="page">
       <header className="topbar">
         <div className="topbar-title">
           <h1>Patterns</h1>
           <span className="quiet">
             {state.loading
               ? "Loading the repo's patterns…"
+              : state.storageMode === "browser"
+                ? "Saved in this browser"
               : state.repoAvailable
                 ? `Saved to ${state.repoDir ?? "patterns/"}`
                 : "Drafts only: the repo isn't reachable"}
@@ -99,7 +101,12 @@ export function PatternsScreen() {
         </div>
       </header>
 
-      {!state.loading && !state.repoAvailable && (
+      {!state.loading && state.storageMode === "browser" && (
+        <p className="banner">
+          Your library stays in this browser on this device. Download recipes to back them up or move them to another computer.
+        </p>
+      )}
+      {!state.loading && state.storageMode === "unavailable" && (
         <p className="banner">
           The designer couldn't reach its dev server, so Save and Delete are off. Edits still keep as drafts in this
           browser. Run <code>bun run dev</code> in <code>designer/</code> to save to the repo.
@@ -254,7 +261,9 @@ export function PatternsScreen() {
           }}
           onCancel={() => setDialog(null)}
         >
-          {dialog.entry.savedAs ? (
+          {state.storageMode === "browser" ? (
+            <p>This removes the pattern and its draft from this browser's library. Download a copy first if you want to keep it.</p>
+          ) : dialog.entry.savedAs ? (
             <p>
               This deletes <code>patterns/{dialog.entry.savedAs}.json</code> from the repo, and any unsaved changes. If the file
               was committed, git still has it.
@@ -265,7 +274,7 @@ export function PatternsScreen() {
           )}
         </ConfirmDialog>
       )}
-    </div>
+    </main>
   );
 }
 

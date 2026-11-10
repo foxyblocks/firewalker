@@ -19,7 +19,7 @@ func commandLines(steps []Step) []string {
 
 func TestPlanBuildsThenServesByDefault(t *testing.T) {
 	plan := Options{RepoRoot: "/repo"}.Plan()
-	if want := []string{"bun install", "bun run build"}; !slices.Equal(commandLines(plan.Setup), want) {
+	if want := []string{"bun install --frozen-lockfile", "bun install --cwd ../designer --frozen-lockfile", "bun run build"}; !slices.Equal(commandLines(plan.Setup), want) {
 		t.Fatalf("setup = %v, want %v", commandLines(plan.Setup), want)
 	}
 	if plan.Serve == nil || plan.Serve.String() != "bun run vite preview --port 5173 --strictPort" {
@@ -35,7 +35,7 @@ func TestPlanBuildsThenServesByDefault(t *testing.T) {
 // different origin, with none of the boot labels or Bluetooth permissions.
 func TestPlanForDevSkipsTheBuildAndStaysOnItsPort(t *testing.T) {
 	plan := Options{RepoRoot: "/repo", Dev: true}.Plan()
-	if want := []string{"bun install"}; !slices.Equal(commandLines(plan.Setup), want) {
+	if want := []string{"bun install --frozen-lockfile", "bun install --cwd ../designer --frozen-lockfile"}; !slices.Equal(commandLines(plan.Setup), want) {
 		t.Fatalf("setup = %v", commandLines(plan.Setup))
 	}
 	if plan.Serve == nil || plan.Serve.String() != "bun run dev --strictPort" {
@@ -45,7 +45,7 @@ func TestPlanForDevSkipsTheBuildAndStaysOnItsPort(t *testing.T) {
 
 func TestPlanForBuildOnlyServesNothing(t *testing.T) {
 	plan := Options{RepoRoot: "/repo", BuildOnly: true}.Plan()
-	if want := []string{"bun install", "bun run build"}; !slices.Equal(commandLines(plan.Setup), want) {
+	if want := []string{"bun install --frozen-lockfile", "bun install --cwd ../designer --frozen-lockfile", "bun run build"}; !slices.Equal(commandLines(plan.Setup), want) {
 		t.Fatalf("setup = %v", commandLines(plan.Setup))
 	}
 	if plan.Serve != nil {

@@ -3,7 +3,9 @@
 // writes a file. A draft remembers which file it came from (`savedAs`), so a rename saves as a
 // move rather than a copy. It also remembers that file's version when the draft started
 // (`baseVersion`), so if the file then changes, for example in a git pull, the pattern reports a
-// conflict and Save won't overwrite the file unless told to.
+// conflict and Save won't overwrite the file unless told to. A hosted build reads a
+// bundled catalog instead: Save and Delete affect this browser's own library, with
+// Download/Import carrying recipes between computers and back into the repo.
 
 import { compileRecipe } from "../recipe/compile";
 import { recipeToJson } from "../recipe/serialize";
@@ -38,6 +40,7 @@ export interface LibraryState {
   loading: boolean;
   // False when the dev server's patterns API isn't reachable, for example in a static build.
   repoAvailable: boolean;
+  storageMode: "repo" | "browser" | "unavailable";
   repoDir: string | null;
   entries: PatternEntry[];
   broken: BrokenFile[];
@@ -54,6 +57,18 @@ interface Draft {
 
 const DRAFTS_KEY = "firewalker-designer:drafts:v1";
 const API = "/api/patterns";
+const BROWSER_LIBRARY_KEY = "firewalker-designer:library:v1";
+
+interface BrowserLibrary {
+  recipes: Record<string, Recipe>;
+  hidden: string[];
+}
+
+interface LibraryOptions {
+  /** A built catalog has the same shape as the dev server's GET response. */
+  catalogUrl?: string;
+  browserStorage?: boolean;
+}
 
 export class PatternLibrary {
   private repo = new Map<string, Recipe>();
@@ -69,9 +84,17 @@ export class PatternLibrary {
   private repoDir: string | null = null;
   private listeners = new Set<() => void>();
   private snapshot: LibraryState;
+  private browserLibrary: BrowserLibrary = { recipes: {}, hidden: [] };
 
-  constructor(private readonly storage: Storage | null = safeLocalStorage()) {
+  constructor(private readonly storage: Storage | null = safeLocalStorage(), private readonly options: LibraryOptions = {}) {
     this.drafts = this.readDrafts();
+    if (options.browserStorage) {
+      try {
+        const saved = JSON.parse(storage?.getItem(BROWSER_LIBRARY_KEY) ?? "null") as BrowserLibrary | null;
+        if (saved && saved.recipes && Array.isArray(saved.hidden)) this.browserLibrary = saved;
+      } catch { /* A damaged browser library doesn't hide the shipped recipes. */ }
+      this.applyBrowserLibrary();
+    }
     this.snapshot = this.buildSnapshot();
   }
 
@@ -99,7 +122,7 @@ export class PatternLibrary {
   // Reads the patterns folder through the dev server. Returns whether anything changed.
   private async fetchRepo(): Promise<boolean> {
     try {
-      const response = await fetch(API);
+      const response = await fetch(this.options.catalogUrl ?? API);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const text = await response.text();
       if (this.repoAvailable && text === this.lastRepoText) return false;
@@ -108,7 +131,10 @@ export class PatternLibrary {
       this.versions = new Map(body.patterns.filter((p) => p.version).map((p) => [p.name, p.version!]));
       this.builtIns = new Set(body.patterns.filter((p) => p.builtIn).map((p) => p.name));
       this.broken = body.patterns.filter((p) => !p.recipe).map((p) => ({ name: p.name, errors: p.errors ?? [] }));
-      this.repoAvailable = true;
+      if (this.options.browserStorage) {
+        this.applyBrowserLibrary();
+      }
+      this.repoAvailable = !this.options.browserStorage;
       this.repoDir = body.dir;
       this.lastRepoText = text;
       this.dropDraftsThatMatchTheirFile();
@@ -209,6 +235,19 @@ export class PatternLibrary {
     if (!entry) return ["That pattern no longer exists."];
     const compiled = compileRecipe(entry.recipe);
     if (!compiled.ok) return compiled.errors;
+    if (this.options.browserStorage) {
+      const hidden = new Set(this.browserLibrary.hidden);
+      if (entry.savedAs && entry.savedAs !== name) hidden.add(entry.savedAs);
+      const recipes = { ...this.browserLibrary.recipes, [name]: entry.recipe };
+      if (entry.savedAs && entry.savedAs !== name) delete recipes[entry.savedAs];
+      const problem = this.saveBrowserLibrary({ recipes, hidden: [...hidden] });
+      if (problem) return [problem];
+      if (entry.savedAs && entry.savedAs !== name) this.repo.delete(entry.savedAs);
+      this.repo.set(name, entry.recipe);
+      delete this.drafts[name];
+      this.commit();
+      return [];
+    }
     if (!this.repoAvailable) return ["Saving to the repo needs the designer's dev server (bun run dev)."];
 
     const params = new URLSearchParams();
@@ -243,6 +282,19 @@ export class PatternLibrary {
   async remove(name: string): Promise<string | null> {
     const entry = this.entry(name);
     if (!entry) return null;
+    if (this.options.browserStorage) {
+      const recipes = { ...this.browserLibrary.recipes };
+      delete recipes[name];
+      if (entry.savedAs) delete recipes[entry.savedAs];
+      const hidden = new Set([...this.browserLibrary.hidden, name, ...(entry.savedAs ? [entry.savedAs] : [])]);
+      const problem = this.saveBrowserLibrary({ recipes, hidden: [...hidden] });
+      if (problem) return problem;
+      this.repo.delete(name);
+      if (entry.savedAs) this.repo.delete(entry.savedAs);
+      delete this.drafts[name];
+      this.commit();
+      return null;
+    }
     if (entry.savedAs) {
       if (!this.repoAvailable) return "Deleting a saved pattern needs the designer's dev server.";
       const response = await fetch(`${API}/${encodeURIComponent(entry.savedAs)}`, { method: "DELETE" });
@@ -315,6 +367,7 @@ export class PatternLibrary {
     return {
       loading: this.loading,
       repoAvailable: this.repoAvailable,
+      storageMode: this.options.browserStorage ? "browser" : this.repoAvailable ? "repo" : "unavailable",
       repoDir: this.repoDir,
       entries,
       broken: this.broken,
@@ -332,6 +385,26 @@ export class PatternLibrary {
       return parsed;
     } catch {
       return {};
+    }
+  }
+
+  /** Save only succeeds once storage accepts it; a full browser keeps the editable draft. */
+  private saveBrowserLibrary(next: BrowserLibrary): string | null {
+    try {
+      if (!this.storage) throw new Error("Storage is unavailable");
+      this.storage.setItem(BROWSER_LIBRARY_KEY, JSON.stringify(next));
+      this.browserLibrary = next;
+      return null;
+    } catch {
+      return "This browser couldn't save the pattern. Download it to keep a copy.";
+    }
+  }
+
+  /** Local recipes stay available even if the shipped catalog can't be fetched. */
+  private applyBrowserLibrary(): void {
+    for (const name of this.browserLibrary.hidden) this.repo.delete(name);
+    for (const [name, recipe] of Object.entries(this.browserLibrary.recipes)) {
+      this.repo.set(name, withDefaults(recipe) as Recipe);
     }
   }
 

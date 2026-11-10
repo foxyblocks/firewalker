@@ -11,7 +11,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import type { Plugin } from "vite";
+import type { ViteDevServer } from "vite";
 
 import { deletePattern, listPatterns, PatternStoreError, savePattern } from "./patternStore.ts";
 
@@ -21,10 +21,12 @@ const MAX_BODY_BYTES = 64 * 1024;
 // `shownDir` is how the designer names the folder to people; `dir` is where the files go.
 // `builtinsHeader` is the firmware's header to keep in step with built-in recipes, for the repo's own
 // folder only.
-export function patternsApi(dir: string, shownDir = dir, builtinsHeader?: string): Plugin {
+export function patternsApi(dir: string, shownDir = dir, builtinsHeader?: string) {
   return {
     name: "firewalker-patterns-api",
-    configureServer(server) {
+    // Both the desktop and standalone designer register these routes. They only
+    // need middleware registration, which each app's Vite installation provides.
+    configureServer(server: Pick<ViteDevServer, "middlewares">) {
       server.middlewares.use(PREFIX, (req, res) => {
         handle(dir, shownDir, builtinsHeader, req, res).catch((error: unknown) => sendError(res, error));
       });

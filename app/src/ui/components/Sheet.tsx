@@ -1,11 +1,11 @@
 /**
  * Shared bottom sheet for connection picking, naming, and one boot's calibration. A native
  * modal dialog keeps focus inside the sheet and makes the app behind it inert.
+ * The browser puts it above the page, so it can stay inside the remote's theme.
  * The caller owns whether closing is allowed, so an active capture cannot lose its
  * result through Escape, the backdrop, or either close button.
  */
 import { useEffect, useId, useRef, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import { Button, ClearIcon, IconButton } from "./Button";
 
 export function Sheet({ title, children, onClose, closeDisabled = false, closeLabel = "Close" }: {
@@ -21,7 +21,7 @@ export function Sheet({ title, children, onClose, closeDisabled = false, closeLa
     const previous = document.activeElement;
     const element = dialog.current;
     element?.showModal();
-    // React's input autofocus can run before a portal's dialog is open. Focus
+    // React's input autofocus can run before the dialog is open. Focus
     // the first editable field after opening so Rename is ready for typing.
     element?.querySelector<HTMLElement>('input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled])')?.focus();
     return () => {
@@ -30,7 +30,7 @@ export function Sheet({ title, children, onClose, closeDisabled = false, closeLa
     };
   }, []);
 
-  return createPortal(
+  return (
     <dialog
       ref={dialog}
       className="sheet-dialog"
@@ -53,7 +53,6 @@ export function Sheet({ title, children, onClose, closeDisabled = false, closeLa
       <footer className="sheet-footer">
         <Button wide disabled={closeDisabled} onClick={onClose}>{closeLabel}</Button>
       </footer>
-    </dialog>,
-    document.body,
+    </dialog>
   );
 }

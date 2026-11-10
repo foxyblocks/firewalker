@@ -1,6 +1,6 @@
 # Firewalker pattern designer
 
-A web app for designing pattern **recipes** on a computer: stack layers, set their knobs, and
+The desktop designer for pattern **recipes**: stack layers, set their knobs, and
 watch a simulated boot react as you tilt it and stomp. Recipes save to the repo's
 [`patterns/`](../patterns) folder. The format is in
 [`docs/recipe-format.md`](../docs/recipe-format.md), and why it works this way is in
@@ -8,7 +8,20 @@ watch a simulated boot react as you tilt it and stomp. Recipes save to the repo'
 
 **Send to boot** tries a pattern on a real boot, with no firmware build.
 
-## Run it
+## Combined app
+
+Open the **Designer** section of the Firewalker app at <http://localhost:5173>.
+Start it with `bun run --cwd app dev` from the repo root, after
+`bash tools/setup-worktree.sh`. It shares boot connections with the Remote section.
+The [app README](../app/README.md) covers the combined workspace and Vercel deployment.
+
+The hosted app includes every repo recipe and saves your library in this browser.
+Download and import recipes to move them between devices. Local development keeps
+saving directly into `patterns/`.
+
+## Standalone development
+
+The standalone editor remains available for focused designer development:
 
 ```bash
 cd app && bun install && cd ..   # Send to boot reuses the iPhone app's connection code
@@ -19,7 +32,8 @@ bun run test         # engine, format, storage, and geometry tests, and every fi
 bun run typecheck
 ```
 
-It runs on port 5174, so it can sit beside the iPhone app's dev server on 5173.
+This standalone editor runs on port 5174 and manages its own boot connections. Use the
+combined app on 5173 for shared Remote/Designer connections.
 
 ## Using it
 
@@ -80,7 +94,7 @@ without touching the repo, point it somewhere else:
 PATTERNS_DIR=/tmp/scratch-patterns bun run dev
 ```
 
-A built copy (`bun run build`) has no dev server, so it works from drafts, download, and
+A standalone built copy (`bun run build` in `designer/`) has no dev server, so it works from drafts, download, and
 import only. Save and Delete stay off, and a banner says why.
 
 ## If a boot won't connect

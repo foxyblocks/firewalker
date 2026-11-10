@@ -255,8 +255,9 @@ grounds tied together.
 
 ## iPhone remote
 
-`app/` is the iPhone app that controls the boots over Bluetooth, and its
-[README](app/README.md) covers running, testing, and installing it. It works with no network.
+`app/` runs the combined desktop Remote/Designer workspace and builds the iPhone
+remote that controls the boots over Bluetooth. Its
+[README](app/README.md) covers running, testing, and installing it. The iPhone build works with no network.
 
 To run it in a browser on this computer, use `./cli web`. It needs [Bun](https://bun.sh).
 
@@ -274,7 +275,10 @@ labels and Bluetooth permissions per port.
 
 ## Pattern designer
 
-`designer/` is a web app for designing new patterns as recipes on a computer. It simulates
+`designer/` supplies the **Designer** section of the combined desktop app for designing
+new patterns as recipes. Start both sections with `bun run --cwd app dev`. It simulates
 the boot from above and from the side, with a tilt slider and a stomp button, and saves
 recipes to [`patterns/`](patterns). Its [README](designer/README.md) covers running it, and
-[`docs/recipe-format.md`](docs/recipe-format.md) is the format. Boots can't run recipes yet.
+[`docs/recipe-format.md`](docs/recipe-format.md) is the format. **Send to boot** uploads a recipe
+without rebuilding firmware. The hosted app saves your library in this browser; local
+development saves directly to the repo.
