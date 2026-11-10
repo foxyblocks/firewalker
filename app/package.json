@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:native": "vite --mode native",
     "build": "tsc --noEmit && vite build",
+    "build:native": "vite build --mode native",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "sync": "vite build && cap sync ios",
-    "ios": "vite build && cap sync ios && cap run ios",
+    "sync": "bun run build:native && cap sync ios",
+    "ios": "bun run build:native && cap sync ios && cap run ios",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
@@ -28,9 +30,11 @@
   "devDependencies": {
     "@capacitor/cli": "^8.6.0",
     "@storybook/react-vite": "10.6.6",
+    "@types/node": "^22",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/w3c-web-serial": "^1.0.9",
+    "@types/web-bluetooth": "^0.0.21",
     "@vitejs/plugin-react": "^6.2.1",
     "storybook": "10.6.6",
     "typescript": "^7.0.2",

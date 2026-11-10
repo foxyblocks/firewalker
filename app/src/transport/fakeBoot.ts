@@ -78,6 +78,8 @@ export interface FakeBootOptions {
 }
 
 export class FakeBoot {
+  /** Desktop demos attach the recipe protocol without bundling the editor into iOS. */
+  commandExtension: ((line: string) => string[] | null) | null = null;
   readonly id: string;
   deviceId: string;
   readonly name: string;
@@ -157,7 +159,7 @@ export class FakeBoot {
     this.deviceId = `fake-${this.id}`;
     this.name = `Firewalker-${this.id}`;
     this.proto = options.proto ?? ORIENTATION_PROTOCOL_VERSION;
-    this.availablePatterns = options.patterns ?? ["rainbow-pool", "fire-stomp"];
+    this.availablePatterns = [...(options.patterns ?? ["rainbow-pool", "fire-stomp"])];
     this.pattern = options.pattern ?? "rainbow-pool";
     this.lastLit = options.lastLit ?? (this.pattern === "off" ? "rainbow-pool" : this.pattern);
     this.brightness = options.brightness ?? 24;
@@ -212,6 +214,11 @@ export class FakeBoot {
     this.received.push(line);
     if (this.unresponsive) return;
     if (this.ignoring.includes(line.split(/\s+/)[0] ?? "")) return;
+    const extra = this.commandExtension?.(line);
+    if (extra) {
+      for (const reply of extra) this.send(reply);
+      return;
+    }
 
     const words = line.split(/\s+/);
     const verb = words[0] ?? "";

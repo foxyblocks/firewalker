@@ -326,6 +326,11 @@ export class BootsStore {
 
   activity(): void {
     this.inactivity.activity();
+    // An explicit Disconnect in the desktop designer also keeps the boot's label.
+    // The remote's Reconnect button wakes those connections as well as idle ones.
+    this.connections.forEach(({ client }) => {
+      if (client.getState().link === "sleeping") client.connect();
+    });
   }
 
   /** The sides the current tab controls. */

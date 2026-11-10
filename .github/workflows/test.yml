@@ -25,18 +25,20 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
+      - name: Install web dependencies
+        run: bash tools/setup-worktree.sh
+
       # Both clients share transport code; check the remote's controls as well as the designer.
       - name: Boot remote
         working-directory: app
         run: |
-          bun install --frozen-lockfile
-          bun run typecheck
+          bun run build
+          bun run build:native
           bun run test
 
       - name: Designer
         working-directory: designer
         run: |
-          bun install --frozen-lockfile
           bun run typecheck
           bun run test
 

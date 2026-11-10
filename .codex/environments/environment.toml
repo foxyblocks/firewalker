@@ -7,11 +7,11 @@ name = "Firewalker"
 script = "bash tools/setup-worktree.sh"
 
 [[actions]]
-name = "Remote app"
+name = "Firewalker"
 icon = "run"
 command = "bun run --cwd app dev"
 
 [[actions]]
-name = "Pattern designer"
+name = "iPhone remote"
 icon = "run"
-command = "bun run --cwd designer dev"
+command = "bun run --cwd app dev:native --port 5174"

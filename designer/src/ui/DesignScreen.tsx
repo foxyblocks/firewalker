@@ -123,7 +123,7 @@ export function DesignScreen({ name }: { name: string }) {
   const setLayers = (next: Layer[]) => change({ ...recipe, layers: next });
   const statusText =
     entry.status === "saved"
-      ? `Saved to patterns/${name}.json`
+      ? state.storageMode === "browser" ? "Saved in this browser" : `Saved to patterns/${name}.json`
       : entry.status === "changed"
         ? "Unsaved changes, kept in this browser"
         : "Not saved yet, kept in this browser";
@@ -186,9 +186,11 @@ export function DesignScreen({ name }: { name: string }) {
             type="button"
             className="button primary"
             onClick={() => void save()}
-            disabled={saving || entry.status === "saved" || entry.problems.length > 0 || !state.repoAvailable || entry.conflict !== null}
+            disabled={saving || entry.status === "saved" || entry.problems.length > 0 || state.storageMode === "unavailable" || entry.conflict !== null}
             title={
-              !state.repoAvailable
+              state.storageMode === "browser"
+                ? "Save in this browser (⌘S)"
+              : !state.repoAvailable
                 ? "Needs the designer's dev server"
                 : entry.conflict
                   ? "The file changed on disk. Choose what to do in the message below."

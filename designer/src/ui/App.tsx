@@ -5,15 +5,15 @@ import { createContext, useContext, useEffect, useMemo, useState, useSyncExterna
 
 import { DesignScreen } from "./DesignScreen";
 import { PatternsScreen } from "./PatternsScreen";
-import { BootConnections, type BootTransport } from "../boot/connections";
+import { BootConnections, type BootTransport, type DesignerBoots } from "../boot/connections";
 import { FakeBootPorts, FakeBootTransport } from "../boot/fakeBoot";
 import { devServerPorts } from "../boot/portHolders";
 import { PatternLibrary, type LibraryState } from "../store/patterns";
 
 const LibraryContext = createContext<PatternLibrary | null>(null);
-const BootsContext = createContext<BootConnections | null>(null);
+const BootsContext = createContext<DesignerBoots | null>(null);
 
-export function useBoots(): BootConnections {
+export function useBoots(): DesignerBoots {
   const boots = useContext(BootsContext);
   if (!boots) throw new Error("useBoots needs the App's provider.");
   return boots;
@@ -44,7 +44,7 @@ export function useLibrary(): [PatternLibrary, LibraryState] {
 export type Route = { screen: "patterns" } | { screen: "design"; name: string };
 
 export function navigate(route: Route): void {
-  window.location.hash = route.screen === "design" ? `#/design/${encodeURIComponent(route.name)}` : "#/";
+  window.location.hash = route.screen === "design" ? `#/design/${encodeURIComponent(route.name)}` : "#/patterns";
 }
 
 function readRoute(): Route {
@@ -52,12 +52,16 @@ function readRoute(): Route {
   return match?.[1] ? { screen: "design", name: decodeURIComponent(match[1]) } : { screen: "patterns" };
 }
 
-export function App() {
-  const library = useMemo(() => new PatternLibrary(), []);
-  const boots = useMemo(createBootConnections, []);
+export function App({ connections, library: providedLibrary, manageActivity = true }: {
+  connections?: DesignerBoots;
+  library?: PatternLibrary;
+  manageActivity?: boolean;
+} = {}) {
+  const library = useMemo(() => providedLibrary ?? new PatternLibrary(), [providedLibrary]);
+  const boots = useMemo(() => connections ?? createBootConnections(), [connections]);
   const [route, setRoute] = useState(readRoute);
 
-  useEffect(() => boots.observeActivity(), [boots]);
+  useEffect(() => manageActivity ? boots.observeActivity() : undefined, [boots, manageActivity]);
 
   useEffect(() => {
     void library.load();
@@ -75,7 +79,9 @@ export function App() {
   return (
     <LibraryContext.Provider value={library}>
       <BootsContext.Provider value={boots}>
-        {route.screen === "design" ? <DesignScreen key={route.name} name={route.name} /> : <PatternsScreen />}
+        <div className="designer-surface">
+          {route.screen === "design" ? <DesignScreen key={route.name} name={route.name} /> : <PatternsScreen />}
+        </div>
       </BootsContext.Provider>
     </LibraryContext.Provider>
   );

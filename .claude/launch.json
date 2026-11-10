@@ -2,15 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "remote-app",
+      "name": "firewalker",
       "runtimeExecutable": "bun",
       "runtimeArgs": ["run", "--cwd", "app", "dev"],
       "port": 5173
     },
     {
-      "name": "pattern-designer",
+      "name": "iphone-remote",
       "runtimeExecutable": "bun",
-      "runtimeArgs": ["run", "--cwd", "designer", "dev"],
+      "runtimeArgs": ["run", "--cwd", "app", "dev:native", "--port", "5174"],
       "port": 5174
     }
   ]

@@ -11,7 +11,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 
-import type { Plugin } from "vite";
+import type { ViteDevServer } from "vite";
 
 import { freePort, FreePortError, listPortHolders } from "./bootPorts.ts";
 
@@ -76,10 +76,10 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   send(res, 405, { error: "Not supported." });
 }
 
-export function bootPortsApi(): Plugin {
+export function bootPortsApi() {
   return {
     name: "firewalker-boot-ports-api",
-    configureServer(server) {
+    configureServer(server: Pick<ViteDevServer, "middlewares">) {
       server.middlewares.use(PREFIX, (req, res) => {
         handle(req, res).catch((error: unknown) => {
           const status = error instanceof FreePortError ? error.status : 500;

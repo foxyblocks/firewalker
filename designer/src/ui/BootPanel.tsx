@@ -76,8 +76,8 @@ function BootRow({ boot, recipe, canSend }: { boot: ConnectedBoot; recipe: Recip
         >
           {boot.sending ? "Sending…" : `Send ${recipe.name}`}
         </button>
-        <button type="button" className="button small" onClick={() => void boots.disconnect(boot.deviceId)}>
-          Disconnect
+        <button type="button" className="button small" disabled={boot.sending} onClick={() => void (boot.paused ? boots.reconnect(boot.deviceId) : boots.disconnect(boot.deviceId)).catch(() => undefined)}>
+          {boot.paused ? "Reconnect" : "Disconnect"}
         </button>
         {boot.activity && <span className={boot.failed ? "small bad" : "quiet small"}>{boot.activity}</span>}
       </div>

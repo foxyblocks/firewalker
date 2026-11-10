@@ -1,5 +1,6 @@
 import "@fontsource-variable/big-shoulders-display";
 import "@fontsource-variable/spline-sans-mono";
+import "../src/ui/base.css";
 import "../src/ui/styles.css";
 import "./preview.css";
 

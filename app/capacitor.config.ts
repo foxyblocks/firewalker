@@ -5,7 +5,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const config: CapacitorConfig = {
   appId: "com.foxyblocks.firewalker",
   appName: "Firewalker",
-  webDir: "dist",
+  webDir: "dist-native",
   backgroundColor: "#0b0a09",
   ios: { contentInset: "never" },
 };

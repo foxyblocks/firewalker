@@ -110,6 +110,57 @@ describe("connecting", () => {
 });
 
 describe("commands", () => {
+  it("lets a designer exchange recover from an unparsed line without releasing its queue slot", async () => {
+    const { client } = setup();
+    client.connect();
+    await settle();
+    const exchange = client.runExclusive(async (session) => {
+      const refused = await session.request("garbled", (reply) => reply.t === "ack");
+      expect(refused).toMatchObject({ cmd: "unknown", ok: false });
+      return session.request("status", (reply) => reply.t === "status");
+    });
+    const outcome = exchange.then((reply) => ({ ok: true, reply }), (error: Error) => ({ ok: false, error: error.message }));
+    await settle();
+    expect(await outcome).toMatchObject({ ok: true, reply: { id: "3ED1" } });
+  });
+
+  it("rejects active and waiting designer operations when the connection drops", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+    boot.ignoring = ["status"];
+    const active = client.runExclusive((session) => session.request("status", (reply) => reply.t === "status"));
+    const waiting = client.runExclusive((session) => session.request("patterns", (reply) => reply.t === "patterns"));
+    const outcomes = Promise.allSettled([active, waiting]);
+    await vi.advanceTimersByTimeAsync(20);
+    boot.dropLink();
+    expect((await outcomes).map((result) => result.status)).toEqual(["rejected", "rejected"]);
+    await client.disconnect();
+  });
+
+  it("finishes a designer exchange before applying remote controls on the same connection", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+
+    let release!: () => void;
+    const holding = new Promise<void>((resolve) => { release = resolve; });
+    const exchange = client.runExclusive(async (session) => {
+      await session.request("status", (reply) => reply.t === "status");
+      await holding;
+      return session.request("patterns", (reply) => reply.t === "patterns");
+    });
+    client.setBrightness(32);
+    await settle();
+    expect(boot.brightness).toBe(24);
+    expect(client.busy()).toBe(true);
+
+    release();
+    await settle();
+    expect(await exchange).toMatchObject({ list: ["rainbow-pool", "fire-stomp"] });
+    expect(client.getState().status?.brightness).toBe(32);
+  });
+
   it("changes the pattern, showing it as pending until the boot confirms", async () => {
     const { boot, client } = setup();
     client.connect();

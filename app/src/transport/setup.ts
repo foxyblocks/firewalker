@@ -54,7 +54,7 @@ function memoryStorage(initial: Record<string, string> = {}): KeyValueStore {
   };
 }
 
-function fakeSetup(params: URLSearchParams): { transport: Transport; storage: KeyValueStore } {
+function fakeSetup(params: URLSearchParams, configure?: (boot: FakeBoot) => void): { transport: Transport; storage: KeyValueStore } {
   const proto = params.get("proto") === null ? undefined : Number(params.get("proto"));
   const extraPatterns = Math.max(0, Number(params.get("patterns") ?? 2) - 2);
   const patterns = ["rainbow-pool", "fire-stomp", ...Array.from({ length: extraPatterns }, (_, index) => `pattern-${index + 3}`)];
@@ -90,6 +90,8 @@ function fakeSetup(params: URLSearchParams): { transport: Transport; storage: Ke
   if (params.get("offline")) right.reachable = false;
   if (params.get("access") === "lost") left.accessLost = right.accessLost = true;
   left.moving = params.get("capture") === "moving";
+  configure?.(left);
+  configure?.(right);
 
   const saved: Record<string, string> = {};
   if (params.get("paired")) {
@@ -106,9 +108,9 @@ function fakeSetup(params: URLSearchParams): { transport: Transport; storage: Ke
   return { transport, storage: memoryStorage(saved) };
 }
 
-export async function setUpBoots(): Promise<{ transport: Transport; storage: KeyValueStore }> {
+export async function setUpBoots(configureFakeBoot?: (boot: FakeBoot) => void): Promise<{ transport: Transport; storage: KeyValueStore }> {
   const params = new URLSearchParams(window.location.search);
-  if (params.get("boot") === "fake") return fakeSetup(params);
+  if (params.get("boot") === "fake") return fakeSetup(params, configureFakeBoot);
 
   const bluetooth = new BleTransport();
   if (Capacitor.isNativePlatform()) {

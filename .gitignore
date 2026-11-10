@@ -4,3 +4,4 @@
 .vscode/launch.json
 .vscode/ipch
 include/generated/recipe_budget.h
+.vercel

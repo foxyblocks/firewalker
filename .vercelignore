@@ -1,0 +1,23 @@
+# Deploy web source only. Firmware, native projects, and local agent tooling aren't build inputs.
+.agents
+.claude
+.codex
+.github
+.pio
+.vscode
+docs
+specs
+include
+/src
+/test
+app/ios
+app/node_modules
+app/dist
+app/dist-native
+app/storybook-static
+designer/node_modules
+designer/dist
+tools/*
+!tools/setup-worktree.sh
+*.md
+**/*.test.ts

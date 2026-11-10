@@ -6,6 +6,7 @@
 // request says which reply it's waiting for and everything else is skipped.
 
 import { recipeCrc } from "../recipe/compile";
+import { LineSession, type LineExchange } from "../../../shared/lineSession";
 
 export type Reply = Record<string, unknown>;
 
@@ -55,71 +56,26 @@ const isPatternAck = (reply: Reply) => reply.t === "ack" && reply.cmd === "patte
 export type SendProgress = { stage: "checking" } | { stage: "sending"; sent: number; total: number } | { stage: "selecting" };
 export type SendResult = { ok: true; alreadyThere: boolean } | { ok: false; error: string };
 
-interface Waiter {
-  matches: (reply: Reply) => boolean;
-  resolve: (reply: Reply) => void;
-  reject: (error: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
-}
-
 export class BootSession {
-  private partial = "";
-  private waiter: Waiter | null = null;
+  private readonly local: LineSession | null;
+  private readonly exchange: LineExchange;
 
+  // A standalone designer supplies a writer. The combined desktop supplies the
+  // BootClient's exclusive exchange, so uploads use the remote's existing link.
   constructor(
-    private readonly write: (line: string) => Promise<void>,
+    writeOrExchange: ((line: string) => Promise<void>) | LineExchange,
     private readonly bytesPerLine: number = BYTES_PER_BLUETOOTH_LINE,
     private readonly lineTimeoutMs: number = LINE_TIMEOUT_MS,
-  ) {}
-
-  // Hands over text from the link. It can hold part of a line, or several.
-  receive(text: string): void {
-    this.partial += text;
-    const lines = this.partial.split("\n");
-    this.partial = lines.pop() ?? "";
-    for (const line of lines) this.receiveLine(line);
+  ) {
+    this.local = typeof writeOrExchange === "function" ? new LineSession(writeOrExchange) : null;
+    this.exchange = this.local ?? writeOrExchange as LineExchange;
   }
 
-  private receiveLine(line: string): void {
-    if (!this.waiter) return;
-    let reply: unknown;
-    try {
-      reply = JSON.parse(line);
-    } catch {
-      return; // the firmware's log lines aren't JSON
-    }
-    if (typeof reply !== "object" || reply === null) return;
-    if (!this.waiter.matches(reply as Reply)) return;
-    const { resolve, timer } = this.waiter;
-    clearTimeout(timer);
-    this.waiter = null;
-    resolve(reply as Reply);
-  }
+  receive(text: string): void { this.local?.receive(text); }
+  fail(reason: string): void { this.local?.fail(reason); }
 
-  // Ends anything waiting on this boot, such as when its link drops.
-  fail(reason: string): void {
-    if (!this.waiter) return;
-    const { reject, timer } = this.waiter;
-    clearTimeout(timer);
-    this.waiter = null;
-    reject(new Error(reason));
-  }
-
-  // Sends one line and waits for the reply it calls for. Only one runs at a time, because a boot
-  // handles one command at a time, and its replies carry nothing to tell them apart.
-  request(line: string, matches: (reply: Reply) => boolean, timeoutMs: number = REPLY_TIMEOUT_MS): Promise<Reply> {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.waiter = null;
-        reject(new Error("The boot stopped answering."));
-      }, timeoutMs);
-      this.waiter = { matches, resolve, reject, timer };
-      this.write(line).catch((error: unknown) => {
-        clearTimeout(timer);
-        this.waiter = null;
-        reject(error instanceof Error ? error : new Error(String(error)));
-      });
-    });
+  request(line: string, matches: (reply: Reply) => boolean, timeoutMs = REPLY_TIMEOUT_MS): Promise<Reply> {
+    return this.exchange.request(line, matches, timeoutMs);
   }
 
   // Sends a line until the reply it calls for arrives, in case the line gets damaged on the way. Rejects

@@ -1,5 +1,5 @@
-// Package webapp runs the phone remote in a browser on this computer, for `./cli web`. It
-// drives the same bun scripts as app/README.md: install, build, then serve.
+// Package webapp runs the combined remote and designer on this computer, for `./cli web`.
+// It drives the same bun scripts as app/README.md: install, build, then serve.
 //
 // Everything stays on one address, http://localhost:5173. A browser keeps a site's data
 // and permissions per origin, which includes the port, so the boot labels (saved in
@@ -80,7 +80,10 @@ type Plan struct {
 // Plan works out the commands for these options. `bun run`, never bunx, because a global
 // bunx can pick up an older Node than the app needs (see app/README.md).
 func (o Options) Plan() Plan {
-	plan := Plan{Dir: filepath.Join(o.RepoRoot, "app"), Setup: []Step{{[]string{"install"}}}}
+	plan := Plan{Dir: filepath.Join(o.RepoRoot, "app"), Setup: []Step{
+		{[]string{"install", "--frozen-lockfile"}},
+		{[]string{"install", "--cwd", "../designer", "--frozen-lockfile"}},
+	}}
 	switch {
 	case o.Dev:
 		plan.Serve = &Step{[]string{"run", "dev", "--strictPort"}}

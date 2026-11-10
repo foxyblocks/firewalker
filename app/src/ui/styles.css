@@ -5,7 +5,11 @@
  * are bundled, so nothing here needs a network.
  */
 
-:root {
+/* Scope the remote styles so the designer can use its own controls. Storybook
+ * shows the same controls in an iframe that only contains remote stories. */
+:where(.remote-surface, body.sb-show-main) {
+  height: 100%;
+  min-width: 0;
   --ink: #f4ede2;
   --ink-quiet: #a79d90;
   --ink-faint: #6f675e;
@@ -23,22 +27,6 @@
   --radius: 14px;
   --gap: 16px;
   color-scheme: dark;
-}
-
-* {
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-}
-
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-  background: var(--night);
-}
-
-body {
   color: var(--ink);
   font-family: var(--mono);
   font-size: 14px;
@@ -48,6 +36,10 @@ body {
   user-select: none;
   -webkit-user-select: none;
   -webkit-text-size-adjust: 100%;
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button,
@@ -288,12 +280,6 @@ dd {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
-@keyframes pulse {
-  50% {
-    opacity: 0.35;
-  }
-}
-
 /* ── Pattern tiles ─────────────────────────────────────────────────────── */
 
 .tiles {
@@ -401,12 +387,6 @@ dd {
 .preview-other {
   background-image: linear-gradient(90deg, transparent, var(--ink-quiet), transparent);
   animation-duration: 3s;
-}
-
-@keyframes strip-run {
-  to {
-    background-position: -300% 0;
-  }
 }
 
 /* ── LED strips ────────────────────────────────────────────────────────── */
@@ -1244,7 +1224,6 @@ dd {
   text-align: center;
 }
 
-
 .sheet-foot {
   display: flex;
   justify-content: center;
@@ -1257,12 +1236,6 @@ dd {
   background: linear-gradient(90deg, var(--ember) 50%, var(--ember-soft) 50%) right / 200% 100%;
   color: var(--ink);
   animation: capture-fill 2s linear forwards;
-}
-
-@keyframes capture-fill {
-  to {
-    background-position: left;
-  }
 }
 
 /* ── Audio ─────────────────────────────────────────────────────────────── */
@@ -1506,7 +1479,6 @@ dd {
 .connection-option:not(:disabled):active { border-color: var(--ember); }
 .step-good .pose-degrees { color: var(--ink-quiet); }
 
-
 /* The diagnostics are always live while open; each signal has a label and visual. */
 .debug-panel { display: grid; gap: 16px; }
 .debug-panel h2 { margin: 0; }
@@ -1518,3 +1490,22 @@ dd {
 .stomp-marker { stroke: var(--good); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .history-scale { fill: var(--ink-faint); font-size: 8px; font-family: var(--mono); }
 .stomp-key { display: inline-block; height: 10px; border-left: 1px solid var(--good); margin-right: 3px; vertical-align: -1px; }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes strip-run {
+  to {
+    background-position: -300% 0;
+  }
+}
+
+@keyframes capture-fill {
+  to {
+    background-position: left;
+  }
+}

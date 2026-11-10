@@ -4,9 +4,9 @@
  * Every screen reads from `BootsStore` and re-renders when it changes. The only other
  * app-wide state is the list of boots Find boots has seen, which outlives that screen so a
  * boot's own screen can be opened from it and returned from. A boot's screen is keyed by its
- * device id, never its side, because labeling it can change its side. Bluetooth being off or denied replaces the whole app where Bluetooth
- * is the only way to reach a boot, because nothing else can work until it's fixed. A desktop
- * browser with USB carries on without it (`BrowserTransport.radioState`).
+ * device id, because labeling it can change its side. The desktop workspace can open directly
+ * to the Boots tab and observes activity across both tools. When Bluetooth is unavailable,
+ * the remote shows the radio prompt unless USB is available (`BrowserTransport.radioState`).
  */
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
@@ -19,9 +19,11 @@ import { AppNavigation } from "./components/AppNavigation";
 
 type Screen = { kind: "remote" } | { kind: "find" } | { kind: "boot"; deviceId: string };
 
-export function App({ store }: { store: BootsStore }) {
+export function App({ store, manageActivity = true, initialTab }: { store: BootsStore; manageActivity?: boolean; initialTab?: "remote" | "boots" }) {
   useSyncExternalStore(store.subscribe, store.getVersion);
-  const [screen, setScreen] = useState<Screen>({ kind: store.sides().length > 0 ? "remote" : "find" });
+  const [screen, setScreen] = useState<Screen>(() => ({
+    kind: (initialTab ?? (store.sides().length > 0 ? "remote" : "boots")) === "remote" ? "remote" : "find",
+  }));
   const [detailBusy, setDetailBusy] = useState(false);
   const [found, setFound] = useState<FoundBoot[]>([]);
   const [radio, setRadio] = useState<RadioState>("on");
@@ -43,7 +45,7 @@ export function App({ store }: { store: BootsStore }) {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [store, checkRadio]);
 
-  useEffect(() => store.observeActivity(), [store]);
+  useEffect(() => manageActivity ? store.observeActivity() : undefined, [store, manageActivity]);
 
   if (radio !== "on") {
     return <RadioPrompt radio={radio} onRetry={checkRadio} onOpenSettings={() => void store.transport.openSettings()} />;
