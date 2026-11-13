@@ -11,6 +11,7 @@
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import type { BootsStore } from "../core/boots";
+import type { PatternSync } from "../core/patternSync";
 import type { FoundBoot, RadioState } from "../transport/transport";
 import { BootDetail } from "./BootDetail";
 import { FindBoots, withFound } from "./FindBoots";
@@ -19,7 +20,8 @@ import { AppNavigation } from "./components/AppNavigation";
 
 type Screen = { kind: "remote" } | { kind: "find" } | { kind: "boot"; deviceId: string };
 
-export function App({ store, initialTab }: { store: BootsStore; initialTab?: "remote" | "boots" }) {
+/** `sync` is the iPhone build's pattern sync, whose progress the Remote screen shows. The desktop app has none. */
+export function App({ store, initialTab, sync }: { store: BootsStore; initialTab?: "remote" | "boots"; sync?: PatternSync }) {
   useSyncExternalStore(store.subscribe, store.getVersion);
   const [screen, setScreen] = useState<Screen>(() => ({
     kind: (initialTab ?? (store.sides().length > 0 ? "remote" : "boots")) === "remote" ? "remote" : "find",
@@ -79,7 +81,7 @@ export function App({ store, initialTab }: { store: BootsStore; initialTab?: "re
         {screen.kind === "boot" && (
           <BootScreen store={store} deviceId={screen.deviceId} found={found} onBack={() => setScreen({ kind: "find" })} onBusy={setDetailBusy} />
         )}
-        {screen.kind === "remote" && <Remote store={store} onBoots={() => setScreen({ kind: "find" })} />}
+        {screen.kind === "remote" && <Remote store={store} sync={sync} onBoots={() => setScreen({ kind: "find" })} />}
       </section>
     </div>
   );

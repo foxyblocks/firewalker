@@ -48,7 +48,10 @@ export interface BootSyncState {
 
 /** What the Remote screen shows about sync for the boots a tab controls. */
 export interface SyncView {
-  /** Combined progress while any of them is changing something. */
+  /**
+   * Progress while any of them is changing something. With both boots syncing, it follows the one
+   * with the most left to do, so the pair reads "3 of 7" rather than adding up to 14 steps.
+   */
   progress?: { done: number; total: number };
   needsFirmware: { side: Side; count: number }[];
   noRoom: { side: Side; count: number }[];
@@ -132,14 +135,12 @@ export class PatternSync {
 
   view(sides: readonly Side[]): SyncView {
     const view: SyncView = { needsFirmware: [], noRoom: [], failed: [] };
-    let done = 0;
-    let total = 0;
     for (const side of sides) {
       const state = this.state(side);
       if (!state) continue;
-      if (state.phase === "syncing") {
-        done += state.done;
-        total += state.total;
+      const left = state.total - state.done;
+      if (state.phase === "syncing" && left > 0 && (!view.progress || left > view.progress.total - view.progress.done)) {
+        view.progress = { done: state.done, total: state.total };
       }
       if (state.needsFirmware > 0) view.needsFirmware.push({ side, count: state.needsFirmware });
       if (state.noRoom > 0) view.noRoom.push({ side, count: state.noRoom });
@@ -148,7 +149,6 @@ export class PatternSync {
         view.failed.push({ side, error: state.error });
       }
     }
-    if (total > 0) view.progress = { done, total };
     return view;
   }
 

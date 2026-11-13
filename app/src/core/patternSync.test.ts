@@ -271,6 +271,18 @@ describe("PatternSync", () => {
     expect(test.sync.view(["left"]).progress).toBeUndefined();
   });
 
+  // Both boots sync the same catalog at once, so the pair reads "3 of 7", not 6 of 14.
+  it("follows the boot with the most left to do when both are syncing", async () => {
+    const test = await rig();
+    const totals = new Set<number>();
+    test.sync.subscribe(() => {
+      const progress = test.sync.view(["left", "right"]).progress;
+      if (progress) totals.add(progress.total);
+    });
+    await waitFor(() => bothSynced(test));
+    expect([...totals]).toEqual([(await realCatalog()).patterns.length]);
+  });
+
   // Each recipe gets its own turn in the boot's command queue, so a brightness drag mid-sync
   // reaches the boot between two recipes instead of waiting for all of them.
   it("lets a tap through between recipes", async () => {

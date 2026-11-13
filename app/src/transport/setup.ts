@@ -22,6 +22,11 @@
  *   &usb=busy                      the same, but another program has the boot's USB port
  *   &cap=off                       Left's soft brightness cap is off
  *   &cap=none                      firmware from before the soft cap, with a fixed maximum
+ *
+ * The phone build's pretend boots also take recipes, so pattern sync runs against them
+ * (transport/fakeRecipes.ts):
+ *   &slots=4                       each boot has only 4 upload slots
+ *   &versions=1                    each boot's firmware reads only recipe version 1
  */
 
 import { Capacitor } from "@capacitor/core";
@@ -54,7 +59,10 @@ function memoryStorage(initial: Record<string, string> = {}): KeyValueStore {
   };
 }
 
-function fakeSetup(params: URLSearchParams, configure?: (boot: FakeBoot) => void): { transport: Transport; storage: KeyValueStore } {
+/** Adds to each pretend boot, such as recipe slots. It gets the page's options too. */
+export type ConfigureFakeBoot = (boot: FakeBoot, params: URLSearchParams) => void;
+
+function fakeSetup(params: URLSearchParams, configure?: ConfigureFakeBoot): { transport: Transport; storage: KeyValueStore } {
   const proto = params.get("proto") === null ? undefined : Number(params.get("proto"));
   const extraPatterns = Math.max(0, Number(params.get("patterns") ?? 2) - 2);
   const patterns = ["rainbow-pool", "fire-stomp", ...Array.from({ length: extraPatterns }, (_, index) => `pattern-${index + 3}`)];
@@ -90,8 +98,8 @@ function fakeSetup(params: URLSearchParams, configure?: (boot: FakeBoot) => void
   if (params.get("offline")) right.reachable = false;
   if (params.get("access") === "lost") left.accessLost = right.accessLost = true;
   left.moving = params.get("capture") === "moving";
-  configure?.(left);
-  configure?.(right);
+  configure?.(left, params);
+  configure?.(right, params);
 
   const saved: Record<string, string> = {};
   if (params.get("paired")) {
@@ -108,13 +116,13 @@ function fakeSetup(params: URLSearchParams, configure?: (boot: FakeBoot) => void
   return { transport, storage: memoryStorage(saved) };
 }
 
-export async function setUpBoots(configureFakeBoot?: (boot: FakeBoot) => void): Promise<{ transport: Transport; storage: KeyValueStore }> {
+export async function setUpBoots(configureFakeBoot?: ConfigureFakeBoot): Promise<{ transport: Transport; storage: KeyValueStore }> {
   const params = new URLSearchParams(window.location.search);
   if (params.get("boot") === "fake") return fakeSetup(params, configureFakeBoot);
 
   const bluetooth = new BleTransport();
   if (Capacitor.isNativePlatform()) {
-    if ((await bluetooth.radioState()) === "unsupported") return fakeSetup(params);
+    if ((await bluetooth.radioState()) === "unsupported") return fakeSetup(params, configureFakeBoot);
     return { transport: bluetooth, storage: preferencesStorage };
   }
   const transport = usbSupported() ? new BrowserTransport(bluetooth, new UsbTransport()) : bluetooth;
