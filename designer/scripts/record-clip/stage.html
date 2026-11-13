@@ -1,0 +1,51 @@
+<!doctype html>
+<!--
+  The picture a recorded clip shows: the simulator's top view, side view, and strip, with
+  the pattern's name, the current scene, and tilt and sound meters underneath. It is a
+  fixed 1280 x 720, the size of the video. record-clip.ts opens this page in a headless
+  browser, and stage.ts draws into it one frame at a time.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Clip recorder stage</title>
+<style>
+  :root { --ink: #f4ede2; --quiet: #a79d90; --faint: #6f675e; --night: #0b0a09; --line: #2e2a25; --violet: #9b7bff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--night); }
+  body { width: 1280px; height: 720px; overflow: hidden; color: var(--ink); font: 13px/1.4 "Spline Sans Mono Variable", ui-monospace, Menlo, monospace; }
+  #stage { width: 1280px; height: 720px; display: grid; grid-template-columns: 300px 1fr; grid-template-rows: 1fr 44px 76px; gap: 12px; padding: 16px; }
+  .view { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--night); }
+  .view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .view span { position: absolute; top: 8px; left: 10px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  #v-top { grid-row: 1 / span 2; }
+  #v-strip { padding: 0 8px; }
+  #v-strip canvas { position: static; height: 44px; }
+  #hud { grid-column: 1 / -1; display: flex; align-items: center; gap: 28px; padding: 0 6px; }
+  #name { font: 700 46px/1 "Big Shoulders Display Variable", "Arial Narrow", sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+  #scene { font: 600 30px/1 "Big Shoulders Display Variable", "Arial Narrow", sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--violet); min-width: 250px; }
+  .meter { display: flex; flex-direction: column; gap: 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+  .meter[data-on="true"] { color: var(--quiet); }
+  .track { position: relative; width: 190px; height: 8px; border-radius: 4px; background: #1d1a17; overflow: hidden; }
+  #tilt-track { overflow: visible; }
+  #tilt-dot { position: absolute; top: -3px; left: 50%; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--ink); }
+  #level { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--violet); }
+  #spacer { flex: 1; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="view" id="v-top"><canvas id="top"></canvas><span>Top</span></div>
+  <div class="view" id="v-side"><canvas id="side"></canvas><span>Outer side</span></div>
+  <div class="view" id="v-strip"><canvas id="strip"></canvas></div>
+  <div id="hud">
+    <div id="name"></div>
+    <div id="spacer"></div>
+    <div id="scene"></div>
+    <div class="meter" id="tilt-meter" data-on="false">Tilt · heel ← → toe<div class="track" id="tilt-track"><div id="tilt-dot"></div></div></div>
+    <div class="meter" id="sound-meter" data-on="false">Sound level<div class="track"><div id="level"></div></div></div>
+  </div>
+</div>
+<script type="module" src="./stage.ts"></script>
+</body>
+</html>

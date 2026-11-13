@@ -53,7 +53,8 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
   Reuse those controls when changing the remote. See `app/README.md`.
 - `designer/` — the pattern designer: a web app that edits and simulates pattern recipes
   (React + TypeScript, Bun, port 5174). Its `src/engine/strip.ts` ports
-  `firewalker_strip_map.h`, so a change to the strip map changes both. See `designer/README.md`.
+  `firewalker_strip_map.h`, so a change to the strip map changes both. `bun run record-clip
+  <pattern>` there records a simulator video of a recipe. See `designer/README.md`.
 - `patterns/` — kept pattern recipes, one JSON file each. Format: `docs/recipe-format.md`.
   `built-ins.txt` lists the ones compiled into the firmware.
 - `include/firewalker_recipe.h`, `firewalker_recipe_engine.h`, `firewalker_recipe_upload.h`,

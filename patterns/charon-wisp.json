@@ -1,0 +1,69 @@
+{
+  "format": "firewalker-recipe",
+  "version": 2,
+  "name": "charon-wisp",
+  "description": "Pale spirits circle the boot through the gloom, two currents weaving past each other. They surge as you tilt and step, and glow with sound.",
+  "layers": [
+    {
+      "type": "fill",
+      "label": "Gloom",
+      "enabled": true,
+      "palette": ["#08032a", "#020a26"],
+      "spread": "ring",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0.03,
+      "brightness": 0.7,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "chase",
+      "label": "Spirits",
+      "enabled": true,
+      "path": "ring",
+      "palette": ["#b9a2ff", "#6a3cff", "#1a1a90", "#05052a"],
+      "count": 2,
+      "speed": { "source": "tiltAmount", "min": 24, "max": 110 },
+      "length": 28,
+      "brightness": { "source": "audioLevel", "min": 0.6, "max": 1 },
+      "blend": "max",
+      "opacity": 1
+    },
+    {
+      "type": "chase",
+      "label": "Undertow",
+      "enabled": true,
+      "path": "ring",
+      "palette": ["#5f90ff", "#1a2aa0", "#04062a"],
+      "count": 2,
+      "speed": { "source": "tiltAmount", "min": -16, "max": -70 },
+      "length": 14,
+      "brightness": 0.55,
+      "blend": "add",
+      "opacity": 0.7
+    },
+    {
+      "type": "sparkle",
+      "label": "Motes",
+      "enabled": true,
+      "palette": ["#a890ff", "#6f8cff"],
+      "density": 4,
+      "fadeMs": 1500,
+      "brightness": 0.4,
+      "blend": "add",
+      "opacity": 1
+    },
+    {
+      "type": "flash",
+      "label": "Lantern",
+      "enabled": true,
+      "trigger": "any",
+      "palette": ["#8a78e0", "#20106a"],
+      "fadeMs": 500,
+      "brightness": { "source": "stompStrength", "min": 0.1, "max": 0.35 },
+      "blend": "add",
+      "opacity": 1
+    }
+  ]
+}

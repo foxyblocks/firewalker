@@ -127,6 +127,17 @@ export class Simulation {
     this.listener = null;
   }
 
+  // Runs exactly one frame and draws it, without the animation clock that start() uses.
+  // The clip recorder (scripts/record-clip.ts) steps time by hand with this and takes a
+  // picture after every call, so a recording can't drop or repeat a frame however slow the
+  // machine is. Returns the same readout start() reports, as of this frame.
+  stepOnce(canvases: Canvases): Readout {
+    this.canvases = canvases;
+    this.step();
+    this.draw();
+    return { tilt: this.tilt, lastStomp: this.lastStomp, stomps: this.stomps, timeMs: this.timeMs };
+  }
+
   setRecipe(recipe: Recipe): void {
     this.engine.setRecipe(recipe);
   }
