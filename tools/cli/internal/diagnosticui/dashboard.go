@@ -1,6 +1,6 @@
 // Package diagnosticui shows live motion and microphone telemetry for every
 // selected boot. diagnostics.Session owns each USB connection and restores its
-// debug flag on exit or idle pause. Only the Bubble Tea event loop changes the
+// debug flag on exit or pause. Only the Bubble Tea event loop changes the
 // displayed state; reader goroutines send messages with a connection generation
 // so an old connection cannot replace readings after a deliberate reconnect.
 package diagnosticui
@@ -57,8 +57,6 @@ type model struct {
 	viewport             viewport.Model
 	width, height, focus int
 	paused, showLogs     bool
-	lastInput            time.Time
-	idleTimeout          time.Duration
 	logs                 []string
 	theme                *theme.Theme
 	closeMu              sync.Mutex
@@ -66,12 +64,11 @@ type model struct {
 }
 
 // Run waits for all observers to close before returning, including restoration
-// of debug after q, Ctrl-C, or an inactivity pause. Paused readings remain visible
-// with their age; incoming telemetry never renews the human inactivity timer.
-func Run(ctx context.Context, targets []boots.Boot, idle time.Duration, in io.Reader, out io.Writer) error {
+// of debug after q, Ctrl-C, or Space. Paused readings remain visible with their age.
+func Run(ctx context.Context, targets []boots.Boot, in io.Reader, out io.Writer) error {
 	watchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	m := &model{ctx: watchCtx, targets: targets, events: make(chan reading, 512), width: 100, height: 32, lastInput: time.Now(), idleTimeout: idle, theme: theme.New(out)}
+	m := &model{ctx: watchCtx, targets: targets, events: make(chan reading, 512), width: 100, height: 32, theme: theme.New(out)}
 	for _, b := range targets {
 		m.rows = append(m.rows, bootView{boot: b, state: "connecting"})
 	}
@@ -195,12 +192,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.Width = max(20, msg.Width-2)
 		m.viewport.Height = max(3, msg.Height-6)
 	case tick:
-		if !m.paused && m.idleTimeout > 0 && time.Since(m.lastInput) >= m.idleTimeout {
-			m.pause()
-		}
 		command = nextTick()
 	case tea.KeyMsg:
-		m.lastInput = time.Now()
 		if msg.String() == "q" || msg.String() == "ctrl+c" || msg.String() == "esc" {
 			return m, tea.Quit
 		}

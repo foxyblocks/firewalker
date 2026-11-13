@@ -34,9 +34,6 @@ export class SharedBootConnections implements DesignerBoots {
   };
   getSnapshot = (): ConnectionsState => this.state;
 
-  // DesktopApp observes activity once for both sections, through BootsStore.
-  observeActivity(): () => void { return () => undefined; }
-
   private update(changes: Partial<ConnectionsState> = {}): void {
     const boots = this.store.sides().flatMap((side): ConnectedBoot[] => {
       const known = this.store.known(side);
@@ -112,7 +109,7 @@ export class SharedBootConnections implements DesignerBoots {
     this.client(id)?.pause();
   }
 
-  /** A Send after idle waits for fresh status, including a firmware update or changed settings. */
+  /** A Send after Disconnect waits for fresh status, including a firmware update or changed settings. */
   async reconnect(id: string): Promise<void> {
     try {
       await this.waitForConnection(id);
@@ -125,7 +122,6 @@ export class SharedBootConnections implements DesignerBoots {
   private async waitForConnection(id: string): Promise<void> {
     const client = this.client(id);
     if (!client) throw new Error("This boot is no longer labeled.");
-    this.store.activity();
     client.connect();
     if (client.getState().link === "online") return;
     await new Promise<void>((resolve, reject) => {

@@ -109,6 +109,50 @@ describe("connecting", () => {
   });
 });
 
+// The desktop designer's Disconnect uses pause(): the boot is released so another
+// tool can connect, but the client remembers it, and Reconnect is just connect().
+describe("pausing", () => {
+  it("releases the boot, then reads another client's changes on reconnect", async () => {
+    const { boot, client } = setup();
+    client.connect();
+    await settle();
+    client.pause();
+    await settle();
+    expect(state(client).link).toBe("sleeping");
+    expect(boot.connected).toBe(false);
+    boot.pattern = "fire-stomp";
+    client.connect();
+    await settle();
+    expect(state(client).status?.pattern).toBe("fire-stomp");
+    await client.disconnect();
+  });
+
+  it("finishes closing before an immediate reconnect opens the boot again", async () => {
+    const { client, transport } = setup();
+    const originalOpen = transport.open.bind(transport);
+    let release: () => void = () => undefined;
+    const closing = new Promise<void>((resolve) => { release = resolve; });
+    const open = vi.spyOn(transport, "open").mockImplementationOnce(async (deviceId, events) => {
+      const link = await originalOpen(deviceId, events);
+      return { ...link, close: async () => { await closing; await link.close(); } };
+    });
+    client.connect();
+    await settle();
+    const unsubscribe = client.subscribe(() => {
+      if (state(client).link === "sleeping") client.connect();
+    });
+    client.pause();
+    await settle();
+    expect(open).toHaveBeenCalledOnce();
+    release();
+    await settle();
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(state(client).link).toBe("online");
+    unsubscribe();
+    await client.disconnect();
+  });
+});
+
 describe("commands", () => {
   it("lets a designer exchange recover from an unparsed line without releasing its queue slot", async () => {
     const { client } = setup();
@@ -153,7 +197,6 @@ describe("commands", () => {
     client.setBrightness(32);
     await settle();
     expect(boot.brightness).toBe(24);
-    expect(client.busy()).toBe(true);
 
     release();
     await settle();
@@ -405,7 +448,6 @@ describe("calibrating", () => {
     await vi.advanceTimersByTimeAsync(100);
     expect(finished).not.toHaveBeenCalled();
     expect(state(client).status?.heelDeg).toBe(65);
-    expect(client.busy()).toBe(true);
     await vi.advanceTimersByTimeAsync(1000);
     await expect(cleared).resolves.toEqual({ ok: true });
     expect(state(client).status).toMatchObject({ heelDeg: null, toeDeg: 120, neutralDeg: 90 });

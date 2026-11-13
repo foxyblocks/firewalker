@@ -14,7 +14,6 @@
 import { BootClient, type BootState } from "./boot";
 import { BOOT_NAME_PREFIX, PROTOCOL_VERSION } from "./protocol";
 import type { FoundBoot, Transport } from "../transport/transport";
-import { Inactivity, observeActivity } from "../../../shared/inactivity";
 
 export type Side = "left" | "right";
 export type Target = "both" | Side;
@@ -90,13 +89,6 @@ export class BootsStore {
   private readonly listeners = new Set<() => void>();
   private needsUpdate: RemoteView["needsUpdate"];
   private version = 0;
-  private readonly inactivity = new Inactivity({
-    busy: () => [...this.connections.values()].some(({ client }) => client.busy()) || this.blinking.size > 0,
-    pause: () => this.connections.forEach(({ client }) => client.pause()),
-    wake: () => this.connections.forEach(({ client }) => {
-      if (client.getState().link === "sleeping") client.connect();
-    }),
-  });
 
   constructor(
     readonly transport: Transport,
@@ -315,19 +307,13 @@ export class BootsStore {
     this.connections.forEach(({ client }) => client.resume());
   }
 
-  /** The app frame owns these listeners; no status or preview traffic renews them. */
-  observeActivity(): () => void {
-    return observeActivity(this.inactivity);
-  }
-
+  /** True when a boot was released on purpose (the desktop designer's Disconnect). */
   paused(): boolean {
     return [...this.connections.values()].some(({ client }) => client.getState().link === "sleeping");
   }
 
-  activity(): void {
-    this.inactivity.activity();
-    // An explicit Disconnect in the desktop designer also keeps the boot's label.
-    // The remote's Reconnect button wakes those connections as well as idle ones.
+  /** The remote's Reconnect button: reopens every released boot, keeping its label. */
+  reconnectPaused(): void {
     this.connections.forEach(({ client }) => {
       if (client.getState().link === "sleeping") client.connect();
     });

@@ -25,7 +25,6 @@ import (
 
 	"firewalker/cli/internal/bench"
 	"firewalker/cli/internal/boards"
-	"firewalker/cli/internal/controlconfig"
 	"firewalker/cli/internal/flash"
 	"firewalker/cli/internal/link"
 	"firewalker/cli/internal/pickboot"
@@ -439,14 +438,6 @@ func runApp(ctx context.Context, cmd *cobra.Command, o *bench.Options) error {
 // flashAndFollow finishes every flash the same way: stop at a dry run, name the target,
 // run PlatformIO, note what's on the board now, and optionally stay attached.
 func flashAndFollow(ctx context.Context, out io.Writer, th *theme.Theme, cache *boards.Cache, o *bench.Options, job flash.Job, target *boards.Board, label string, follow bool) error {
-	var idleTimeout time.Duration
-	if follow && !o.BuildOnly && !o.DryRun {
-		var err error
-		idleTimeout, err = controlconfig.Read(o.RepoRoot)
-		if err != nil {
-			return err
-		}
-	}
 	if o.DryRun {
 		fmt.Fprintln(out, "Dry run: no compilation, upload, or firmware-source changes.")
 		return nil
@@ -468,7 +459,7 @@ func flashAndFollow(ctx context.Context, out io.Writer, th *theme.Theme, cache *
 		fmt.Fprintln(out, th.Dim.Render("Couldn't remember what's on this board: "+err.Error()))
 	}
 	if follow {
-		streamBoard(ctx, out, th, target.Serial, idleTimeout)
+		streamBoard(ctx, out, th, target.Serial)
 	}
 	return nil
 }

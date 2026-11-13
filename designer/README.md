@@ -99,12 +99,6 @@ import only. Save and Delete stay off, and a banner says why.
 
 ## If a boot won't connect
 
-The designer releases its connections after two minutes without input, or when its
-tab is hidden. Boot rows stay in Send to boot; interacting reconnects them, and Send
-waits for a fresh connection before uploading. An upload finishes before pausing.
-The shared timeout is in [`../config/control-surfaces.json`](../config/control-surfaces.json);
-see [`../config/README.md`](../config/README.md) to change or disable it.
-
 A USB port can only be open in one program at a time. When Send to boot can't open one, it names what has it
 open. For `./cli`, `pio device monitor`, a PlatformIO upload, miniterm, or a pyserial script, **Free it** asks that
 program to close and connects again. If that leaves its terminal acting oddly, type `reset` there. A browser or
