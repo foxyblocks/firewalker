@@ -62,6 +62,23 @@ describe("sending a recipe", () => {
     expect(boot.pattern).toBe("spark");
   });
 
+  // Pattern sync on the phone puts recipes on a boot without touching what's on its strip.
+  it("can upload without selecting", async () => {
+    const bytes = compiled();
+    expect(await connect(boot).uploadRecipe("spark", bytes)).toBeNull();
+    expect(boot.stored.get("spark")).toEqual(bytes);
+    expect(boot.pattern).toBe("rainbow-pool");
+    expect(boot.linesSeen.some((line) => line.startsWith("pattern "))).toBe(false);
+  });
+
+  it("reads an upload's size and checksum, and nothing for a name it doesn't have", async () => {
+    const bytes = compiled();
+    const session = connect(boot);
+    expect(await session.recipeInfo("spark")).toBeNull();
+    await session.uploadRecipe("spark", bytes);
+    expect(await session.recipeInfo("spark")).toEqual({ bytes: bytes.length, crc: expect.stringMatching(/^[0-9a-f]{8}$/) });
+  });
+
   it("keeps every line under the boot's 48-byte command limit", async () => {
     await connect(boot).sendRecipe("abcdefghijkl", compiled({ ...RECIPE, name: "abcdefghijkl" }));
     expect(boot.linesSeen.length).toBeGreaterThan(5);
