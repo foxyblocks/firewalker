@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "reference-frames": "UPDATE_REFERENCE_FRAMES=1 vitest run src/engine/referenceFrames.test.ts",
     "build-recipes": "bun run scripts/build-recipes.ts",
-    "budget-recipes": "bun run scripts/budget-recipes.ts"
+    "budget-recipes": "bun run scripts/budget-recipes.ts",
+    "record-clip": "bun run scripts/record-clip.ts"
   },
   "dependencies": {
     "@fontsource-variable/big-shoulders-display": "^5.3.0",
@@ -26,6 +27,7 @@
     "@types/w3c-web-serial": "^1.0.9",
     "@types/web-bluetooth": "^0.0.21",
     "@vitejs/plugin-react": "^6.2.1",
+    "playwright": "1.65.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
     "vitest": "^5.1.0"

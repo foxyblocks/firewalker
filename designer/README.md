@@ -97,6 +97,28 @@ PATTERNS_DIR=/tmp/scratch-patterns bun run dev
 A standalone built copy (`bun run build` in `designer/`) has no dev server, so it works from drafts, download, and
 import only. Save and Delete stay off, and a banner says why.
 
+## Recording a clip of a pattern
+
+`bun run record-clip` makes a short video of a pattern running in the simulator, for an audition
+page or a pull request:
+
+```bash
+cd designer
+bun run record-clip rainbow-pool comet        # names from patterns/
+bun run record-clip ~/Downloads/draft.json    # or a recipe file anywhere
+bun run record-clip comet --out /tmp/clips    # default is designer/clips/, which git ignores
+```
+
+Each pattern becomes a 26 second, 1280 x 720 `.mp4` and a `.jpg` poster. Every clip plays the
+same four scenes, so clips of different patterns can be compared side by side: standing still
+(from 0 s), walking (3.008 s), walking to music (12.016 s), and standing to music (21.024 s).
+The music is a made-up 120 BPM level, not a recording, so a run always gives the same clip.
+
+The clip is the designer's own simulator, stepped one frame at a time with a screenshot after
+each, so it never drops a frame. It takes about a minute per pattern. It needs `ffmpeg` on the
+PATH and Playwright's Chromium, installed once with `bunx playwright install chromium`. The
+script is `scripts/record-clip.ts`, and the scenes are in `scripts/record-clip/script.ts`.
+
 ## If a boot won't connect
 
 The designer releases its connections after two minutes without input, or when its
