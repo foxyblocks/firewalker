@@ -15,18 +15,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	if key == "ctrl+c" {
 		return m.quit()
 	}
-	m.lastActivity = m.deps.Now()
-	if m.paused {
-		if key == "q" {
-			return m.quit()
-		}
-		m.paused = false
-		m.notice = "Reconnecting. Repeat your action once the boot is attached."
-		if row, ok := m.selectedRow(); ok && row.OnUSB {
-			return m.startFollow()
-		}
-		return nil
-	}
 	m.notice = ""
 	switch {
 	case m.confirm != nil:

@@ -10,5 +10,5 @@ const library = new PatternLibrary(undefined, import.meta.env.PROD
   : {});
 
 export default function Designer({ connections }: { connections: SharedBootConnections }) {
-  return <App connections={connections} library={library} manageActivity={false} />;
+  return <App connections={connections} library={library} />;
 }

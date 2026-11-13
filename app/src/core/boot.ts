@@ -14,8 +14,9 @@
  *
  * Text goes through the `Transport` seam (transport/transport.ts), so everything here
  * runs the same against a real boot and against `fakeBoot.ts`.
- * `boots.ts` owns human inactivity: a sleeping client keeps its last report and
- * device identity, but releases its transport and stops retrying until woken.
+ * `pause` is a deliberate disconnect that remembers: the client lands in "sleeping",
+ * keeps its last report and device identity, releases its transport, and stops
+ * retrying until `connect` is called again. The desktop designer's Disconnect uses it.
  */
 
 import {
@@ -206,15 +207,6 @@ export class BootClient {
   /** Lets another client use this boot without forgetting its last report. */
   pause(): void {
     if (this.wanted) void this.endConnection("sleeping");
-  }
-
-  /** Read-only polling doesn't block sleep; pending writes and captures do. */
-  busy(): boolean {
-    // Calibration can still be collecting data or saving after its ack. Keep the
-    // link until the result arrives or its recovery timer finishes.
-    return this.capture !== null || this.calibrationClear !== null || this.audioCapture !== null ||
-      this.inFlight?.expect === "ack" || this.inFlight?.expect === "exclusive" ||
-      this.queue.some((job) => job.expect === "ack" || job.expect === "exclusive");
   }
 
   /**
