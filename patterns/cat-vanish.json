@@ -1,0 +1,69 @@
+{
+  "format": "firewalker-recipe",
+  "version": 2,
+  "name": "cat-vanish",
+  "description": "The cat melts away tail first until only its eyes hang in the dark, then fades back in. A stomp snaps the whole cat back for a moment.",
+  "layers": [
+    {
+      "type": "fill",
+      "label": "Stripes",
+      "enabled": true,
+      "palette": ["#6a00ff", "#6a00ff", "#6a00ff", "#ff1f8f", "#ff1f8f", "#ff1f8f"],
+      "spread": "foot",
+      "repeat": 3,
+      "offset": 0,
+      "scroll": -0.35,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "fill",
+      "label": "Vanish",
+      "enabled": true,
+      "palette": ["#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff"],
+      "spread": "foot",
+      "repeat": 0.25,
+      "offset": { "source": "wave", "min": 0.17, "max": 0.75, "periodMs": 14000 },
+      "scroll": 0,
+      "brightness": 1,
+      "blend": "multiply",
+      "opacity": 1
+    },
+    {
+      "type": "fill",
+      "label": "Stomp return",
+      "enabled": true,
+      "palette": ["#6a00ff", "#6a00ff", "#6a00ff", "#ff1f8f", "#ff1f8f", "#ff1f8f"],
+      "spread": "foot",
+      "repeat": 3,
+      "offset": 0,
+      "scroll": -0.35,
+      "brightness": { "source": "stompFade", "min": 0, "max": 1, "fadeMs": 2200 },
+      "blend": "max",
+      "opacity": 1
+    },
+    {
+      "type": "band",
+      "label": "Face",
+      "enabled": true,
+      "position": 0,
+      "width": 0.76,
+      "blend": "multiply",
+      "opacity": 1
+    },
+    {
+      "type": "fill",
+      "label": "Eyes",
+      "enabled": true,
+      "palette": ["#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#ffd000", "#000000", "#000000"],
+      "spread": "foot",
+      "repeat": 0.97,
+      "offset": 0,
+      "scroll": 0,
+      "brightness": { "source": "wave", "min": 1, "max": 0.5, "periodMs": 14000 },
+      "blend": "add",
+      "opacity": 1
+    }
+  ]
+}
