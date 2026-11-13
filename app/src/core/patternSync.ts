@@ -182,7 +182,10 @@ export class PatternSync {
       if (track.running || track.attempted === fingerprint) continue;
       track.attempted = fingerprint;
       track.running = true;
-      void this.syncBoot(client, track, status.id).finally(() => {
+      void this.syncBoot(client, track, status.id).catch((error: unknown) => {
+        // Only storage can throw past syncBoot's own handling.
+        this.setState(track, { phase: "failed", done: 0, total: 0, needsFirmware: 0, noRoom: 0, error: String((error as Error)?.message ?? error) });
+      }).finally(() => {
         track.running = false;
         // A newer catalog may have arrived meanwhile.
         this.check();
