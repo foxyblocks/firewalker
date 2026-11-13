@@ -17,6 +17,11 @@ Pattern recipes worth keeping, one `<name>.json` each. The designer in
 [`built-ins.txt`](built-ins.txt) lists the recipes compiled into the firmware, so every boot ships with
 them. The rest reach a boot by upload.
 
+Everything here on `main` reaches the boots without a firmware build: each push to `main` publishes
+these recipes as the pattern catalog, and the iPhone app uploads them to each boot as it connects
+([ADR-0007](../docs/adr/0007-sync-patterns-from-main.md)). A boot has 16 upload slots, so keep this
+folder to 16 recipes or fewer; `bun run test` in `designer/` checks that.
+
 
 Edit them in the designer rather than by hand. It checks every value and writes the file
 the same way each time, so diffs stay small. `bun run test` in `designer/` checks every file
