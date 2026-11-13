@@ -2,7 +2,7 @@
   "format": "firewalker-recipe",
   "version": 2,
   "name": "cat-vanish",
-  "description": "The cat melts away tail first until only its eyes and grin hang in the dark, then fades back in. A stomp snaps the whole cat back for a moment.",
+  "description": "The cat melts away tail first until only its eyes hang in the dark, then fades back in. A stomp snaps the whole cat back for a moment.",
   "layers": [
     {
       "type": "fill",
@@ -54,9 +54,9 @@
     },
     {
       "type": "fill",
-      "label": "Eyes and grin",
+      "label": "Eyes",
       "enabled": true,
-      "palette": ["#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#ffd000", "#000000", "#ffd9ee"],
+      "palette": ["#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#ffd000", "#000000", "#000000"],
       "spread": "foot",
       "repeat": 0.97,
       "offset": 0,
