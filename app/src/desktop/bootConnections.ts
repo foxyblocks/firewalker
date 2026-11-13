@@ -7,7 +7,7 @@
 import { BootsStore, type Side } from "../core/boots";
 import type { BootClient } from "../core/boot";
 import type { PickMethod } from "../transport/transport";
-import { BootSession, BYTES_PER_BLUETOOTH_LINE, BYTES_PER_USB_LINE, RECIPE_PROTOCOL, type SendProgress } from "../../../designer/src/boot/bootSession";
+import { BootSession, BYTES_PER_BLUETOOTH_LINE, BYTES_PER_USB_LINE, RECIPE_PROTOCOL, type SendProgress } from "../../../shared/bootSession";
 import type { ConnectedBoot, ConnectionsState, DesignerBoots } from "../../../designer/src/boot/connections";
 import { devServerPorts, type BootPortsClient, type PortHolder } from "../../../designer/src/boot/portHolders";
 import { compileRecipe } from "../../../designer/src/recipe/compile";

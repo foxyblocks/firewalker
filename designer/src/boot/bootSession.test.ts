@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { BootSession, BYTES_PER_USB_LINE, NEEDS_FIRMWARE, type SendProgress } from "./bootSession";
+import { BootSession, BYTES_PER_USB_LINE, NEEDS_FIRMWARE, type SendProgress } from "../../../shared/bootSession";
 import { BootConnections } from "./connections";
 import { FakeBoot, FakeBootPorts, FakeBootTransport } from "./fakeBoot";
 import { describeHolder, type BootPortsClient } from "./portHolders";

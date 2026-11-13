@@ -10,7 +10,7 @@
 // Both exist for the desktop app's shared connections (app/src/desktop/bootConnections.ts), where
 // Disconnect keeps the row and Reconnect reopens it.
 
-import { BootSession, BYTES_PER_BLUETOOTH_LINE, BYTES_PER_USB_LINE, type SendProgress } from "./bootSession";
+import { BootSession, BYTES_PER_BLUETOOTH_LINE, BYTES_PER_USB_LINE, type SendProgress } from "../../../shared/bootSession";
 import { devServerPorts, type BootPortsClient, type PortHolder } from "./portHolders";
 import { compileRecipe } from "../recipe/compile";
 import type { Recipe } from "../recipe/types";

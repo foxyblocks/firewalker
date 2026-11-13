@@ -14,9 +14,11 @@
 import { fieldsFor, STOMP_FADE, WAVE_PERIOD, type Field, type KnobField } from "./spec.ts";
 import { isBinding, isRecipeVersion, requiredRecipeVersion, MAX_LAYERS, MAX_NAME_LENGTH, MAX_PALETTE_STOPS, RECIPE_FORMAT, SOURCES, type Binding, type Layer, type LayerType, type Recipe, type RecipeVersion } from "./types.ts";
 import { nameProblem, validateRecipe } from "./validate.ts";
+import { MAX_COMPILED_BYTES, recipeCrc } from "../../../shared/recipeBinary.ts";
 
-// NVM3's largest entry, so one recipe saves all at once and a power cut can't leave half of it.
-export const MAX_COMPILED_BYTES = 254;
+// The size limit and the checksum live in shared/recipeBinary.ts, because the iPhone app checks
+// compiled recipes too, without this compiler.
+export { MAX_COMPILED_BYTES, recipeCrc };
 
 // A layer type's number in the binary. This order is part of the format.
 export const LAYER_CODES: readonly LayerType[] = ["fill", "pool", "trail", "flash", "sparkle", "chase", "band"];
@@ -29,17 +31,6 @@ const SCALE = 32767;
 // broken to compile at all.
 export type CompileResult = { ok: true; bytes: Uint8Array; size: number } | { ok: false; errors: string[]; size: number | null };
 export type DecodeResult = { ok: true; recipe: Recipe } | { ok: false; error: string };
-
-// CRC-32, the common zlib polynomial. It matches settingsCrc in include/firewalker_settings.h, and
-// its value goes last in the binary and in `recipe info` replies.
-export function recipeCrc(bytes: Uint8Array): number {
-  let crc = 0xffffffff;
-  for (const byte of bytes) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
 
 function scaleRange(field: { min: number; max: number }): number {
   return Math.max(Math.abs(field.min), Math.abs(field.max));
