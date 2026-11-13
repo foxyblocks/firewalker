@@ -5,3 +5,4 @@ bass-ripple
 comet
 fire-stomp
 rainbow-pool
+rainbow-spin

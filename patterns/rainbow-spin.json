@@ -1,0 +1,21 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "rainbow-spin",
+  "description": "A full rainbow spins around the strip at a steady speed, with every pixel lit.",
+  "layers": [
+    {
+      "type": "fill",
+      "label": "Rainbow",
+      "enabled": true,
+      "palette": ["#ff0000", "#ffff00", "#00ff00", "#00ffff", "#0000ff", "#ff00ff"],
+      "spread": "ring",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0.98,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    }
+  ]
+}
