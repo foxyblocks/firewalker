@@ -1,0 +1,67 @@
+# Publishes the pattern catalog, every recipe in patterns/ compiled into one JSON file, to
+# https://cdn.foxyblocks.com/files/firewalker-catalog.json on each push to main. The iPhone app
+# downloads it and syncs the patterns to boots as they connect (docs/adr/0007-sync-patterns-from-main.md).
+#
+# The recipe tests run first, and the build itself fails on any recipe that can't compile, so a
+# broken catalog is never published. A newer push cancels an older run that's still going, so
+# the CDN always ends up with the latest main.
+#
+# It uploads straight to the CDN's R2 bucket over R2's S3 API, and needs three repository secrets:
+#   R2_ACCOUNT_ID         the Cloudflare account ID that owns the foxyblocks-cdn bucket
+#   R2_ACCESS_KEY_ID      an R2 API token's access key, with Object Read & Write on foxyblocks-cdn only
+#   R2_SECRET_ACCESS_KEY  that token's secret
+name: Publish pattern catalog
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: publish-catalog
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install web dependencies
+        run: bash tools/setup-worktree.sh
+
+      - name: Recipe tests
+        working-directory: designer
+        run: bun run test
+
+      - name: Build the catalog
+        working-directory: designer
+        run: bun run build-catalog "$RUNNER_TEMP/firewalker-catalog.json"
+
+      - name: Upload it to the CDN
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          # R2 doesn't take every checksum header newer AWS CLIs add by default.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "::error::Add the R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY repository secrets to publish the catalog."
+            exit 1
+          fi
+          # A minute's cache, so phones see a new main within about a minute.
+          aws s3 cp "$RUNNER_TEMP/firewalker-catalog.json" s3://foxyblocks-cdn/files/firewalker-catalog.json \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --content-type application/json \
+            --cache-control "public, max-age=60"
+
+      - name: Check the CDN serves it
+        run: curl --fail --silent --show-error https://cdn.foxyblocks.com/files/firewalker-catalog.json | cmp - "$RUNNER_TEMP/firewalker-catalog.json"

@@ -15,8 +15,9 @@ export function isRecipeVersion(value: unknown): value is RecipeVersion {
 
 export const MAX_LAYERS = 8;
 export const MAX_PALETTE_STOPS = 16;
-// The boot lists patterns by name and `pattern <name>` has to fit a 20-byte BLE write.
-export const MAX_NAME_LENGTH = 12;
+// The boot lists patterns by name and `pattern <name>` has to fit a 20-byte BLE write. The
+// limit lives in shared/recipeBinary.ts with the rest of the name rule.
+export { MAX_NAME_LENGTH } from "../../../shared/recipeBinary.ts";
 export const MAX_DESCRIPTION_LENGTH = 200;
 export const MAX_LABEL_LENGTH = 24;
 

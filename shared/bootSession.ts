@@ -1,12 +1,19 @@
-// Talks to one connected boot in its text protocol (docs/remote-protocol.md), and sends it a recipe.
+// Talks to one connected boot in its text protocol (docs/remote-protocol.md) to put recipes on it.
 // This knows nothing about Bluetooth or USB: it writes lines and is handed the text that comes back,
-// so tests can run the whole exchange against fakeBoot.ts. connections.ts wires it to a real link.
+// so tests can run the whole exchange against a pretend boot (shared/fakeRecipeBoot.ts). Two callers
+// share it, which is why it lives in shared/:
+//
+// - The designer's Send to boot (designer/src/boot/connections.ts, and app/src/desktop/
+//   bootConnections.ts in the combined desktop app) uses `sendRecipe`, which uploads and selects.
+// - The iPhone app's pattern sync (app/src/core/patternSync.ts) uses `recipes`, `recipeInfo`,
+//   `uploadRecipe`, and `deleteRecipe`, and never selects anything.
 //
 // A boot's replies arrive alongside lines nobody asked for, such as status updates and log lines, so a
-// request says which reply it's waiting for and everything else is skipped.
+// request says which reply it's waiting for and everything else is skipped. Keep this free of the
+// designer's compiler: the phone's bundle imports it.
 
-import { recipeCrc } from "../recipe/compile";
-import { LineSession, type LineExchange } from "../../../shared/lineSession";
+import { compiledCrc } from "./recipeBinary";
+import { LineSession, type LineExchange } from "./lineSession";
 
 export type Reply = Record<string, unknown>;
 
@@ -120,11 +127,8 @@ export class BootSession {
 
       const alreadyThere = await this.hasRecipe(name, bytes);
       if (!alreadyThere) {
-        const failure = await this.upload(name, bytes, onProgress);
-        if (failure) {
-          await this.ask("recipe cancel", isRecipeAck).catch(() => undefined);
-          return { ok: false, error: failure };
-        }
+        const failure = await this.uploadRecipe(name, bytes, onProgress);
+        if (failure) return { ok: false, error: failure };
       }
 
       onProgress({ stage: "selecting" });
@@ -136,11 +140,26 @@ export class BootSession {
     }
   }
 
-  private async hasRecipe(name: string, bytes: Uint8Array): Promise<boolean> {
-    const body = bytes.subarray(0, bytes.length - 4);
-    const crc = recipeCrc(body).toString(16).padStart(8, "0");
+  // Uploads compiled bytes under `name` as they are: no version check first, and nothing selected after.
+  // An upload with that name is replaced, and a built-in with that name is overridden. The caller has
+  // already decided this recipe belongs on the boot, as pattern sync's plan does. Returns why it failed,
+  // or null if it worked. A failure cancels the half-sent upload, so the boot keeps what it had.
+  async uploadRecipe(name: string, bytes: Uint8Array, onProgress: (progress: SendProgress) => void = () => undefined): Promise<string | null> {
+    const failure = await this.upload(name, bytes, onProgress);
+    if (failure) await this.ask("recipe cancel", isRecipeAck).catch(() => undefined);
+    return failure;
+  }
+
+  // What the boot has uploaded under `name`: its size and checksum, as eight hex digits. Null when there's
+  // no upload with that name. Built-ins don't answer `recipe info`, so a built-in reads as null too.
+  async recipeInfo(name: string): Promise<{ bytes: number; crc: string } | null> {
     const info = await this.ask(`recipe info ${name}`, (reply) => isRecipeAck(reply) || (reply.t === "recipe" && reply.name === name));
-    return info.t === "recipe" && info.crc === crc && info.bytes === bytes.length;
+    return info.t === "recipe" && typeof info.bytes === "number" && typeof info.crc === "string" ? { bytes: info.bytes, crc: info.crc } : null;
+  }
+
+  private async hasRecipe(name: string, bytes: Uint8Array): Promise<boolean> {
+    const info = await this.recipeInfo(name);
+    return info !== null && info.crc === compiledCrc(bytes) && info.bytes === bytes.length;
   }
 
   // One line of an upload. Null means no reply came, as when the line lost its newline.

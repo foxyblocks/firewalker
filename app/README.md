@@ -51,6 +51,26 @@ alone in a browser; use `--port 5174` if the combined app is already running.
 It talks to each boot through the text protocol in
 [`docs/remote-protocol.md`](../docs/remote-protocol.md).
 
+## Pattern sync
+
+The iPhone build keeps each boot's patterns in step with `main`
+([ADR-0007](../docs/adr/0007-sync-patterns-from-main.md)). Every push to `main` publishes the
+pattern catalog, every recipe in `patterns/` compiled, to
+`https://cdn.foxyblocks.com/files/firewalker-catalog.json`. The app downloads it when it opens and
+whenever it returns to the foreground, and keeps the last good copy for when there's no signal.
+
+When a boot connects, the app uploads the patterns it lacks or has a different version of, one at
+a time, so taps still get through. It never changes which pattern is running. "Syncing patterns
+3 of 7" shows above the tiles while it works, and nothing shows once the boot is up to date. A
+notice says when a boot needs a firmware update for some patterns or has run out of slots.
+
+Main is canonical. A recipe sent from the designer under a main pattern's name goes back to main's
+version the next time that boot connects. A recipe with its own name is left alone, and so is
+anything the phone didn't put there. Sync deletes only patterns it synced earlier that main has
+since dropped. Each boot has 16 upload slots, and every pattern on main takes one, built-ins too.
+
+The desktop app doesn't sync, so a recipe you're trying from the designer stays put.
+
 ## Microphone calibration
 
 Open **Audio**, just above brightness on the Remote screen. With Both chosen, pick which
@@ -94,6 +114,12 @@ Open <http://localhost:5173/?boot=fake&paired=1>. These options set up a scenari
 | `capture=moving` | Left moves during every capture |
 | `usb=1` | Offers Add over USB beside Bluetooth, as a desktop browser does |
 | `usb=busy` | The same, but another program has the boot's USB port |
+| `slots=4` | Each boot has only 4 upload slots, to see the "out of pattern slots" notice |
+| `versions=1` | Each boot's firmware reads only recipe version 1, to see the "needs a firmware update" notice |
+
+With `bun run dev:native`, pattern sync runs against these pretend boots. Chrome can't download the
+CDN's catalog, which has no CORS headers, so the dev server serves one built live from `patterns/`
+at `/catalog.json`. The iOS Simulator downloads the real one.
 
 ### In Chrome with real boots
 
@@ -214,6 +240,12 @@ home.
 | `src/core/calibration.ts` | Pose labels, capture instructions, and failure messages |
 | `src/core/stripSetup.ts` | Where the LED count, toe, and heel sliders can land |
 | `src/core/patternNames.ts` | Friendly names, with generated ones for new patterns |
+| `src/core/catalog.ts` | Reads and checks the pattern catalog. Pure code. |
+| `src/core/patternLibrary.ts` | The phone's patterns: main's from the catalog, cached, with an origin each |
+| `src/core/syncPlan.ts` | What pattern sync uploads, deletes, and skips on one boot. Pure code. |
+| `src/core/patternSync.ts` | Runs pattern sync on each boot as it connects |
+| `src/transport/catalogFetch.ts` | Downloads the catalog, through native HTTP on a phone |
+| `src/transport/fakeRecipes.ts` | Recipe slots for pretend boots |
 | `src/transport/transport.ts` | The seam between the app and the boots |
 | `src/transport/ble.ts` | The real radio, for iOS and Chrome |
 | `src/transport/usb.ts` | A boot plugged in over USB, for desktop browsers |
