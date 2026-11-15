@@ -19,10 +19,11 @@
  * designer, but could construct one of these to opt in.
  */
 
-import { BootSession, BYTES_PER_BLUETOOTH_LINE, BYTES_PER_USB_LINE, RECIPE_PROTOCOL } from "../../../shared/bootSession";
+import { BootSession, bytesPerLineFor, RECIPE_PROTOCOL, type RecipeInfo } from "../../../shared/bootSession";
 import type { BootClient } from "./boot";
 import type { BootsStore, KeyValueStore, Side } from "./boots";
 import type { PatternLibrary, PatternOrigin, WantedRecipe } from "./patternLibrary";
+import { isObject } from "./protocol";
 import { planSync, recordAfterSync, type BootRecipes, type OnBootRecord } from "./syncPlan";
 
 /** The storage key holding what this phone has put on one boot, by the boot's own id (status `id`). */
@@ -182,10 +183,8 @@ export class PatternSync {
       if (track.running || track.attempted === fingerprint) continue;
       track.attempted = fingerprint;
       track.running = true;
-      void this.syncBoot(client, track, status.id).catch((error: unknown) => {
-        // Only storage can throw past syncBoot's own handling.
-        this.setState(track, { phase: "failed", done: 0, total: 0, needsFirmware: 0, noRoom: 0, error: String((error as Error)?.message ?? error) });
-      }).finally(() => {
+      // Only storage can throw past syncBoot's own handling.
+      void this.syncBoot(client, track, status.id).catch((error: unknown) => this.fail(track, error)).finally(() => {
         track.running = false;
         // A newer catalog may have arrived meanwhile.
         this.check();
@@ -198,6 +197,12 @@ export class PatternSync {
     this.notify();
   }
 
+  /** Marks this boot's sync failed, keeping what's known so far, such as its counts. */
+  private fail(track: Track, error: unknown): void {
+    const known = track.state ?? { done: 0, total: 0, needsFirmware: 0, noRoom: 0 };
+    this.setState(track, { ...known, phase: "failed", error: error instanceof Error ? error.message : String(error) });
+  }
+
   /** Waits while this boot is paused. */
   private async whenResumed(track: Track): Promise<void> {
     if (!track.paused) return;
@@ -207,20 +212,19 @@ export class PatternSync {
   /** One sync of one boot: check, plan, delete, upload, then remember what's there. */
   private async syncBoot(client: BootClient, track: Track, bootId: string): Promise<void> {
     const wanted = this.library.wanted();
-    const bytesPerLine = client.deviceId.startsWith("usb:") ? BYTES_PER_USB_LINE : BYTES_PER_BLUETOOTH_LINE;
     // One turn in the boot's command queue.
     const step = async <T>(operation: (session: BootSession) => Promise<T>): Promise<T> => {
       await this.whenResumed(track);
-      return client.runExclusive((exchange) => operation(new BootSession(exchange, bytesPerLine)));
+      return client.runExclusive((exchange) => operation(new BootSession(exchange, bytesPerLineFor(client.deviceId))));
     };
-    const counts = { needsFirmware: track.state?.needsFirmware ?? 0, noRoom: track.state?.noRoom ?? 0 };
-    this.setState(track, { phase: "checking", done: 0, total: 0, ...counts });
+    // Keep the last counts while checking, so a notice doesn't flicker off and back on.
+    this.setState(track, { phase: "checking", done: 0, total: 0, needsFirmware: track.state?.needsFirmware ?? 0, noRoom: track.state?.noRoom ?? 0 });
 
     let boot: BootRecipes;
     try {
       boot = await step((session) => askBoot(session, wanted));
     } catch (error) {
-      this.setState(track, { phase: "failed", done: 0, total: 0, ...counts, error: (error as Error).message });
+      this.fail(track, error);
       return;
     }
     const record = await this.loadRecord(bootId);
@@ -229,28 +233,30 @@ export class PatternSync {
     const state: BootSyncState = { phase: total > 0 ? "syncing" : "done", done: 0, total, needsFirmware: plan.needsFirmware.length, noRoom: plan.noRoom.length };
     this.setState(track, state);
 
-    const finished = { deleted: [] as string[], uploaded: [] as string[] };
-    let error: string | undefined;
-    const work: { name: string; run: (session: BootSession) => Promise<string | null>; done: string[] }[] = [
-      ...plan.deletes.map((name) => ({ name, run: (session: BootSession) => session.deleteRecipe(name), done: finished.deleted })),
-      ...plan.uploads.map((recipe) => ({ name: recipe.name, run: (session: BootSession) => session.uploadRecipe(recipe.name, recipe.bytes), done: finished.uploaded })),
+    // Deletes first, so they free slots. Each step returns why it failed, or null.
+    const work: { name: string; run: (session: BootSession) => Promise<string | null> }[] = [
+      ...plan.deletes.map((name) => ({ name, run: (session: BootSession) => session.deleteRecipe(name) })),
+      ...plan.uploads.map(({ name, bytes }) => ({ name, run: (session: BootSession) => session.uploadRecipe(name, bytes) })),
     ];
+    const succeeded: string[] = [];
+    let error: string | null = null;
     for (const item of work) {
       try {
         const failure = await step(item.run);
         if (failure) error = failure;
-        else item.done.push(item.name);
+        else succeeded.push(item.name);
       } catch (thrown) {
         // The boot went away. What finished is still worth remembering; the rest waits for the
         // next connection.
         error = (thrown as Error).message;
         break;
       }
-      this.setState(track, { ...state, done: finished.deleted.length + finished.uploaded.length });
+      this.setState(track, { ...state, done: succeeded.length });
     }
 
-    await this.saveRecord(bootId, recordAfterSync(record, plan, boot, finished));
-    this.setState(track, { ...state, phase: error ? "failed" : "done", done: finished.deleted.length + finished.uploaded.length, ...(error ? { error } : {}) });
+    await this.saveRecord(bootId, recordAfterSync(record, plan, boot, succeeded));
+    if (error) this.fail(track, error);
+    else this.setState(track, { ...state, phase: "done", done: succeeded.length });
   }
 
   private async loadRecord(bootId: string): Promise<OnBootRecord> {
@@ -258,7 +264,7 @@ export class PatternSync {
     if (!text) return {};
     try {
       const value: unknown = JSON.parse(text);
-      if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+      if (!isObject(value)) return {};
       return Object.fromEntries(
         Object.entries(value).filter((entry): entry is [string, PatternOrigin] => entry[1] === "canonical" || entry[1] === "mine"),
       );
@@ -274,15 +280,16 @@ export class PatternSync {
 
 /**
  * Asks a boot what it has uploaded: the `recipes` reply, then `recipe info` for each upload a
- * wanted recipe would replace, since only those need comparing.
+ * wanted recipe would replace, since only those need comparing. Recipes the boot's firmware can't
+ * read are held back whatever it has, so those go unasked.
  */
 async function askBoot(session: BootSession, wanted: readonly WantedRecipe[]): Promise<BootRecipes> {
   const reply = await session.recipes();
   const versions = Array.isArray(reply.versions) ? reply.versions.filter((value): value is number => typeof value === "number") : [];
   const list = Array.isArray(reply.list) ? reply.list.filter((value): value is string => typeof value === "string") : [];
   const free = typeof reply.free === "number" ? reply.free : 0;
-  const wantedNames = new Set(wanted.map((recipe) => recipe.name));
-  const uploads: Record<string, { bytes: number; crc: string } | null> = {};
+  const wantedNames = new Set(wanted.filter((recipe) => versions.includes(recipe.recipeVersion)).map((recipe) => recipe.name));
+  const uploads: Record<string, RecipeInfo | null> = {};
   for (const name of list) {
     uploads[name] = wantedNames.has(name) ? await session.recipeInfo(name).catch(() => null) : null;
   }

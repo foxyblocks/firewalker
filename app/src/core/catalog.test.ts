@@ -10,7 +10,7 @@ const PATTERNS_DIR = fileURLToPath(new URL("../../../patterns", import.meta.url)
 const real = async (): Promise<CatalogJson> => buildCatalog(PATTERNS_DIR, "abc123");
 
 const edited = async (edit: (catalog: CatalogJson) => void): Promise<string> => {
-  const catalog = structuredClone(await real());
+  const catalog = await real();
   edit(catalog);
   return JSON.stringify(catalog);
 };

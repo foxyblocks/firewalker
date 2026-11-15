@@ -19,6 +19,7 @@
  * update, at the cost of an upload slot.
  */
 
+import type { RecipeInfo } from "../../../shared/bootSession";
 import type { PatternOrigin, WantedRecipe } from "./patternLibrary";
 
 /** What a boot reported about its uploads. */
@@ -31,12 +32,12 @@ export interface BootRecipes {
    * Every upload on the boot, by name. For a name that's wanted, the value is its `recipe info`
    * (size and checksum), or null when that couldn't be read. Other names map to null.
    */
-  uploads: Readonly<Record<string, { bytes: number; crc: string } | null>>;
+  uploads: Readonly<Record<string, RecipeInfo | null>>;
 }
 
 /**
  * The uploads this phone has put on one boot, by name, with each one's origin. Pattern sync keeps
- * one per boot in storage (`ON_BOOT_KEY_PREFIX` in patternSync.ts). It's what lets sync tell its own
+ * one per boot in storage (`onBootKey` in patternSync.ts). It's what lets sync tell its own
  * uploads, which it may delete, from designer experiments, which it never touches.
  */
 export type OnBootRecord = Record<string, PatternOrigin>;
@@ -82,24 +83,21 @@ export function planSync(wanted: readonly WantedRecipe[], boot: BootRecipes, rec
 }
 
 /**
- * This phone's record for the boot once a sync has run. It holds main's recipes the boot now has
- * (uploaded or already up to date), plus anything recorded before that's still on the boot, such
- * as a delete that failed or an older copy an upload failed to replace, so the next sync can
- * finish the job. Names that left the boot are forgotten.
+ * This phone's record for the boot once a sync has run. `succeeded` names the deletes and uploads
+ * that worked. The record holds main's recipes the boot now has (uploaded or already up to date),
+ * plus anything recorded before that's still on the boot, such as a delete that failed or an older
+ * copy an upload failed to replace, so the next sync can finish the job. Names that left the boot
+ * are forgotten.
  */
-export function recordAfterSync(
-  record: OnBootRecord,
-  plan: SyncPlan,
-  boot: BootRecipes,
-  done: { deleted: readonly string[]; uploaded: readonly string[] },
-): OnBootRecord {
+export function recordAfterSync(record: OnBootRecord, plan: SyncPlan, boot: BootRecipes, succeeded: readonly string[]): OnBootRecord {
   const next: OnBootRecord = {};
   for (const recipe of plan.upToDate) next[recipe.name] = recipe.origin;
   for (const recipe of plan.uploads) {
-    if (done.uploaded.includes(recipe.name)) next[recipe.name] = recipe.origin;
+    if (succeeded.includes(recipe.name)) next[recipe.name] = recipe.origin;
   }
+  // A recorded name that isn't wanted any more was planned as a delete, so succeeding means it's gone.
   for (const [name, origin] of Object.entries(record)) {
-    if (!(name in next) && name in boot.uploads && !done.deleted.includes(name)) next[name] = origin;
+    if (!(name in next) && name in boot.uploads && !succeeded.includes(name)) next[name] = origin;
   }
   return next;
 }

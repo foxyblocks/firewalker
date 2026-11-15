@@ -72,6 +72,10 @@ export function wantedRecipes(canonical: readonly LibraryPattern[], mine: readon
 
 export class PatternLibrary {
   private catalog: Catalog | null = null;
+  // The kept catalog's text and fingerprint, so an unchanged download is skipped and sync's
+  // frequent checks don't rebuild the fingerprint.
+  private text: string | null = null;
+  private catalogId: string | null = null;
   private refreshing: Promise<void> | null = null;
   private readonly listeners = new Set<() => void>();
   private version = 0;
@@ -106,9 +110,15 @@ export class PatternLibrary {
     const text = await this.storage.get(LIBRARY_KEYS.canonical);
     const parsed = text === null ? null : parseCatalog(text);
     if (parsed?.ok) {
-      this.catalog = parsed.catalog;
+      this.keep(text!, parsed.catalog);
       this.notify();
     }
+  }
+
+  private keep(text: string, catalog: Catalog): void {
+    this.text = text;
+    this.catalog = catalog;
+    this.catalogId = catalogFingerprint(catalog);
   }
 
   /**
@@ -131,11 +141,12 @@ export class PatternLibrary {
           timer = setTimeout(() => reject(new Error("The catalog download timed out.")), this.timeoutMs);
         }),
       ]);
+      if (text === this.text) return;
       const parsed = parseCatalog(text);
       if (!parsed.ok) return;
-      const changed = this.catalog === null || catalogFingerprint(parsed.catalog) !== catalogFingerprint(this.catalog);
+      const changed = catalogFingerprint(parsed.catalog) !== this.catalogId;
       await this.storage.set(LIBRARY_KEYS.canonical, text);
-      this.catalog = parsed.catalog;
+      this.keep(text, parsed.catalog);
       if (changed) this.notify();
     } catch {
       // No signal, or the CDN is down: the kept copy carries on.
@@ -156,7 +167,7 @@ export class PatternLibrary {
 
   /** Identifies what `wanted()` holds, or null with nothing to sync yet. */
   fingerprint(): string | null {
-    return this.catalog ? catalogFingerprint(this.catalog) : null;
+    return this.catalogId;
   }
 
   /** Main's description of a pattern, for its tile. */

@@ -28,9 +28,12 @@ export async function fetchCatalogText(url: string, timeoutMs: number): Promise<
 }
 
 /**
- * Where the catalog comes from: the CDN on a phone or in the Simulator, and the dev server's live
- * copy of patterns/ in Chrome, where the CDN's missing CORS headers would block it.
+ * Where the catalog comes from: the CDN on a phone or in the Simulator. In Chrome with pretend
+ * boots (`?boot=fake`), it's the dev server's live copy of patterns/, since the CDN's missing CORS
+ * headers block Chrome. Chrome with real boots gets the CDN too, which fails there, so a working
+ * tree's unmerged recipes can never reach real boots as main's.
  */
 export function catalogUrl(cdnUrl: string): string {
-  return Capacitor.isNativePlatform() ? cdnUrl : "./catalog.json";
+  const fake = new URLSearchParams(window.location.search).get("boot") === "fake";
+  return Capacitor.isNativePlatform() || !fake ? cdnUrl : "./catalog.json";
 }

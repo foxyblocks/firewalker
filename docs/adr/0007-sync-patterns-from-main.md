@@ -54,10 +54,12 @@ that reuses a main pattern's name is reset to main's version the next time that 
   that already matches main.
 - A boot whose firmware can't read a recipe's version keeps the rest, and the remote says it needs
   a firmware update for that many patterns.
-- The catalog workflow needs three repository secrets for the CDN's R2 bucket: `R2_ACCOUNT_ID`,
-  `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`. The token is an R2 API token with Object Read &
-  Write on the `foxyblocks-cdn` bucket only. Until they're added, the workflow fails with a message
-  naming them, and the catalog stays at its last published copy.
+- The catalog workflow reads three repository secrets for the CDN's R2 bucket: `R2_ACCOUNT_ID`,
+  `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`. They come from a dedicated Cloudflare API token,
+  "firewalker catalog publish (GitHub Actions)", that can only read and write objects in the
+  `foxyblocks-cdn` bucket. R2's key ID is the token's ID, and its secret key is the SHA-256 of the
+  token's value. If a secret is missing, the workflow fails with a message naming them, and the
+  catalog stays at its last published copy.
 - Only the iPhone build syncs. The desktop app leaves boots alone, so trying a recipe from the
   designer isn't undone while the designer is open. Desktop could opt in later by starting a
   `PatternSync` the way `app/src/native.tsx` does.

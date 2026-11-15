@@ -22,10 +22,9 @@ import { App } from "./ui/App";
 
 const { transport, storage } = await setUpBoots(attachFakeRecipes);
 const store = new BootsStore(transport, storage);
-await store.load();
-
 const library = new PatternLibrary(storage, fetchCatalogText, { url: catalogUrl(CATALOG_URL) });
-await library.load();
+// The kept catalog loads before any download, so an older copy can't replace a fresh one.
+await Promise.all([store.load(), library.load()]);
 const sync = new PatternSync(store, library, storage);
 sync.start();
 void library.refresh();

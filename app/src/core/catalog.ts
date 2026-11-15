@@ -11,8 +11,9 @@
  */
 
 import { CATALOG_FORMAT, CATALOG_VERSION } from "../../../shared/patternCatalog";
-import { checkCompiledRecipe, nameProblem } from "../../../shared/recipeBinary";
+import { checkCompiledRecipe, compiledCrc, fromHex, nameProblem } from "../../../shared/recipeBinary";
 import type { LibraryPattern } from "./patternLibrary";
+import { isObject } from "./protocol";
 
 export interface Catalog {
   /** The git commit on main the catalog was built from. */
@@ -25,9 +26,6 @@ export type CatalogParse = { ok: true; catalog: Catalog } | { ok: false; error: 
 
 const HEX = /^(?:[0-9a-f]{2})+$/;
 const CRC = /^[0-9a-f]{8}$/;
-
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 /** Parses and checks a downloaded catalog. Never throws; a bad file comes back as an error. */
 export function parseCatalog(text: string): CatalogParse {
@@ -69,11 +67,11 @@ function parseEntry(entry: unknown): LibraryPattern | string {
   if (typeof crc !== "string" || !CRC.test(crc)) return "its crc isn't eight hex digits.";
   if (!isObject(recipe)) return "it has no source recipe.";
 
-  const compiled = Uint8Array.from(data.match(/../g)!, (pair) => parseInt(pair, 16));
+  const compiled = fromHex(data);
   if (bytes !== compiled.length) return `it says ${String(bytes)} bytes but holds ${compiled.length}.`;
   const check = checkCompiledRecipe(compiled);
   if (!check.ok) return check.reason;
-  if (check.crc !== crc) return "its crc doesn't match its bytes.";
+  if (compiledCrc(compiled) !== crc) return "its crc doesn't match its bytes.";
   if (check.name !== name) return `its bytes are named ${check.name}.`;
   if (check.version !== recipeVersion) return `its bytes are recipe version ${check.version}, not ${String(recipeVersion)}.`;
 

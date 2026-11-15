@@ -9,7 +9,7 @@ import { FakeBoot as RecipeBoot } from "../../../designer/src/boot/fakeBoot";
 import { compileRecipe } from "../../../designer/src/recipe/compile";
 import type { Recipe } from "../../../designer/src/recipe/types";
 import type { CatalogJson } from "../../../shared/patternCatalog";
-import { compiledCrc } from "../../../shared/recipeBinary";
+import { compiledCrc, fromHex, toHex as hex } from "../../../shared/recipeBinary";
 import { FakeBoot, FakeTransport } from "../transport/fakeBoot";
 import { attachRecipes } from "../transport/fakeRecipes";
 import { BootsStore, type KeyValueStore } from "./boots";
@@ -113,7 +113,6 @@ async function rig({
 const synced = (rig: Rig, side: "left" | "right") => rig.sync.state(side)?.phase === "done";
 const bothSynced = (rig: Rig) => synced(rig, "left") && synced(rig, "right");
 const begins = (boot: FakeBoot) => boot.received.filter((line) => line.startsWith("recipe begin"));
-const hex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
 describe("PatternSync", () => {
   it("puts every catalog pattern on both boots when they connect, selecting none", async () => {
@@ -182,7 +181,7 @@ describe("PatternSync", () => {
     const test = await rig();
     const experiment = (await realCatalog()).patterns[0]!;
     // An upload this phone never put there, under a name main doesn't have.
-    test.leftRecipes.stored.set("my-test", Uint8Array.from(experiment.data.match(/../g)!.map((pair) => parseInt(pair, 16))));
+    test.leftRecipes.stored.set("my-test", fromHex(experiment.data));
     await waitFor(() => bothSynced(test));
     expect(test.leftRecipes.stored.has("my-test")).toBe(true);
   });

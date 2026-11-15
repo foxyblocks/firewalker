@@ -92,14 +92,14 @@ describe("recordAfterSync", () => {
   const plan = planSync([recipe("comet"), recipe("lava-pour")], before, record);
 
   it("adds what it uploaded and drops what it deleted", () => {
-    expect(recordAfterSync(record, plan, before, { deleted: ["old"], uploaded: ["comet", "lava-pour"] })).toEqual({
+    expect(recordAfterSync(record, plan, before, ["old", "comet", "lava-pour"])).toEqual({
       comet: "canonical",
       "lava-pour": "canonical",
     });
   });
 
   it("keeps a name whose delete failed, to try again next time", () => {
-    expect(recordAfterSync(record, plan, before, { deleted: [], uploaded: ["comet", "lava-pour"] })).toEqual({
+    expect(recordAfterSync(record, plan, before, ["comet", "lava-pour"])).toEqual({
       comet: "canonical",
       "lava-pour": "canonical",
       old: "canonical",
@@ -109,7 +109,7 @@ describe("recordAfterSync", () => {
   it("leaves out an upload that failed, unless it put an older copy there before", () => {
     const earlier: OnBootRecord = { comet: "canonical" };
     const again = planSync([recipe("comet"), recipe("lava-pour")], before, earlier);
-    expect(recordAfterSync(earlier, again, before, { deleted: [], uploaded: [] })).toEqual({ comet: "canonical" });
+    expect(recordAfterSync(earlier, again, before, [])).toEqual({ comet: "canonical" });
   });
 
   // A boot that already has main's exact bytes, however they got there, holds main's pattern, so
@@ -117,11 +117,11 @@ describe("recordAfterSync", () => {
   it("counts a recipe that was already up to date as this phone's", () => {
     const current = boot({ comet: { bytes: 40, crc: "aaaaaaaa" } });
     const upToDate = planSync([recipe("comet")], current, {});
-    expect(recordAfterSync({}, upToDate, current, { deleted: [], uploaded: [] })).toEqual({ comet: "canonical" });
+    expect(recordAfterSync({}, upToDate, current, [])).toEqual({ comet: "canonical" });
   });
 
   it("forgets a name that's no longer on the boot", () => {
     const empty = boot();
-    expect(recordAfterSync({ gone: "canonical" }, planSync([], empty, { gone: "canonical" }), empty, { deleted: [], uploaded: [] })).toEqual({});
+    expect(recordAfterSync({ gone: "canonical" }, planSync([], empty, { gone: "canonical" }), empty, [])).toEqual({});
   });
 });
