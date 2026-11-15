@@ -349,9 +349,14 @@ dd {
   font-weight: 700;
 }
 
+/* Two lines at most, so a long description from main's catalog can't stretch the grid. */
 .tile-hint {
+  display: -webkit-box;
+  overflow: hidden;
   color: var(--ink-quiet);
   font-size: 11.5px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .tile-hint-warn {
@@ -652,6 +657,15 @@ dd {
 
 .toggle-small.toggle-on .toggle-knob {
   transform: translateX(16px);
+}
+
+/* ── Pattern sync ──────────────────────────────────────────────────────── */
+
+/* A quiet progress line while main's patterns go to a boot, plus notices for what didn't. */
+.sync-status {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 /* ── Banners ───────────────────────────────────────────────────────────── */

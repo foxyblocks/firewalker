@@ -12,19 +12,31 @@
  * outline's warning sign says so on a tap. Audio tuning sits just above brightness, for one
  * boot's microphone at a time (AudioSetup.tsx). Each boot's calibration, status, and debug
  * output live on its own screen under the app's Boots tab. The app frame owns main navigation.
+ *
+ * In the iPhone build, pattern sync (core/patternSync.ts) puts main's patterns on each boot as it
+ * connects. Its progress and problems show above the tiles, and main's pattern catalog supplies
+ * descriptions for tiles this app has no short description for.
  */
 
+import { useSyncExternalStore } from "react";
 import { SIDE_NAMES, type BootsStore, type PatternTile, type RemoteView, type Side, type Target } from "../core/boots";
 import { patternDisplay } from "../core/patternNames";
+import type { PatternSync, SyncView } from "../core/patternSync";
 import { AudioPanel } from "./AudioSetup";
 import { Segmented } from "./components/Segmented";
+import { SyncStatus } from "./components/SyncStatus";
 import { joinNames, LinkDot, PixelSlider, SideBadge, Toggle, type SliderWarning } from "./parts";
 
 const CAP_OFF_MESSAGE = "Past this line, full white can draw more than USB gives, about 1 A.";
 
-export function Remote({ store, onBoots }: { store: BootsStore; onBoots: () => void }) {
+const noSubscribe = () => () => undefined;
+const noVersion = () => 0;
+
+export function Remote({ store, sync, onBoots }: { store: BootsStore; sync?: PatternSync; onBoots: () => void }) {
+  useSyncExternalStore(sync?.subscribe ?? noSubscribe, sync?.getVersion ?? noVersion);
   const view = store.view();
   const names = (sides: Side[]) => joinNames(sides.map((side) => store.displayName(side)));
+  const syncView = sync?.view(view.chosen);
   const percent = view.maxBrightness > 0 ? Math.round((view.brightness / view.maxBrightness) * 100) : 0;
   // Shown while any chosen boot is uncapped. When another chosen boot still has its cap on, the
   // slider stops at that cap, so there's nothing past it to mark.
@@ -43,11 +55,13 @@ export function Remote({ store, onBoots }: { store: BootsStore; onBoots: () => v
           <span className="section-label">Pattern</span>
           <SaveLine view={view} names={names} />
         </div>
+        {syncView && <SyncStatus progress={syncView.progress} problems={syncProblems(syncView, names)} />}
         <div className="tiles">
           {view.tiles.map((tile) => (
             <Tile
               key={tile.id}
               tile={tile}
+              description={sync?.library.description(tile.id)}
               names={names}
               disabled={!view.controllable}
               onSelect={() => store.selectPattern(tile.id)}
@@ -134,19 +148,42 @@ function TargetTabs({ store, onBoots }: { store: BootsStore; onBoots: () => void
   );
 }
 
+/**
+ * Pattern sync's problems as sentences. Boots with the same problem share one, so a pair that
+ * both need a firmware update reads "Left and Right need a firmware update for 1 pattern".
+ */
+function syncProblems(view: SyncView, names: (sides: Side[]) => string): string[] {
+  const patterns = (count: number) => `${count} pattern${count === 1 ? "" : "s"}`;
+  const byCount = (entries: { side: Side; count: number }[]) =>
+    [...new Set(entries.map((entry) => entry.count))].map((count) => ({
+      sides: entries.filter((entry) => entry.count === count).map((entry) => entry.side),
+      count,
+    }));
+  return [
+    ...byCount(view.needsFirmware).map(({ sides, count }) =>
+      `${names(sides)} ${sides.length > 1 ? "need" : "needs"} a firmware update for ${patterns(count)} from main.`),
+    ...byCount(view.noRoom).map(({ sides, count }) =>
+      `${names(sides)} ${sides.length > 1 ? "are" : "is"} out of pattern slots, so ${patterns(count)} from main didn't fit. Free a slot from the designer.`),
+    ...view.failed.map(({ side, error }) => `Couldn't sync patterns to ${names([side])}. ${error}`),
+  ];
+}
+
 /** One pattern. Its strip previews the pattern, and the badges show which boots run it. */
 function Tile({
   tile,
+  description: catalogDescription,
   names,
   disabled,
   onSelect,
 }: {
   tile: PatternTile;
+  /** Main's description from the pattern catalog, when there is one. */
+  description?: string;
   names: (sides: Side[]) => string;
   disabled: boolean;
   onSelect: () => void;
 }) {
-  const { name, description } = patternDisplay(tile.id);
+  const { name, description } = patternDisplay(tile.id, catalogDescription);
   const running = tile.runningOn.length > 0;
   const hint = tile.missingOn.length > 0 ? `${names(tile.missingOn)} needs update` : description;
   const previewClass = ["rainbow-pool", "flow"].includes(tile.id)

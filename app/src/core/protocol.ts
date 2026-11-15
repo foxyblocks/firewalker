@@ -138,7 +138,8 @@ export const commands = {
   stripPreview: (on: boolean) => `strip preview ${on ? "on" : "off"}`,
 };
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
+/** True for a plain JSON object, not null or an array. */
+export const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
