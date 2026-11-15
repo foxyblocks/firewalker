@@ -352,41 +352,35 @@ describe("power and brightness on Both", () => {
 describe("the soft brightness cap", () => {
   const CAP = { capBrightness: 96, maxBrightness: 255 };
 
-  it("shows the cap on, and turns it off on both boots", async () => {
-    const { left, right, store } = await pair(CAP, CAP);
-    expect(store.view().capped).toBe(true);
-    expect(store.view().maxBrightness).toBe(96);
-    expect(store.view().capBrightness).toBe(96);
-
-    store.setCap(false);
-    expect(store.view().capped).toBe(false);
-    await settle();
+  it("turns the cap off on every boot that connects with it on, keeping its level", async () => {
+    const { left, right, store } = await pair({ ...CAP, brightness: 96 }, { ...CAP, brightness: 96 });
     expect(left.capped).toBe(false);
     expect(right.capped).toBe(false);
-    expect(store.view().maxBrightness).toBe(255);
-  });
-
-  it("reads as off when either boot is uncapped, so one tap caps both", async () => {
-    const { left, right, store } = await pair({ ...CAP, capped: false, brightness: 200 }, CAP);
-    expect(store.view().capped).toBe(false);
-
-    store.setCap(true);
-    await settle();
-    expect(left.capped).toBe(true);
-    expect(right.capped).toBe(true);
     expect(left.brightness).toBe(96);
+    expect(store.view().maxBrightness).toBe(255);
+    // The slider marks the levels past the cap instead of stopping at it.
+    expect(store.view().capBrightness).toBe(96);
   });
 
-  it("offers no cap for firmware without one, and never sends it the command", async () => {
+  it("leaves a boot whose cap is already off alone", async () => {
+    const { left } = await pair({ ...CAP, capped: false, brightness: 200 }, CAP);
+    expect(left.received).not.toContain("cap off");
+    expect(left.brightness).toBe(200);
+  });
+
+  it("turns it off again after a reconnect finds it back on", async () => {
+    const { left, store } = await pair(CAP, CAP);
+    await store.client("left")!.disconnect();
+    left.capped = true;
+    store.client("left")!.connect();
+    await settle();
+    expect(left.capped).toBe(false);
+  });
+
+  it("never sends the command to firmware without a cap", async () => {
     const { right, store } = await pair(CAP, {});
     store.setTarget("right");
-    expect(store.view().capped).toBeUndefined();
     expect(store.view().capBrightness).toBeUndefined();
-
-    store.setTarget("both");
-    expect(store.view().capped).toBe(true);
-    store.setCap(false);
-    await settle();
     expect(right.received).not.toContain("cap off");
   });
 });

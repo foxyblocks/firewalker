@@ -1,37 +1,38 @@
 /**
  * The home screen: choose Both, Left, or Right, then control them. Patterns take the
- * middle of the screen and scroll, while brightness and power stay pinned in a dock at the
- * bottom. So however many patterns a boot has, your thumb always knows where those are.
- * All the numbers come from `store.view()`, which shows what the boots reported, plus any
+ * middle of the screen and scroll, while a bar pinned at the bottom holds Audio, Brightness,
+ * and the Lights switch side by side. So however many patterns a boot has, your thumb always
+ * knows where those are. Audio and Brightness each open a drawer that slides up over the
+ * patterns. A second tap on the same section, a tap on the dimmed patterns, or Escape closes
+ * it. All the numbers come from `store.view()`, which shows what the boots reported, plus any
  * tap still on its way.
  *
- * The brightness percent is a share of what the boots accept right now, so it reads 100%
- * at the soft cap while the cap is on, and the same level reads 38% with it off (96 of 255).
- * The cap's toggle sits beside the percent. With the cap off, the slider outlines the levels
- * past the cap, because a full-white strip can then draw more than USB supplies, and the
- * outline's warning sign says so on a tap. Audio tuning sits just above brightness, for one
- * boot's microphone at a time (AudioSetup.tsx). Each boot's calibration, status, and debug
- * output live on its own screen under the app's Boots tab. The app frame owns main navigation.
+ * There's no brightness cap switch. The store keeps every boot's soft cap off, so the slider
+ * runs to the boot's full range, and the levels past the cap sit inside a yellow outline whose
+ * warning sign explains them on a tap. The bar's brightness reading turns yellow past it too,
+ * so the warning shows with the drawer closed. Audio tuning is per boot (AudioSetup.tsx).
+ * Each boot's calibration, status, and debug output live on its own screen under the app's
+ * Boots tab. The app frame owns main navigation.
  */
 
+import { useEffect, useState } from "react";
 import { SIDE_NAMES, type BootsStore, type PatternTile, type RemoteView, type Side, type Target } from "../core/boots";
 import { patternDisplay } from "../core/patternNames";
-import { AudioPanel } from "./AudioSetup";
+import { AudioControls, audioSummary } from "./AudioSetup";
+import { ChevronIcon } from "./components/Button";
+import { Icon, type IconName } from "./components/Icon";
 import { Segmented } from "./components/Segmented";
-import { joinNames, LinkDot, PixelSlider, SideBadge, Toggle, type SliderWarning } from "./parts";
+import { joinNames, LinkDot, PixelSlider, SideBadge, WarningIcon, type SliderWarning } from "./parts";
 
-const CAP_OFF_MESSAGE = "Past this line, full white can draw more than USB gives, about 1 A.";
+const CAP_MESSAGE = "Past this line, full white can draw more than USB gives, about 1 A.";
+/** How long the drawer takes to slide away, matching `drawer-out` in styles.css. */
+const DRAWER_CLOSE_MS = 160;
+
+type Drawer = "audio" | "brightness";
 
 export function Remote({ store, onBoots }: { store: BootsStore; onBoots: () => void }) {
   const view = store.view();
   const names = (sides: Side[]) => joinNames(sides.map((side) => store.displayName(side)));
-  const percent = view.maxBrightness > 0 ? Math.round((view.brightness / view.maxBrightness) * 100) : 0;
-  // Shown while any chosen boot is uncapped. When another chosen boot still has its cap on, the
-  // slider stops at that cap, so there's nothing past it to mark.
-  const capWarning: SliderWarning | undefined =
-    view.capped === false && view.capBrightness !== undefined
-      ? { above: view.capBrightness, label: "About the brightness cap", message: CAP_OFF_MESSAGE }
-      : undefined;
 
   return (
     <>
@@ -56,52 +57,168 @@ export function Remote({ store, onBoots }: { store: BootsStore; onBoots: () => v
         </div>
       </main>
 
-      <footer className="dock">
-        <AudioPanel store={store} />
-        <div className="section-head">
-          <span className="section-label">Brightness</span>
-          <span className="brightness-head">
-            <span className="readout">{view.controllable ? `${percent}%` : "--"}</span>
-            {view.capped !== undefined && (
-              <span className="cap-control">
-                <span className="cap-label" aria-hidden="true">
-                  Cap
-                </span>
-                <Toggle
-                  on={view.capped}
-                  label="Brightness cap"
-                  small
-                  disabled={!view.controllable}
-                  onChange={(on) => store.setCap(on)}
-                />
-              </span>
-            )}
-          </span>
-        </div>
-        <PixelSlider
-          label="Brightness"
-          value={view.brightness}
-          min={1}
-          max={view.maxBrightness}
-          disabled={!view.controllable}
-          onStart={() => store.setDragging(true)}
-          onChange={(level) => store.setBrightness(level)}
-          onEnd={() => store.setDragging(false)}
-          warning={capWarning}
-        />
-        <div className="dock-row">
-          <div className="dock-card">
-            <span className="card-name">{view.controllable ? `Lights ${view.on ? "on" : "off"}` : "Lights —"}</span>
-            <Toggle
-              on={view.on}
-              label="Lights"
-              disabled={!view.controllable}
-              onChange={(on) => store.setPower(on)}
-            />
-          </div>
-        </div>
-      </footer>
+      <Dock store={store} view={view} names={names} />
     </>
+  );
+}
+
+/**
+ * The bottom bar and its drawer. The drawer stays mounted for its slide-away, then unmounts,
+ * so the audio blocks stop watching their boots once it's gone.
+ */
+function Dock({ store, view, names }: { store: BootsStore; view: RemoteView; names: (sides: Side[]) => string }) {
+  const [open, setOpen] = useState<Drawer>();
+  const [shown, setShown] = useState<Drawer>();
+  const drawer = open ?? shown;
+  const leaving = open === undefined && shown !== undefined;
+
+  useEffect(() => {
+    if (open !== undefined) {
+      setShown(open);
+      return;
+    }
+    const timer = setTimeout(() => setShown(undefined), DRAWER_CLOSE_MS);
+    return () => clearTimeout(timer);
+  }, [open]);
+
+  useEffect(() => {
+    if (open === undefined) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(undefined);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  const toggle = (next: Drawer) => setOpen((current) => (current === next ? undefined : next));
+  const percent = view.maxBrightness > 0 ? Math.round((view.brightness / view.maxBrightness) * 100) : 0;
+  const cap = view.capBrightness;
+  const capWarning: SliderWarning | undefined =
+    cap !== undefined && view.maxBrightness > cap
+      ? { above: cap, label: "About the brightness cap", message: CAP_MESSAGE }
+      : undefined;
+  const overCap = view.controllable && capWarning !== undefined && view.brightness > capWarning.above;
+
+  return (
+    <footer className={`dock${drawer ? " dock-open" : ""}`}>
+      {drawer && (
+        <>
+          <div className={`drawer-scrim${leaving ? " drawer-leaving" : ""}`} aria-hidden="true" onClick={() => setOpen(undefined)} />
+          <div className="drawer-clip">
+            <section
+              id="remote-drawer"
+              className={`drawer${leaving ? " drawer-leaving" : ""}`}
+              aria-label={drawer === "audio" ? "Audio" : "Brightness"}
+            >
+              <header className="drawer-head">
+                <span className="section-label">{drawer === "audio" ? "Audio" : "Brightness"}</span>
+                <span className="drawer-head-end">
+                  {drawer === "brightness" && (
+                    <span className={`readout${overCap ? " readout-warn" : ""}`}>{view.controllable ? `${percent}%` : "--"}</span>
+                  )}
+                  <button type="button" className="drawer-close" aria-label="Close" onClick={() => setOpen(undefined)}>
+                    <ChevronIcon />
+                  </button>
+                </span>
+              </header>
+              {drawer === "audio" ? (
+                <AudioControls store={store} />
+              ) : (
+                <div className="brightness-drawer">
+                  <PixelSlider
+                    label="Brightness"
+                    value={view.brightness}
+                    min={1}
+                    max={view.maxBrightness}
+                    disabled={!view.controllable}
+                    onStart={() => store.setDragging(true)}
+                    onChange={(level) => store.setBrightness(level)}
+                    onEnd={() => store.setDragging(false)}
+                    warning={capWarning}
+                  />
+                  {view.chosen.length > 1 && <span className="help-text help-small">Sets {names(view.chosen)} together.</span>}
+                </div>
+              )}
+            </section>
+          </div>
+        </>
+      )}
+
+      <div className="control-bar">
+        <BarButton
+          icon="mic"
+          label="Audio"
+          value={audioSummary(store)}
+          open={drawer === "audio" && !leaving}
+          onClick={() => toggle("audio")}
+        />
+        <BarButton
+          icon="sun"
+          label="Brightness"
+          value={view.controllable ? `${percent}%` : "--"}
+          warn={overCap}
+          open={drawer === "brightness" && !leaving}
+          onClick={() => toggle("brightness")}
+        />
+        <button
+          type="button"
+          role="switch"
+          aria-checked={view.on}
+          aria-label="Lights"
+          className={`bar-cell bar-power${view.on && view.controllable ? " bar-power-on" : ""}`}
+          disabled={!view.controllable}
+          onClick={() => store.setPower(!view.on)}
+        >
+          <span className="bar-label">
+            <Icon name="power" size={14} />
+            Lights
+          </span>
+          <span className="bar-power-row">
+            <span className="bar-value">{view.controllable ? (view.on ? "On" : "Off") : "--"}</span>
+            <span className={`toggle toggle-small${view.on ? " toggle-on" : ""}`} aria-hidden="true">
+              <span className="toggle-knob" />
+            </span>
+          </span>
+        </button>
+      </div>
+    </footer>
+  );
+}
+
+/** One of the bar's drawer sections: a label, its current reading, and which way it slides. */
+function BarButton({
+  icon,
+  label,
+  value,
+  warn,
+  open,
+  onClick,
+}: {
+  icon: IconName;
+  label: string;
+  value: string;
+  warn?: boolean;
+  open: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`bar-cell${open ? " bar-cell-on" : ""}`}
+      aria-expanded={open}
+      aria-controls={open ? "remote-drawer" : undefined}
+      onClick={onClick}
+    >
+      <span className="bar-label">
+        <Icon name={icon} size={14} />
+        {label}
+        <ChevronIcon open={!open} />
+      </span>
+      <span className={`bar-value readout${warn ? " readout-warn" : ""}`}>
+        {value}
+        {warn && <WarningIcon />}
+      </span>
+    </button>
   );
 }
 

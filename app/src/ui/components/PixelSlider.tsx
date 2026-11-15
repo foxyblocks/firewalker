@@ -86,6 +86,7 @@ export function PixelSlider({
   // Pixels from here on stand for levels past the warning. It's the pixel count when nothing is.
   const overFrom = warning && shape === "fill" ? firstPixelOver(warning.above, max, STRIP_PIXELS) : STRIP_PIXELS;
   const marked = warning !== undefined && overFrom < STRIP_PIXELS;
+  const zone = useZonePlacement(marked, wrap, edgeStart, edgeEnd, overFrom);
 
   const levelAt = (clientX: number) => {
     const box = track.current!.getBoundingClientRect();
@@ -129,7 +130,7 @@ export function PixelSlider({
   // remounts the slider under a finger.
   return (
     <div ref={wrap} className="slider-wrap">
-      {marked && <WarningZone wrap={wrap} edgeStart={edgeStart} edgeEnd={edgeEnd} warning={warning} overFrom={overFrom} />}
+      {marked && zone && <WarningZone zone={zone} warning={warning} />}
       <div
         ref={track}
         className={`strip strip-slider${disabled ? " strip-disabled" : ""}`}
@@ -158,40 +159,39 @@ export function PixelSlider({
   );
 }
 
-/**
- * The outline around a slider's pixels past its warning, with the warning sign at the top of its
- * left edge. The sign is a button whose tap shows why those levels need care, in a tip that a
- * second tap, a tap anywhere else, or Escape closes. Both sit outside the slider, because a
- * slider's children are hidden from screen readers and a tap on the slider sets its value. The
- * outline lets taps through to the slider, and the sign's 44-pixel tap area reaches up from the
- * sign, so neither covers the pixels.
- *
- * The strip spaces its pixels to fit the screen, so this places the outline after layout, and
- * again whenever the strip resizes: from the left spacer's outer edge to the right spacer's, and
- * as far above and below the pixels as the left spacer is from the first pixel inside.
- */
-function WarningZone({
-  wrap,
-  edgeStart,
-  edgeEnd,
-  warning,
-  overFrom,
-}: {
-  wrap: RefObject<HTMLDivElement | null>;
-  edgeStart: RefObject<HTMLSpanElement | null>;
-  edgeEnd: RefObject<HTMLSpanElement | null>;
-  warning: SliderWarning;
-  overFrom: number;
-}) {
-  const [zone, setZone] = useState<{ left: number; top: number; width: number; height: number; gap: number } | null>(
-    null,
-  );
-  const [open, setOpen] = useState(false);
-  const button = useRef<HTMLButtonElement>(null);
-  const tip = useRef<HTMLDivElement>(null);
-  const tipId = useId();
+/** Where the outline goes, relative to the slider's wrapper. */
+interface ZonePlacement {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  /** The space between pixels, which the outline also keeps from the pixels inside it. */
+  gap: number;
+  /** The middle of the outline's left edge, where the sign and the tip's caret point. */
+  edgeX: number;
+}
 
+/**
+ * Places the outline around the pixels past the warning. The strip spaces its pixels to fit
+ * the screen, so this measures after layout, and again whenever the strip resizes: from the
+ * left spacer's outer edge to the right spacer's, and as far above and below the pixels as the
+ * left spacer is from the first pixel inside.
+ *
+ * It runs as PixelSlider's own layout effect rather than the outline's, because React attaches
+ * the wrapper's ref only after the effects of everything inside it. A slider that mounts with
+ * its warning already on, such as one in a drawer that just opened, would otherwise measure
+ * nothing and never draw the outline.
+ */
+function useZonePlacement(
+  marked: boolean,
+  wrap: RefObject<HTMLDivElement | null>,
+  edgeStart: RefObject<HTMLSpanElement | null>,
+  edgeEnd: RefObject<HTMLSpanElement | null>,
+  overFrom: number,
+): ZonePlacement | null {
+  const [zone, setZone] = useState<ZonePlacement | null>(null);
   useLayoutEffect(() => {
+    if (!marked) return setZone(null);
     const place = () => {
       const box = wrap.current?.getBoundingClientRect();
       const start = edgeStart.current?.getBoundingClientRect();
@@ -201,12 +201,14 @@ function WarningZone({
       // The space between the left spacer and the first pixel inside is the space between pixels.
       const gap = first.left - start.right;
       const reach = gap + start.width;
+      const left = start.left - box.left;
       setZone({
-        left: start.left - box.left,
+        left,
         top: first.top - box.top - reach,
         width: end.right - start.left,
         height: first.height + 2 * reach,
         gap,
+        edgeX: left + start.width / 2,
       });
     };
     place();
@@ -214,7 +216,23 @@ function WarningZone({
     const observer = new ResizeObserver(place);
     observer.observe(wrap.current);
     return () => observer.disconnect();
-  }, [wrap, edgeStart, edgeEnd, overFrom]);
+  }, [marked, wrap, edgeStart, edgeEnd, overFrom]);
+  return zone;
+}
+
+/**
+ * The outline around a slider's pixels past its warning, with the warning sign at the top of its
+ * left edge. The sign is a button whose tap shows why those levels need care, in a tip that a
+ * second tap, a tap anywhere else, or Escape closes. Both sit outside the slider, because a
+ * slider's children are hidden from screen readers and a tap on the slider sets its value. The
+ * outline lets taps through to the slider, and the sign's 44-pixel tap area reaches up from the
+ * sign, so neither covers the pixels. PixelSlider places it (useZonePlacement).
+ */
+function WarningZone({ zone, warning }: { zone: ZonePlacement; warning: SliderWarning }) {
+  const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const tip = useRef<HTMLDivElement>(null);
+  const tipId = useId();
 
   useEffect(() => {
     if (!open) return;
@@ -233,9 +251,7 @@ function WarningZone({
     };
   }, [open]);
 
-  if (zone === null) return null;
-  // The sign and the tip's caret point at the middle of the outline's left edge.
-  const edgeX = zone.left + (edgeStart.current?.offsetWidth ?? 0) / 2;
+  const edgeX = zone.edgeX;
   return (
     <>
       <span
@@ -265,7 +281,7 @@ function WarningZone({
   );
 }
 
-function WarningIcon() {
+export function WarningIcon() {
   return (
     <svg className="slider-mark-icon" viewBox="0 0 12 12" aria-hidden="true" focusable="false">
       <path className="slider-mark-sign" d="M6 0.6 11.6 10.9H0.4Z" />

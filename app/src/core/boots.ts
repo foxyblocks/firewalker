@@ -56,11 +56,9 @@ export interface RemoteView {
   brightness: number;
   maxBrightness: number;
   /**
-   * Whether the soft brightness cap is on. False if any chosen boot has it off, so one tap
-   * caps them all. Undefined when no chosen boot's firmware has a cap, which hides the toggle.
+   * The lowest soft cap among the chosen boots that have one. The remote keeps every cap off
+   * (see `startClient`) and marks the slider's levels past this instead.
    */
-  capped?: boolean;
-  /** The lowest soft cap among the chosen boots that have one, for marking the slider past it. */
   capBrightness?: number;
   /** A pattern just chosen that some boots can't run. */
   needsUpdate?: { pattern: string; sides: Side[] };
@@ -87,6 +85,8 @@ export class BootsStore {
   /** Short-lived connections to unlabeled boots, for Blink. Labeling one adopts it. */
   private readonly blinking = new Map<string, BootClient>();
   private readonly listeners = new Set<() => void>();
+  /** Boots already asked to turn their soft cap off since they last came online. */
+  private readonly uncapping = new WeakSet<BootClient>();
   private needsUpdate: RemoteView["needsUpdate"];
   private version = 0;
 
@@ -125,8 +125,29 @@ export class BootsStore {
   private startClient(boot: KnownBoot): void {
     const client = this.blinking.get(boot.deviceId) ?? new BootClient(this.transport, boot.deviceId);
     this.blinking.delete(boot.deviceId);
-    this.connections.set(boot.side, { client, unsubscribe: client.subscribe(() => this.notify()) });
+    const changed = () => {
+      this.uncap(client);
+      this.notify();
+    };
+    this.connections.set(boot.side, { client, unsubscribe: client.subscribe(changed) });
     client.connect();
+    this.uncap(client);
+  }
+
+  /**
+   * The remote has no cap switch. A boot that reports its soft cap on gets it turned off, once
+   * each time it comes online, so the slider reaches the boot's full range and marks the
+   * levels past the cap rather than stopping at it. Firmware without a cap reports none.
+   */
+  private uncap(client: BootClient): void {
+    const state = client.getState();
+    if (state.link !== "online") {
+      this.uncapping.delete(client);
+      return;
+    }
+    if (state.status?.capped !== true || state.pending.capped !== undefined || this.uncapping.has(client)) return;
+    this.uncapping.add(client);
+    client.setCap(false);
   }
 
   private stopClient(side: Side): void {
@@ -355,13 +376,6 @@ export class BootsStore {
     this.onlineTargets().forEach(({ client }) => client.setBrightness(level));
   }
 
-  /** Turns the soft cap on or off on every chosen boot whose firmware has one. */
-  setCap(on: boolean): void {
-    this.onlineTargets()
-      .filter(({ client }) => client.getState().status?.capped !== undefined)
-      .forEach(({ client }) => client.setCap(on));
-  }
-
   setDragging(dragging: boolean): void {
     this.onlineTargets().forEach(({ client }) => client.setDragging(dragging));
   }
@@ -394,17 +408,12 @@ export class BootsStore {
       const level = state.status!.capBrightness;
       return level === undefined ? [] : [level];
     });
-    const caps = online.flatMap(({ state }) => {
-      const capped = state.pending.capped ?? state.status!.capped;
-      return capped === undefined ? [] : [capped];
-    });
     return {
       chosen: chosen.map(({ side }) => side),
       tiles,
       on: online.some(({ state }) => shownOn(state)),
       brightness: first?.pending.brightness ?? first?.status?.brightness ?? 0,
       maxBrightness: online.length > 0 ? Math.min(...online.map(({ state }) => state.status!.maxBrightness)) : 0,
-      capped: caps.length > 0 ? caps.every((capped) => capped) : undefined,
       capBrightness: capLevels.length > 0 ? Math.min(...capLevels) : undefined,
       needsUpdate: this.needsUpdate,
       offline: sidesWhere((state) => state.link !== "online" && state.link !== "needs-access" && state.link !== "sleeping"),

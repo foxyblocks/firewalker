@@ -8,7 +8,7 @@ import type { Side } from "../core/boots";
 import type { LinkState } from "../core/boot";
 
 export { Toggle } from "./components/Toggle";
-export { PixelSlider, STRIP_PIXELS, type PixelSliderShape, type PixelTone, type SliderWarning } from "./components/PixelSlider";
+export { PixelSlider, STRIP_PIXELS, WarningIcon, type PixelSliderShape, type PixelTone, type SliderWarning } from "./components/PixelSlider";
 export { TiltStrip } from "./components/TiltStrip";
 
 export function LinkDot({ link }: { link?: LinkState }) {

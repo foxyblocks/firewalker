@@ -143,10 +143,12 @@ dd {
 }
 
 .dock {
+  position: relative;
+  z-index: 2;
   flex: none;
-  padding: 12px var(--gap) calc(env(safe-area-inset-bottom) + 12px);
+  padding: 10px var(--gap) calc(env(safe-area-inset-bottom) + 10px);
   border-top: 1px solid var(--line);
-  background: rgb(11 10 9 / 82%);
+  background: var(--night);
 }
 
 .section-head {
@@ -171,25 +173,8 @@ dd {
   font-variant-numeric: tabular-nums;
 }
 
-.brightness-head,
-.cap-control {
-  display: inline-flex;
-  align-items: center;
-}
-
-.brightness-head {
-  gap: 14px;
-}
-
-.cap-control {
-  gap: 6px;
-}
-
-.cap-label {
-  color: var(--ink-quiet);
-  font-size: 11.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.readout-warn {
+  color: var(--wait);
 }
 
 .link-dot {
@@ -556,6 +541,205 @@ dd {
 }
 
 /* ── Dock ──────────────────────────────────────────────────────────────── */
+
+/* Audio, Brightness, and Lights side by side. The first two open the drawer above. */
+.control-bar {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.bar-cell {
+  display: flex;
+  min-width: 0;
+  min-height: 68px;
+  padding: 9px 10px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 6px;
+  text-align: left;
+}
+
+.bar-cell-on {
+  border-color: var(--ember);
+  background: var(--ember-soft);
+  box-shadow: 0 0 18px rgb(255 106 31 / 18%);
+}
+
+.bar-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--ink-quiet);
+  font-family: var(--display);
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.bar-label svg:first-child {
+  flex: none;
+}
+
+.bar-label .chevron {
+  flex: none;
+  margin-left: auto;
+}
+
+.bar-cell-on .bar-label {
+  color: var(--ink);
+}
+
+.bar-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.bar-value .slider-mark-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.bar-power-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.bar-power .bar-value {
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.bar-power-on .bar-label svg {
+  color: var(--ember);
+}
+
+/* The drawer slides up from behind the bar, so the clip hides it until it clears the bar's top. */
+.drawer-clip {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  overflow: hidden;
+  padding: 24px 8px 0;
+  pointer-events: none;
+}
+
+.drawer {
+  display: grid;
+  gap: 12px;
+  max-height: 62vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px var(--gap) 18px;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 20px 20px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -12px 32px rgb(0 0 0 / 55%);
+  pointer-events: auto;
+  animation: drawer-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.drawer.drawer-leaving {
+  animation: drawer-out 160ms ease-in forwards;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: -4px 0 0;
+}
+
+.drawer-head-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drawer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin-right: -10px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-quiet);
+}
+
+.brightness-drawer {
+  display: grid;
+  gap: 4px;
+  padding-top: 14px;
+}
+
+/* Dims the patterns while a drawer is open. A tap on it closes the drawer. */
+.drawer-scrim {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 100vh;
+  background: rgb(0 0 0 / 55%);
+  animation: scrim-in 200ms ease;
+}
+
+.drawer-scrim.drawer-leaving {
+  animation: scrim-out 160ms ease-in forwards;
+}
+
+@keyframes drawer-in {
+  from { transform: translateY(100%); }
+}
+
+@keyframes drawer-out {
+  to { transform: translateY(100%); }
+}
+
+@keyframes scrim-in {
+  from { opacity: 0; }
+}
+
+@keyframes scrim-out {
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer,
+  .drawer.drawer-leaving,
+  .drawer-scrim,
+  .drawer-scrim.drawer-leaving {
+    animation-duration: 1ms;
+  }
+}
 
 .dock-row {
   display: grid;
@@ -1240,57 +1424,40 @@ dd {
 
 /* ── Audio ─────────────────────────────────────────────────────────────── */
 
-.audio-panel {
-  margin-bottom: 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
+.mic-list {
+  display: grid;
+  gap: 14px;
 }
 
-.audio-panel-head {
+.mic {
+  display: grid;
+  gap: 4px;
+}
+
+.mic + .mic {
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.mic-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  width: 100%;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 0;
-  background: none;
-  text-align: left;
 }
 
-.audio-panel-summary {
+.mic-name {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
-  font-size: 12.5px;
+  font-family: var(--display);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.audio-panel-who {
-  overflow: hidden;
-  color: var(--ink-quiet);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.audio-panel-body {
-  display: grid;
-  gap: 8px;
-  padding: 0 12px 10px;
-}
-
-.audio-panel-body .tab {
-  min-height: 36px;
-  font-size: 16px;
-}
-
-.audio-slider .section-head {
-  margin-bottom: 0;
-}
-
-.audio-slider .strip {
+.mic .strip {
   height: 36px;
 }
 
