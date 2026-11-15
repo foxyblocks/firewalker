@@ -1,0 +1,56 @@
+{
+  "format": "firewalker-recipe",
+  "version": 2,
+  "name": "cat-vanish",
+  "description": "Purple and pink stripes flow heel to toe. Music squeezes them tighter. Tilting the boot melts the cat away tail first until only its eyes are left.",
+  "layers": [
+    {
+      "type": "fill",
+      "label": "Stripes",
+      "enabled": true,
+      "palette": ["#6a00ff", "#6a00ff", "#6a00ff", "#ff1f8f", "#ff1f8f", "#ff1f8f"],
+      "spread": "foot",
+      "repeat": { "source": "audioLevel", "min": 2.4, "max": 3.6 },
+      "offset": 0,
+      "scroll": -0.35,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "fill",
+      "label": "Vanish",
+      "enabled": true,
+      "palette": ["#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff", "#ffffff"],
+      "spread": "foot",
+      "repeat": 0.25,
+      "offset": { "source": "tiltAmount", "min": 0.6, "max": 0 },
+      "scroll": 0,
+      "brightness": 1,
+      "blend": "multiply",
+      "opacity": 1
+    },
+    {
+      "type": "band",
+      "label": "Face",
+      "enabled": true,
+      "position": 0,
+      "width": 0.76,
+      "blend": "multiply",
+      "opacity": 1
+    },
+    {
+      "type": "fill",
+      "label": "Eyes",
+      "enabled": true,
+      "palette": ["#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#ffd000", "#000000", "#000000"],
+      "spread": "foot",
+      "repeat": 0.97,
+      "offset": 0,
+      "scroll": 0,
+      "brightness": 1,
+      "blend": "add",
+      "opacity": 1
+    }
+  ]
+}
