@@ -12,6 +12,9 @@ Pattern recipes worth keeping, one `<name>.json` each. The designer in
 | `comet` | Yes | Two neon comets circling faster the more you tilt |
 | `lava-pour` | No | Lava colors crawling around the ring, pooled hard toward the low end, with sparks |
 | `bass-ripple` | Yes | A rainbow volume bar on both sides, sliding downhill with tilt and flashing from 70% to 100% brightness on a stomp |
+| `heat-pour` | No | A heat map that pours downhill: dark blue at the up end, warming through purple, red, and orange to a white-yellow tip at full tilt, with a yellow flash on a stomp |
+| `heat-inferno` | No | The heat map in the reference photo's colors, with a long purple and magenta ramp, ends that glow magenta when flat, and a stomp that bursts hot and cools back in about half a second |
+| `heat-forge` | No | A glowing-metal heat map, steel blue to dull red, orange, and white-hot, with embers twinkling where it's hot and a white-hot flash on a stomp |
 | `starfield` | No | A dim sky with twinkling stars, and an ice-blue flash on a stomp |
 
 [`built-ins.txt`](built-ins.txt) lists the recipes compiled into the firmware, so every boot ships with
