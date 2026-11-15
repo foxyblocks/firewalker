@@ -5,7 +5,7 @@
 // the firmware's replies look, and its checks mirror include/firewalker_recipe_upload.h. Keep it
 // free of the designer's compiler, because the phone's bundle imports it in fake mode.
 
-import { checkCompiledRecipe, compiledCrc, MAX_COMPILED_BYTES, type CompiledCheck } from "./recipeBinary";
+import { checkCompiledRecipe, compiledCrc, fromHex, MAX_COMPILED_BYTES, type CompiledCheck } from "./recipeBinary";
 
 export interface FakeRecipeBootOptions {
   id?: string;
@@ -38,6 +38,9 @@ export class FakeRecipeBoot {
   private unfinished = "";
   // Each uploaded recipe's bytes, by name.
   readonly stored = new Map<string, Uint8Array>();
+  // The patterns built into this boot's firmware, which head the `patterns` list after an upload.
+  // A pretend boot that adds these slots to another (app/src/transport/fakeRecipes.ts) sets its own.
+  builtIns: string[] = ["comet", "fire-stomp", "rainbow-pool"];
   pattern = "rainbow-pool";
   // Skips storing the next `recipe data` line while still reporting success, as if a line went
   // missing, so the following one comes in at the wrong offset.
@@ -115,7 +118,7 @@ export class FakeRecipeBoot {
         const offset = Number(words[2]);
         if (offset !== this.upload.bytes.length) return [recipeAck(false, "wrong-offset", this.upload.bytes.length)];
         if (words[3]!.length % 2 !== 0) return [recipeAck(false, "bad-hex", this.upload.bytes.length)];
-        const incoming = (words[3]!.match(/../g) ?? []).map((pair) => parseInt(pair, 16));
+        const incoming = Array.from(fromHex(words[3]!));
         if (this.loseNextData) {
           this.loseNextData = false;
           return [recipeAck(true, undefined, offset + incoming.length)];
@@ -134,7 +137,7 @@ export class FakeRecipeBoot {
         if (!this.versions.includes(checked.version)) return [recipeAck(false, "unsupported-version")];
         if (checked.name !== name) return [recipeAck(false, "name-mismatch")];
         this.stored.set(name, data);
-        return [recipeAck(true), reply({ t: "patterns", list: [...new Set(["comet", "fire-stomp", "rainbow-pool", ...this.stored.keys()])].sort() })];
+        return [recipeAck(true), reply({ t: "patterns", list: [...new Set([...this.builtIns, ...this.stored.keys()])] })];
       }
       case "cancel":
         this.upload = null;

@@ -12,17 +12,17 @@
 import { FakeRecipeBoot } from "../../../shared/fakeRecipeBoot";
 import type { FakeBoot } from "./fakeBoot";
 
-/** Answers `recipes` and `recipe ...` lines on `boot` from `recipes`, and returns `recipes`. */
+/**
+ * Answers `recipes` and `recipe ...` lines on `boot` from `recipes`, and returns `recipes`. The
+ * pretend boot's own patterns become the slots' built-ins, so both report the same list.
+ */
 export function attachRecipes<T extends FakeRecipeBoot>(boot: FakeBoot, recipes: T): T {
-  const builtIns = [...boot.availablePatterns];
+  recipes.builtIns = [...boot.availablePatterns];
   boot.commandExtension = (line) => {
     if (boot.proto < 3 || !(line === "recipes" || line.startsWith("recipe "))) return null;
     const replies = recipes.handle(line);
-    boot.availablePatterns.splice(0, boot.availablePatterns.length, ...new Set([...builtIns, ...recipes.stored.keys()]));
-    return replies.map((reply) => {
-      const body = JSON.parse(reply) as { t: string };
-      return body.t === "patterns" ? JSON.stringify({ t: "patterns", list: boot.availablePatterns }) : reply;
-    });
+    boot.availablePatterns.splice(0, boot.availablePatterns.length, ...new Set([...recipes.builtIns, ...recipes.stored.keys()]));
+    return replies;
   };
   return recipes;
 }
@@ -31,7 +31,7 @@ export function attachRecipes<T extends FakeRecipeBoot>(boot: FakeBoot, recipes:
  * Recipe slots for the phone build's pretend boots. `&slots=4` gives each boot fewer slots, and
  * `&versions=1` makes their firmware read only recipe version 1, as older firmware does.
  */
-export function attachFakeRecipes(boot: FakeBoot, params: URLSearchParams = new URLSearchParams()): void {
+export function attachFakeRecipes(boot: FakeBoot, params: URLSearchParams): void {
   const slots = params.get("slots");
   const versions = params.get("versions");
   attachRecipes(boot, new FakeRecipeBoot({

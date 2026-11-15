@@ -49,6 +49,16 @@ export function recipeCrc(bytes: Uint8Array): number {
   return (crc ^ 0xffffffff) >>> 0;
 }
 
+/** Bytes as lowercase hex, two digits each: [0x02, 0xab] → "02ab". The catalog's `data` uses it. */
+export function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** Hex back to bytes, two digits each. Callers check the text is even-length hex first. */
+export function fromHex(hex: string): Uint8Array {
+  return Uint8Array.from(hex.match(/../g) ?? [], (pair) => parseInt(pair, 16));
+}
+
 /**
  * The checksum a boot reports for these compiled bytes in a `recipe info` reply: the CRC of
  * everything but the last four bytes, as eight lowercase hex digits, such as "cb75d224".
@@ -58,7 +68,7 @@ export function compiledCrc(bytes: Uint8Array): string {
 }
 
 export type CompiledCheck =
-  | { ok: true; version: number; name: string; crc: string }
+  | { ok: true; version: number; name: string }
   | { ok: false; error: "bad-checksum" | "bad-recipe"; reason: string };
 
 /**
@@ -79,5 +89,5 @@ export function checkCompiledRecipe(bytes: Uint8Array): CompiledCheck {
   const name = String.fromCharCode(...bytes.subarray(2, 2 + nameLength));
   const problem = nameProblem(name);
   if (problem) return { ok: false, error: "bad-recipe", reason: problem };
-  return { ok: true, version: bytes[0]!, name, crc: stored.toString(16).padStart(8, "0") };
+  return { ok: true, version: bytes[0]!, name };
 }

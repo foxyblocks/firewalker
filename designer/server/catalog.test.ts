@@ -13,7 +13,7 @@ import { buildCatalog, catalogJson } from "./catalog";
 import { compileRecipe, decodeRecipe } from "../src/recipe/compile";
 import { recipeToJson } from "../src/recipe/serialize";
 import type { Recipe } from "../src/recipe/types";
-import { compiledCrc } from "../../shared/recipeBinary";
+import { compiledCrc, fromHex, toHex } from "../../shared/recipeBinary";
 
 const PATTERNS_DIR = fileURLToPath(new URL("../../patterns", import.meta.url));
 
@@ -24,8 +24,6 @@ const recipe = (name: string, description = `${name} test`): Recipe => ({
   description,
   layers: [{ type: "fill", enabled: true, palette: ["#ff0000"], spread: "ring", repeat: 1, offset: 0, scroll: 0, brightness: 1, blend: "over", opacity: 1 }],
 });
-
-const hex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
 describe("buildCatalog", () => {
   let dir: string;
@@ -53,7 +51,7 @@ describe("buildCatalog", () => {
       recipeVersion: 1,
       bytes: compiled.bytes.length,
       crc: compiledCrc(compiled.bytes),
-      data: hex(compiled.bytes),
+      data: toHex(compiled.bytes),
       recipe: recipe("apple", "Red all over."),
     });
   });
@@ -87,7 +85,7 @@ describe("the catalog of the real patterns/ folder", () => {
     const catalog = await buildCatalog(PATTERNS_DIR, "test");
     expect(catalog.patterns.length).toBeGreaterThan(0);
     for (const entry of catalog.patterns) {
-      const bytes = Uint8Array.from(entry.data.match(/../g)!.map((pair) => parseInt(pair, 16)));
+      const bytes = fromHex(entry.data);
       const decoded = decodeRecipe(bytes);
       expect(decoded.ok ? decoded.recipe.name : decoded.error).toBe(entry.name);
       expect(bytes[0]).toBe(entry.recipeVersion);

@@ -10,17 +10,15 @@ import { decodeRecipe } from "../recipe/compile";
 import type { CompiledCheck } from "../../../shared/recipeBinary";
 import { RECIPE_VERSION } from "../recipe/types";
 
-export type FakeBootOptions = FakeRecipeBootOptions;
-
 // What the firmware's decoder says about a finished upload, in its error codes.
 function decodeCheck(bytes: Uint8Array): CompiledCheck {
   const decoded = decodeRecipe(bytes);
   if (!decoded.ok) return { ok: false, error: decoded.error.includes("checksum") ? "bad-checksum" : "bad-recipe", reason: decoded.error };
-  return { ok: true, version: decoded.recipe.version, name: decoded.recipe.name, crc: "" };
+  return { ok: true, version: decoded.recipe.version, name: decoded.recipe.name };
 }
 
 export class FakeBoot extends FakeRecipeBoot {
-  constructor(options: FakeBootOptions = {}) {
+  constructor(options: FakeRecipeBootOptions = {}) {
     super({ versions: [1, RECIPE_VERSION], check: decodeCheck, ...options });
   }
 }

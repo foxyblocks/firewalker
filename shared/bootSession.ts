@@ -12,7 +12,7 @@
 // request says which reply it's waiting for and everything else is skipped. Keep this free of the
 // designer's compiler: the phone's bundle imports it.
 
-import { compiledCrc } from "./recipeBinary";
+import { compiledCrc, toHex } from "./recipeBinary";
 import { LineSession, type LineExchange } from "./lineSession";
 
 export type Reply = Record<string, unknown>;
@@ -27,6 +27,8 @@ const REPLY_TIMEOUT_MS = 3000;
 // characters plus its newline. A client waits for each reply, so the buffer is empty when a line starts.
 export const BYTES_PER_BLUETOOTH_LINE = 15;
 export const BYTES_PER_USB_LINE = 7;
+/** The line size for a boot's connection. USB device ids start with "usb:" (usbDeviceId in app/src/transport/transport.ts). */
+export const bytesPerLineFor = (deviceId: string): number => (deviceId.startsWith("usb:") ? BYTES_PER_USB_LINE : BYTES_PER_BLUETOOTH_LINE);
 // The first firmware protocol with the recipe commands.
 export const RECIPE_PROTOCOL = 3;
 // A line over USB can still lose characters now and then, about 0.3% of them on a real boot, and it can
@@ -59,6 +61,9 @@ const isRecipeAck = (reply: Reply) => reply.t === "ack" && reply.cmd === "recipe
 const isUnparsed = (reply: Reply) => reply.t === "ack" && reply.cmd === "unknown";
 const isLineReply = (reply: Reply) => isRecipeAck(reply) || isUnparsed(reply);
 const isPatternAck = (reply: Reply) => reply.t === "ack" && reply.cmd === "pattern";
+
+/** What `recipe info` reports about one upload: its size and checksum, as eight hex digits. */
+export type RecipeInfo = { bytes: number; crc: string };
 
 export type SendProgress = { stage: "checking" } | { stage: "sending"; sent: number; total: number } | { stage: "selecting" };
 export type SendResult = { ok: true; alreadyThere: boolean } | { ok: false; error: string };
@@ -152,7 +157,7 @@ export class BootSession {
 
   // What the boot has uploaded under `name`: its size and checksum, as eight hex digits. Null when there's
   // no upload with that name. Built-ins don't answer `recipe info`, so a built-in reads as null too.
-  async recipeInfo(name: string): Promise<{ bytes: number; crc: string } | null> {
+  async recipeInfo(name: string): Promise<RecipeInfo | null> {
     const info = await this.ask(`recipe info ${name}`, (reply) => isRecipeAck(reply) || (reply.t === "recipe" && reply.name === name));
     return info.t === "recipe" && typeof info.bytes === "number" && typeof info.crc === "string" ? { bytes: info.bytes, crc: info.crc } : null;
   }
@@ -209,8 +214,7 @@ export class BootSession {
       onProgress({ stage: "sending", sent: at, total: bytes.length });
       const reply = await untilAccepted(
         () => {
-          const hex = Array.from(bytes.subarray(at, at + this.bytesPerLine), (byte) => byte.toString(16).padStart(2, "0")).join("");
-          return `recipe data ${at} ${hex}`;
+          return `recipe data ${at} ${toHex(bytes.subarray(at, at + this.bytesPerLine))}`;
         },
         (refused) => {
           if (typeof refused.next === "number") at = refused.next;

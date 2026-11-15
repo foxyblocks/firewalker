@@ -10,7 +10,7 @@
 // Both exist for the desktop app's shared connections (app/src/desktop/bootConnections.ts), where
 // Disconnect keeps the row and Reconnect reopens it.
 
-import { BootSession, BYTES_PER_BLUETOOTH_LINE, BYTES_PER_USB_LINE, type SendProgress } from "../../../shared/bootSession";
+import { BootSession, bytesPerLineFor, type SendProgress } from "../../../shared/bootSession";
 import { devServerPorts, type BootPortsClient, type PortHolder } from "./portHolders";
 import { compileRecipe } from "../recipe/compile";
 import type { Recipe } from "../recipe/types";
@@ -149,7 +149,7 @@ export class BootConnections {
         onData: (text) => session?.receive(text),
         onClosed: () => this.forget(found.deviceId),
       });
-      const bytesPerLine = found.deviceId.startsWith("usb:") ? BYTES_PER_USB_LINE : BYTES_PER_BLUETOOTH_LINE;
+      const bytesPerLine = bytesPerLineFor(found.deviceId);
       session = new BootSession((line) => link.write(line), bytesPerLine);
       const status = await session.status().catch(async (error: unknown) => {
         await link.close().catch(() => undefined);

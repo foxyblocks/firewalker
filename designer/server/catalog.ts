@@ -9,9 +9,7 @@
 import { listPatterns } from "./patternStore.ts";
 import { compileRecipe } from "../src/recipe/compile.ts";
 import { CATALOG_FORMAT, CATALOG_VERSION, type CatalogJson } from "../../shared/patternCatalog.ts";
-import { compiledCrc } from "../../shared/recipeBinary.ts";
-
-const hex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+import { compiledCrc, toHex } from "../../shared/recipeBinary.ts";
 
 /**
  * Reads and compiles every recipe in `dir`. `commit` names the git commit the folder came from, so
@@ -37,7 +35,7 @@ export async function buildCatalog(dir: string, commit: string): Promise<Catalog
       recipeVersion: compiled.bytes[0]!,
       bytes: compiled.bytes.length,
       crc: compiledCrc(compiled.bytes),
-      data: hex(compiled.bytes),
+      data: toHex(compiled.bytes),
       // listPatterns hands back the file's parsed JSON as is, so this is the recipe exactly as kept.
       recipe: pattern.recipe,
     });
