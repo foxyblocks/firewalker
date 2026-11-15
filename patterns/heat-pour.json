@@ -1,0 +1,32 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "heat-pour",
+  "description": "Both sides heat toward the down end, from dark blue to white-yellow at full tilt. A stomp flashes the whole ring in the hottest color.",
+  "layers": [
+    {
+      "type": "fill",
+      "label": "Temperature",
+      "enabled": true,
+      "palette": ["#fff18b", "#ff6809", "#ff1005", "#4c0965", "#080b5a", "#070a51", "#060948", "#05083f", "#040738", "#05083f", "#060948", "#070a51", "#080b5a", "#4c0965", "#ff1005", "#ff6809"],
+      "spread": "foot",
+      "repeat": 0.5,
+      "offset": { "source": "tilt", "min": 0, "max": 0.5 },
+      "scroll": 0,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "flash",
+      "label": "Stomp flash",
+      "enabled": true,
+      "trigger": "any",
+      "palette": ["#fff18b"],
+      "fadeMs": 200,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    }
+  ]
+}

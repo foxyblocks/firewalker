@@ -1,0 +1,56 @@
+{
+  "format": "firewalker-recipe",
+  "version": 1,
+  "name": "heat-forge",
+  "description": "Glowing metal: steel blue at the up end, dull red, orange, then white-hot at the down end, with embers twinkling where it's hot. A stomp flashes white-hot.",
+  "layers": [
+    {
+      "type": "sparkle",
+      "label": "Embers",
+      "enabled": true,
+      "palette": ["#ffffff", "#ffd080"],
+      "density": 90,
+      "fadeMs": 350,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "fill",
+      "label": "Ember mask",
+      "enabled": true,
+      "palette": ["#ffffff", "#b0b0b0", "#505050", "#141414", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#141414", "#505050", "#b0b0b0"],
+      "spread": "foot",
+      "repeat": 0.5,
+      "offset": { "source": "tilt", "min": 0, "max": 0.5 },
+      "scroll": 0,
+      "brightness": 1,
+      "blend": "multiply",
+      "opacity": 1
+    },
+    {
+      "type": "fill",
+      "label": "Temperature",
+      "enabled": true,
+      "palette": ["#ffeba1", "#ff860d", "#ff2901", "#a10501", "#3f0101", "#1e0205", "#0b0319", "#040532", "#030637", "#040532", "#0b0319", "#1e0205", "#3f0101", "#a10501", "#ff2901", "#ff860d"],
+      "spread": "foot",
+      "repeat": 0.5,
+      "offset": { "source": "tilt", "min": 0, "max": 0.5 },
+      "scroll": 0,
+      "brightness": 1,
+      "blend": "max",
+      "opacity": 1
+    },
+    {
+      "type": "flash",
+      "label": "Stomp flash",
+      "enabled": true,
+      "trigger": "any",
+      "palette": ["#ffeba1"],
+      "fadeMs": 200,
+      "brightness": 1,
+      "blend": "over",
+      "opacity": 1
+    }
+  ]
+}
