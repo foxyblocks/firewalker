@@ -4,6 +4,11 @@
 //
 // A stomp is animated in the side view: the boot lifts and drops, and the pattern gets the
 // stomp on the frame it lands, the way the boot's motion sensor feels it.
+//
+// The simulator also works out slosh, the water-in-a-tray signal from slosh.ts. A boot
+// feels its own pushes through the motion sensor. Here the pushes are made up from the two
+// things that move the boot forward: the swing of each walking step, and the Push button,
+// which slides the boot along the ground while held and stops it on release.
 
 import { sideGeometry, topGeometry, type SideGeometry, type TopGeometry } from "./bootGeometry";
 import { drawSideView, drawStripView, drawTopView, type SidePose } from "./draw";
@@ -11,6 +16,7 @@ import { RecipeEngine } from "../engine/engine";
 import { applyBootBrightness, BOOT_BRIGHTNESS } from "../engine/output";
 import type { StripLayout } from "../engine/strip";
 import type { Recipe } from "../recipe/types";
+import { newSloshState, sloshStep } from "./slosh";
 
 export const FRAME_MS = 16;
 const MAX_STEPS_PER_TICK = 8;
@@ -32,6 +38,19 @@ const GAIT_STOMP_STRENGTH = 0.6;
 // The foot leaves the ground after toe off and comes down at the heel strike.
 const GAIT_LIFT_FROM = 0.72;
 const GAIT_LIFT = 34;
+// How far the foot travels in that swing, in meters. The slosh model needs real units,
+// because the boot's motion sensor reports real ones.
+const GAIT_STRIDE_M = 1.2;
+
+const GRAVITY_MPS2 = 9.80665;
+// The angle of a full tilt. A boot's heel and toe poses are whatever its owner held during
+// calibration, so this is a typical value, not a measured one.
+const FULL_TILT_RAD = Math.PI / 6;
+// The Push button: the speed the boot slides at while it is held, how hard it speeds up,
+// and how hard it stops. Stopping is the sharper of the two, like a foot being planted.
+const PUSH_SPEED_MPS = 1.5;
+const PUSH_SPEEDUP_G = 0.5;
+const PUSH_BRAKE_G = 1;
 
 // A stomp's lift and drop, and how long its landing shows. Heights are in the side view's
 // units, where the boot is about 260 tall.
@@ -51,6 +70,8 @@ export interface Canvases {
 
 export interface Readout {
   tilt: number;
+  // The slosh signal this frame: -1 water at the heel, 0 level, +1 at the toe.
+  slosh: number;
   lastStomp: number | null;
   // Counts landings, so the panel can flash its stomp button on each one.
   stomps: number;
@@ -77,6 +98,10 @@ export class Simulation {
   private tilt = 0;
   private manualTilt = 0;
   private audioLevel = 0;
+  private sloshState = newSloshState();
+  private slosh = 0;
+  private pushing = false;
+  private pushSpeed = 0;
   private walking = false;
   private paused = false;
   private speed = 1;
@@ -127,6 +152,21 @@ export class Simulation {
     this.listener = null;
   }
 
+  // Runs exactly one frame and draws it, without the animation clock that start() uses.
+  // The clip recorder (scripts/record-clip.ts) steps time by hand with this and takes a
+  // picture after every call, so a recording can't drop or repeat a frame however slow the
+  // machine is. Returns the same readout start() reports, as of this frame.
+  stepOnce(canvases: Canvases): Readout {
+    this.canvases = canvases;
+    this.step();
+    this.draw();
+    return this.readout();
+  }
+
+  private readout(): Readout {
+    return { tilt: this.tilt, slosh: this.slosh, lastStomp: this.lastStomp, stomps: this.stomps, timeMs: this.timeMs };
+  }
+
   setRecipe(recipe: Recipe): void {
     this.engine.setRecipe(recipe);
   }
@@ -161,6 +201,13 @@ export class Simulation {
     this.gaitMs = 0;
     this.lift = 0;
     if (!walking) this.tilt = this.manualTilt;
+  }
+
+  // The Push button. While held the boot slides forward along the ground, and letting go
+  // stops it. Only slosh feels this: speeding up throws the water back and stopping throws
+  // it forward. The views don't move the boot, since the ground has no marks to move past.
+  setPushing(pushing: boolean): void {
+    this.pushing = pushing;
   }
 
   // Stomps on every beat at this tempo, landing on the beat, or stops with null.
@@ -208,6 +255,9 @@ export class Simulation {
     this.lift = 0;
     this.impactMs = 0;
     this.beatClockMs = 0;
+    this.sloshState = newSloshState();
+    this.slosh = 0;
+    this.pushSpeed = 0;
     if (this.beatMs !== null) this.nextBeatMs = this.dropTiming().riseMs + this.dropTiming().fallMs;
   }
 
@@ -231,7 +281,7 @@ export class Simulation {
 
     if (this.listener && now - this.lastReadout >= READOUT_MS) {
       this.lastReadout = now;
-      this.listener({ tilt: this.tilt, lastStomp: this.lastStomp, stomps: this.stomps, timeMs: this.timeMs });
+      this.listener(this.readout());
     }
   }
 
@@ -242,13 +292,25 @@ export class Simulation {
       stomp = Math.max(stomp ?? 0, strength);
     };
 
+    // The boot's forward acceleration this frame, in m/s^2, for the slosh model.
+    let forwardAccel = 0;
+
     if (this.walking) {
       const before = this.gaitMs;
       this.gaitMs = (this.gaitMs + FRAME_MS) % GAIT_MS;
       if (this.gaitMs < before) land(GAIT_STOMP_STRENGTH);
       this.tilt = gaitTilt(this.gaitMs / GAIT_MS);
       this.lift = gaitLift(this.gaitMs / GAIT_MS) * GAIT_LIFT;
+      forwardAccel += gaitForwardAccel(this.gaitMs / GAIT_MS);
     }
+
+    // The Push button moves the slide speed toward its target, no faster than the boot
+    // can speed up or brake, and the change in speed is the push the water feels.
+    const pushTarget = this.pushing ? PUSH_SPEED_MPS : 0;
+    const pushLimit = (pushTarget > this.pushSpeed ? PUSH_SPEEDUP_G : PUSH_BRAKE_G) * GRAVITY_MPS2 * (FRAME_MS / 1000);
+    const pushSpeed = this.pushSpeed + Math.max(-pushLimit, Math.min(pushLimit, pushTarget - this.pushSpeed));
+    forwardAccel += (pushSpeed - this.pushSpeed) / (FRAME_MS / 1000);
+    this.pushSpeed = pushSpeed;
 
     if (this.beatMs !== null) {
       this.beatClockMs += FRAME_MS;
@@ -280,11 +342,15 @@ export class Simulation {
       this.impactMs = Math.max(0, this.impactMs - FRAME_MS);
     }
     this.timeMs += FRAME_MS;
+    // The water is pulled the opposite way to the boot's own acceleration, and toward
+    // whichever end is tilted down. See slosh.ts for the model.
+    this.slosh = sloshStep(this.sloshState, -forwardAccel / GRAVITY_MPS2, Math.sin(this.tilt * FULL_TILT_RAD), FRAME_MS / 1000);
     this.engine.update({
       tiltFwd: this.tilt,
       stomp: stomp !== null,
       stompStrength: stomp ?? 0,
       audioLevel: this.audioLevel,
+      slosh: this.slosh,
       dt: FRAME_MS,
     });
   }
@@ -327,6 +393,21 @@ export function dropHeight(drop: Drop): number {
 export function gaitLift(phase: number): number {
   if (phase < GAIT_LIFT_FROM) return 0;
   return Math.sin((Math.PI * (phase - GAIT_LIFT_FROM)) / (1 - GAIT_LIFT_FROM));
+}
+
+/**
+ * The foot's forward acceleration through a walking step, in m/s^2. The foot stands still
+ * while it is on the ground. In the swing it speeds up to the middle and slows to a stop at
+ * the heel strike, covering GAIT_STRIDE_M. That is a couple of g each way, which is why a
+ * walking boot sloshes hard: thrown to the heel as the swing starts, and to the toe as the
+ * foot lands.
+ */
+export function gaitForwardAccel(phase: number): number {
+  if (phase < GAIT_LIFT_FROM) return 0;
+  const swingSeconds = ((1 - GAIT_LIFT_FROM) * GAIT_MS) / 1000;
+  // Speed follows half a sine wave over the swing, so the distance covered is the stride.
+  const peakSpeed = (GAIT_STRIDE_M * Math.PI) / (2 * swingSeconds);
+  return ((peakSpeed * Math.PI) / swingSeconds) * Math.cos((Math.PI * (phase - GAIT_LIFT_FROM)) / (1 - GAIT_LIFT_FROM));
 }
 
 function clamp01(value: number): number {

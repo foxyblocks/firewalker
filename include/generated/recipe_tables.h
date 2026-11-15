@@ -9,7 +9,7 @@
 namespace Firewalker {
 
 constexpr uint8_t RECIPE_MIN_VERSION = 1;
-constexpr uint8_t RECIPE_VERSION = 2;
+constexpr uint8_t RECIPE_VERSION = 3;
 constexpr size_t RECIPE_MAX_BYTES = 254;
 constexpr uint8_t RECIPE_MAX_LAYERS = 8;
 constexpr uint8_t RECIPE_MAX_PALETTE_STOPS = 16;
@@ -43,7 +43,13 @@ enum class RecipeSource : uint8_t {
   StompFade = 3,
   Wave = 4,
   AudioLevel = 5,
+  Slosh = 6,
+  SloshAmount = 7,
 };
+
+// The earliest recipe version that may bind each source, in RecipeSource order. The decoder
+// refuses a recipe that binds a source newer than the version it claims.
+constexpr uint8_t RECIPE_SOURCE_VERSIONS[] = {1, 1, 1, 1, 1, 2, 3, 3};
 
 enum class RecipeBlend : uint8_t {
   Over = 0,

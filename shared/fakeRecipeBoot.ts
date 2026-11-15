@@ -53,7 +53,7 @@ export class FakeRecipeBoot {
     this.id = options.id ?? "FA4E";
     this.proto = options.proto ?? 3;
     // The recipe versions current firmware reads (RECIPE_VERSION in designer/src/recipe/types.ts).
-    this.versions = options.versions ?? [1, 2];
+    this.versions = options.versions ?? [1, 2, 3];
     this.slots = options.slots ?? 16;
     this.silent = options.silent ?? false;
     this.receiveBytes = options.receiveBytes ?? Number.POSITIVE_INFINITY;

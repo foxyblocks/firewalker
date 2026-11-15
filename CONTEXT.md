@@ -72,6 +72,12 @@ code, issues, and docs rather than drifting to synonyms.
   lives in `include/firewalker_orientation.h` and is tested off-hardware
   (`pio test -e native`). _Avoid_: "gyro angle" (the gyro alone can't give
   absolute tilt).
+- **Slosh** — imaginary water in a tray along the boot, from -1 (thrown to the heel)
+  through 0 (level) to +1 (thrown to the toe). Moving off throws it back, stopping throws
+  it forward, and a tilt pours it toward the low end. Recipes follow it through the
+  `slosh` and `sloshAmount` sources, and **charon-slosh** is built on it. The model is
+  `include/firewalker_slosh.h` (`imuSlosh()`, `SLOSH_*`), with the simulator's copy in
+  `designer/src/sim/slosh.ts`. _Avoid_: "inertia" or "momentum" for the signal itself.
 - **Hysteresis** — separate arm/release thresholds so one physical event = one
   trigger even when readings wiggle around the threshold (used for IMU stomp
   detection).
@@ -106,7 +112,8 @@ code, issues, and docs rather than drifting to synonyms.
 - **Layer** — one part of a recipe that paints the strip (fill, pool, trail, flash,
   sparkle, chase), combined with the layers below it by its blend.
 - **Knob** — a recipe number that is either fixed or a **binding**: it follows tilt, tilt
-  amount, stomp strength, a fading stomp, or a wave, between a min and a max.
+  amount, stomp strength, a fading stomp, a wave, the audio level, or **slosh**, between a
+  min and a max.
 - **Designer** — the web app in `designer/` that edits recipes and simulates them on a
   drawn boot with a tilt slider and a stomp button. Not the iPhone **remote**.
 - **Remote** — anything controlling running firmware through the line protocol in

@@ -1,16 +1,16 @@
 // The recipe format: a pattern described as data, not code. A recipe is a stack of up to
-// eight layers drawn bottom first, each wired to tilt, stomps, time, or audio. The
+// eight layers drawn bottom first, each wired to tilt, stomps, time, audio, or slosh. The
 // designer saves recipes as JSON in the repo's patterns/ folder, and later firmware will run
 // them from flash. docs/recipe-format.md is the reference; this file and spec.ts are its
 // source of truth in code.
 
 export const RECIPE_FORMAT = "firewalker-recipe";
 export const MIN_RECIPE_VERSION = 1;
-export const RECIPE_VERSION = 2;
-export type RecipeVersion = 1 | typeof RECIPE_VERSION;
+export const RECIPE_VERSION = 3;
+export type RecipeVersion = 1 | 2 | typeof RECIPE_VERSION;
 
 export function isRecipeVersion(value: unknown): value is RecipeVersion {
-  return value === MIN_RECIPE_VERSION || value === RECIPE_VERSION;
+  return typeof value === "number" && Number.isInteger(value) && value >= MIN_RECIPE_VERSION && value <= RECIPE_VERSION;
 }
 
 export const MAX_LAYERS = 8;
@@ -24,9 +24,24 @@ export const MAX_LABEL_LENGTH = 24;
 // A color as "#rrggbb".
 export type Color = string;
 
-// Inputs a knob can follow. Each reads 0..1, and the binding maps that onto min..max.
-export const SOURCES = ["tilt", "tiltAmount", "stompStrength", "stompFade", "wave", "audioLevel"] as const;
+// Inputs a knob can follow. Each reads 0..1, and the binding maps that onto min..max. The
+// order is the binary format's numbering, so new sources only ever go on the end.
+export const SOURCES = ["tilt", "tiltAmount", "stompStrength", "stompFade", "wave", "audioLevel", "slosh", "sloshAmount"] as const;
 export type Source = (typeof SOURCES)[number];
+
+// The format version that first had each source. A recipe is saved as the earliest version
+// that holds everything it uses, so a boot with older firmware still reads every recipe that
+// doesn't need a newer source. Example: binding one knob to `slosh` makes a recipe version 3.
+export const SOURCE_VERSION: Record<Source, RecipeVersion> = {
+  tilt: 1,
+  tiltAmount: 1,
+  stompStrength: 1,
+  stompFade: 1,
+  wave: 1,
+  audioLevel: 2,
+  slosh: 3,
+  sloshAmount: 3,
+};
 
 export interface Binding {
   source: Source;
@@ -149,14 +164,44 @@ export function isBinding(knob: Knob): knob is Binding {
   return typeof knob === "object" && knob !== null;
 }
 
+// The format version that first had the Band layer. Every other layer type is in version 1.
+const BAND_VERSION: RecipeVersion = 2;
+
 /**
  * The earliest firmware format that can run these layers. Old effects retain
- * version 1 bytes, while Band or an audio binding needs version 2. JSON saving
- * also uses this to upgrade drafts made before audio had its own version.
+ * version 1 bytes, Band or an audio binding needs version 2, and a slosh binding
+ * needs version 3. JSON saving also uses this to upgrade drafts made before a
+ * source had its own version.
  */
 export function requiredRecipeVersion(layers: readonly Layer[]): RecipeVersion {
-  const needsAudioFormat = layers.some((layer) =>
-    layer.type === "band" || Object.values(layer).some((value) => isBinding(value) && value.source === "audioLevel"),
-  );
-  return needsAudioFormat ? RECIPE_VERSION : MIN_RECIPE_VERSION;
+  let version: RecipeVersion = MIN_RECIPE_VERSION;
+  const need = (needed: RecipeVersion) => {
+    if (needed > version) version = needed;
+  };
+  for (const layer of layers) {
+    if (layer.type === "band") need(BAND_VERSION);
+  }
+  for (const source of boundSources(layers)) need(SOURCE_VERSION[source]);
+  return version;
+}
+
+/** Every source a knob in these layers follows, one entry per bound knob. */
+export function boundSources(layers: readonly Layer[]): Source[] {
+  const sources: Source[] = [];
+  for (const layer of layers) {
+    for (const value of Object.values(layer)) {
+      // A layer's object-valued fields are its palette, which is a list, and its bound knobs.
+      if (typeof value === "object" && value !== null && !Array.isArray(value)) sources.push((value as Binding).source);
+    }
+  }
+  return sources;
+}
+
+/**
+ * Whether any enabled layer follows the slosh signal. The simulator's clip recorder uses
+ * this to add its push-and-stop scene, which is the only motion that shows slosh off.
+ */
+export function usesSlosh(recipe: Recipe): boolean {
+  const enabled = recipe.layers.filter((layer) => layer.enabled);
+  return boundSources(enabled).some((source) => source === "slosh" || source === "sloshAmount");
 }

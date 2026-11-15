@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "inputFormat": 2,
+  "inputFormat": 3,
   "frames": 400,
   "checkEvery": 16,
   "cases": [
@@ -161,6 +161,24 @@
       "file": "pool--heel-first.bin",
       "recipe": "recipes/pool.json",
       "compiled": "compiled/pool.bin",
+      "layout": "heel-first",
+      "count": 107,
+      "toe": 72,
+      "heel": 19
+    },
+    {
+      "file": "slosh--bench.bin",
+      "recipe": "recipes/slosh.json",
+      "compiled": "compiled/slosh.bin",
+      "layout": "bench",
+      "count": 160,
+      "toe": 52,
+      "heel": 132
+    },
+    {
+      "file": "slosh--heel-first.bin",
+      "recipe": "recipes/slosh.json",
+      "compiled": "compiled/slosh.bin",
       "layout": "heel-first",
       "count": 107,
       "toe": 72,

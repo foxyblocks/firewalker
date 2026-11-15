@@ -70,6 +70,8 @@ export const SOURCE_LABELS: Record<Source, string> = {
   stompFade: "Stomp fade",
   wave: "Wave",
   audioLevel: "Audio level",
+  slosh: "Slosh (heel to toe)",
+  sloshAmount: "Slosh amount",
 };
 
 export const SOURCE_HELP: Record<Source, string> = {
@@ -79,6 +81,8 @@ export const SOURCE_HELP: Record<Source, string> = {
   stompFade: "Max at a stomp, falling back to min over the fade time.",
   wave: "A smooth loop between min and max.",
   audioLevel: "Follows the audio meter above the boot. Min in silence or when stopped, max at full level. Choose a source and click Listen.",
+  slosh: "Moves like water in a tray on the boot. Speeding up throws it to the heel (min), stopping throws it to the toe (max), and it settles halfway. Hold Push or press Walk to try it.",
+  sloshAmount: "Min while the water sits level, max when it is thrown to either end.",
 };
 
 // Limits for the extra numbers a binding carries.

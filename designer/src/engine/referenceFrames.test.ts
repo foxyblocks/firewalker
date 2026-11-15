@@ -85,16 +85,25 @@ describe("reference frames", () => {
     const bytes = buildReferenceFiles(RECIPES).get("inputs.bin")!;
     const view = new DataView(bytes.buffer);
     expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe("FWRI");
-    expect(view.getUint16(4, true)).toBe(2);
+    expect(view.getUint16(4, true)).toBe(3);
     expect(view.getUint16(6, true)).toBe(REFERENCE_FRAMES);
+    expect(bytes.length).toBe(8 + REFERENCE_FRAMES * 13);
     inputs.forEach((input, i) => {
-      const at = 8 + i * 12;
+      const at = 8 + i * 13;
       expect(view.getFloat32(at, true)).toBe(input.tiltFwd);
       expect(view.getFloat32(at + 4, true)).toBe(input.stompStrength);
       expect(view.getUint16(at + 8, true)).toBe(input.dt);
       expect(view.getUint8(at + 10)).toBe(input.stomp ? 1 : 0);
       expect(Math.fround(view.getUint8(at + 11) / 255)).toBe(input.audioLevel);
+      expect(Math.fround(view.getInt8(at + 12) / 127)).toBe(input.slosh);
     });
+  });
+
+  it("have a slosh script that reaches the heel, the toe, and level", () => {
+    const slosh = referenceInputs().map((input) => input.slosh ?? 0);
+    expect(Math.min(...slosh)).toBe(-1);
+    expect(Math.max(...slosh)).toBe(1);
+    expect(slosh.some((value) => value === 0)).toBe(true);
   });
 
   it("have a script that stomps flat, toe down, and heel down, with uneven frame times", () => {

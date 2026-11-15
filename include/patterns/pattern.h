@@ -5,8 +5,8 @@
 // A Pattern renders a runtime-selectable recipe onto the strip. RecipePattern connects
 // the pure recipe engine to the hardware, and the app loads a built-in or uploaded recipe
 // when the remote selects its name. Each frame the app feeds it the fused orientation, whether a
-// stomp fired this tick, the live sound level, and elapsed time, and the pattern renders to the
-// shared strip. Brightness belongs to the caller, so patterns never set it. See
+// stomp fired this tick, the live sound level, the slosh signal, and elapsed time, and the
+// pattern renders to the shared strip. Brightness belongs to the caller, so patterns never set it. See
 // ADR-0002.
 
 namespace Firewalker {
@@ -17,6 +17,7 @@ struct PatternInput {
   float         stompStrength; // 0..1 force of that stomp (valid when stomp is true)
   unsigned long dt;            // ms since the previous update
   float         audioLevel = 0.0f; // normalized 0..1 sound level; from the onboard microphone service
+  float         slosh = 0.0f;      // where the imaginary water sits: -1 heel, 0 level, +1 toe (imuSlosh)
 };
 
 class Pattern {

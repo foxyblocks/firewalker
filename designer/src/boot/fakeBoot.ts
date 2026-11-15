@@ -19,7 +19,8 @@ function decodeCheck(bytes: Uint8Array): CompiledCheck {
 
 export class FakeBoot extends FakeRecipeBoot {
   constructor(options: FakeRecipeBootOptions = {}) {
-    super({ versions: [1, RECIPE_VERSION], check: decodeCheck, ...options });
+    // Every recipe version up to the newest, which is what firmware built from this checkout reads.
+    super({ versions: Array.from({ length: RECIPE_VERSION }, (_, i) => i + 1), check: decodeCheck, ...options });
   }
 }
 

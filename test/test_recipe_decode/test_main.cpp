@@ -71,7 +71,7 @@ static RecipeDecodeResult decode(const std::vector<uint8_t>& bytes) {
 
 static void test_every_compiled_recipe_decodes() {
   const std::vector<std::string> names = compiledNames();
-  TEST_ASSERT_GREATER_OR_EQUAL_MESSAGE(11, names.size(), "Compiled recipes are missing. Tests run from the project root.");
+  TEST_ASSERT_GREATER_OR_EQUAL_MESSAGE(12, names.size(), "Compiled recipes are missing. Tests run from the project root.");
   for (const std::string& name : names) {
     TEST_ASSERT_EQUAL_MESSAGE(RecipeDecodeResult::Ok, decode(readCompiled(name)), name.c_str());
     TEST_ASSERT_EQUAL_STRING(name.c_str(), recipe.name);
@@ -138,7 +138,7 @@ static void test_refuses_another_version() {
   TEST_ASSERT_EQUAL(RecipeDecodeResult::BadVersion, decode(bytes));
 }
 
-static void test_reads_both_versions_and_refuses_mislabeled_extensions() {
+static void test_reads_every_version_and_refuses_mislabeled_extensions() {
   std::vector<uint8_t> old = readCompiled("pool");
   TEST_ASSERT_EQUAL_UINT8(1, old[0]);
   TEST_ASSERT_EQUAL(RecipeDecodeResult::Ok, decode(old));
@@ -157,6 +157,24 @@ static void test_reads_both_versions_and_refuses_mislabeled_extensions() {
   audio[0] = 1;
   fixChecksum(audio);
   TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(audio));
+
+  // Version 3 adds the two slosh sources. A recipe that claims an earlier version can't bind them.
+  std::vector<uint8_t> slosh = readCompiled("slosh");
+  TEST_ASSERT_EQUAL_UINT8(3, slosh[0]);
+  TEST_ASSERT_EQUAL(RecipeDecodeResult::Ok, decode(slosh));
+  slosh[0] = 2;
+  fixChecksum(slosh);
+  TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(slosh));
+  for (const RecipeSource source : {RecipeSource::Slosh, RecipeSource::SloshAmount}) {
+    std::vector<uint8_t> bound = recipeNamedAb({(uint8_t)RecipeLayerType::Pool, 1, (uint8_t)source, 0, 0, 0xFF, 0x7F, 3, 0xFF, 0x7F});
+    bound[0] = 3;
+    fixChecksum(bound);
+    TEST_ASSERT_EQUAL(RecipeDecodeResult::Ok, decode(bound));
+    TEST_ASSERT_EQUAL(source, recipe.layers[0].knobs[RecipeSlot::PoolBaseline].source);
+    bound[0] = 2;
+    fixChecksum(bound);
+    TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(bound));
+  }
 }
 
 static void test_refuses_a_recipe_cut_short_even_with_a_good_checksum() {
@@ -196,7 +214,7 @@ static void test_refuses_unknown_types_options_and_sources() {
   TEST_ASSERT_EQUAL(RecipeDecodeResult::Ok, decode(recipeNamedAb({pool, 0, 0, 0, 3, 0, 0})));
   TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(recipeNamedAb({(uint8_t)RecipeLayerType::Band + 1, 0})));
   TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(recipeNamedAb({pool, 0, 0, 0, 4, 0, 0})));
-  TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(recipeNamedAb({pool, 1, 6, 0, 0, 0, 0, 0, 0, 0})));
+  TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(recipeNamedAb({pool, 1, (uint8_t)RecipeSource::SloshAmount + 1, 0, 0, 0, 0, 0, 0, 0})));
   TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(recipeNamedAb({fill, 0, 0})));
   TEST_ASSERT_EQUAL(RecipeDecodeResult::BadRecipe, decode(recipeNamedAb({fill, 0, RECIPE_MAX_PALETTE_STOPS + 1})));
 }
@@ -238,7 +256,7 @@ static void assertRecipeIsSafe() {
           const RecipeKnob& knob = layer.knobs[field.slot];
           TEST_ASSERT_TRUE(knob.min >= field.min && knob.min <= field.max);
           TEST_ASSERT_TRUE(knob.max >= field.min && knob.max <= field.max);
-          TEST_ASSERT_TRUE((uint8_t)knob.source <= (uint8_t)RecipeSource::AudioLevel);
+          TEST_ASSERT_TRUE((uint8_t)knob.source < sizeof(RECIPE_SOURCE_VERSIONS));
           if (knob.bound && knob.source == RecipeSource::Wave) TEST_ASSERT_TRUE(knob.ms >= RECIPE_WAVE_PERIOD_MIN);
           if (knob.bound && knob.source == RecipeSource::StompFade) TEST_ASSERT_TRUE(knob.ms >= RECIPE_STOMP_FADE_MIN);
           break;
@@ -306,7 +324,7 @@ int main() {
   RUN_TEST(test_refuses_the_wrong_size);
   RUN_TEST(test_refuses_a_damaged_byte);
   RUN_TEST(test_refuses_another_version);
-  RUN_TEST(test_reads_both_versions_and_refuses_mislabeled_extensions);
+  RUN_TEST(test_reads_every_version_and_refuses_mislabeled_extensions);
   RUN_TEST(test_refuses_a_recipe_cut_short_even_with_a_good_checksum);
   RUN_TEST(test_refuses_extra_bytes);
   RUN_TEST(test_refuses_bad_names);

@@ -10,6 +10,7 @@
 
 #include "firewalker_calibration.h"
 #include "firewalker_orientation.h"
+#include "firewalker_slosh.h"
 #include "firewalker_strip_map.h"
 
 // ── Serial ──────────────────────────────────────────────────────────────
@@ -161,6 +162,22 @@ constexpr Firewalker::OrientationLimits ORIENTATION_LIMITS = {
     IMU_TILT_DEADZONE_DEG,
     10.0f,  // a heel or toe pose must sit at least this far from neutral
     30.0f,  // maximum disagreement between heel/toe rotation planes
+};
+
+// ── Slosh ────────────────────────────────────────────────────────────────
+// The imaginary water behind the slosh recipe sources (include/firewalker_slosh.h), which
+// charon-slosh is built on. The designer's simulator runs the same water from the SLOSH
+// numbers in designer/src/sim/slosh.ts, so change both together. These are first guesses
+// made in the simulator, to tune on a worn boot (see open-questions.md): raise the push
+// gain if a shuffle barely moves the fog, and lower it if every step pins it at an end.
+constexpr float SLOSH_FREQUENCY_HZ     = 1.6f;   // rocks back and forth this many times a second
+constexpr float SLOSH_DAMPING          = 0.35f;  // 1 would settle with no overshoot at all
+constexpr float SLOSH_PUSH_GAIN        = 1.5f;   // how far one g of speeding up or stopping throws it
+constexpr float SLOSH_POUR_GAIN        = 0.6f;   // how far one g of gravity along the foot pours it
+constexpr float SLOSH_MAX_PULL         = 2.5f;   // ceiling, so one heel strike can't pin it for seconds
+constexpr float SLOSH_MAX_STEP_SECONDS = 0.05f;  // a stalled loop counts as this much time
+constexpr Firewalker::SloshParams SLOSH_PARAMS = {
+    SLOSH_FREQUENCY_HZ, SLOSH_DAMPING, SLOSH_PUSH_GAIN, SLOSH_POUR_GAIN, SLOSH_MAX_PULL, SLOSH_MAX_STEP_SECONDS,
 };
 
 // How a capture finds a pose in a hold, which is judged as a whole at the end of the window

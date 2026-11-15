@@ -202,6 +202,8 @@ static void test_recipe_replies_are_well_formed() {
   TEST_ASSERT_EQUAL_STRING("{\"t\":\"recipes\",\"versions\":[1],\"slots\":16,\"free\":16,\"list\":[]}", line);
   formatRecipes(line, sizeof(line), 2, slots, 16);
   TEST_ASSERT_EQUAL_STRING("{\"t\":\"recipes\",\"versions\":[1,2],\"slots\":16,\"free\":16,\"list\":[]}", line);
+  formatRecipes(line, sizeof(line), 3, slots, 16);
+  TEST_ASSERT_EQUAL_STRING("{\"t\":\"recipes\",\"versions\":[1,2,3],\"slots\":16,\"free\":16,\"list\":[]}", line);
   slots[3].used = true;
   copyPatternName(slots[3].name, "comet");
   slots[3].size = 74;

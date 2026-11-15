@@ -1,5 +1,5 @@
-// Runs a recipe one frame at a time using fused tilt, stomps, live audio level, and elapsed
-// time. It draws every layer into one frame of pixel colors and mirrors the firmware's
+// Runs a recipe one frame at a time using fused tilt, stomps, live audio level, slosh, and
+// elapsed time. It draws every layer into one frame of pixel colors and mirrors the firmware's
 // Pattern interface (include/patterns/pattern.h). The pool and down-point
 // trail math are ports of src/patterns/flow.cpp, so a future C++ engine can be checked against
 // this one frame for frame.
@@ -31,6 +31,7 @@ export interface EngineInput {
   stomp: boolean; // a stomp fired since the previous frame
   stompStrength: number; // 0..1, valid when stomp is true
   audioLevel?: number; // 0..1 from the audio meter; omitted inputs act as silence
+  slosh?: number; // -1 water thrown to the heel, 0 level, +1 thrown to the toe; omitted inputs act as level
   dt: number; // ms since the previous frame
 }
 
@@ -72,6 +73,7 @@ export class RecipeEngine {
   private timeMs = 0;
   private tilt = 0;
   private audioLevel = 0;
+  private slosh = 0;
   private lastStrength = 0;
   private sinceStompMs = Number.POSITIVE_INFINITY;
   private rng = RNG_SEED;
@@ -96,6 +98,7 @@ export class RecipeEngine {
     this.timeMs = 0;
     this.tilt = 0;
     this.audioLevel = 0;
+    this.slosh = 0;
     this.lastStrength = 0;
     this.sinceStompMs = Number.POSITIVE_INFINITY;
     this.rng = RNG_SEED;
@@ -125,6 +128,9 @@ export class RecipeEngine {
     // last loud frame. Motion-only callers and reference recordings stay silent.
     const audioLevel = input.audioLevel ?? 0;
     this.audioLevel = Number.isFinite(audioLevel) ? clamp01(audioLevel) : 0;
+    // Slosh is live too: callers that don't model it leave the water level.
+    const slosh = input.slosh ?? 0;
+    this.slosh = Number.isFinite(slosh) ? Math.max(-1, Math.min(1, slosh)) : 0;
     if (input.stomp) {
       this.lastStrength = Math.max(0, Math.min(1, input.stompStrength));
       this.sinceStompMs = 0;
@@ -156,6 +162,10 @@ export class RecipeEngine {
         return Math.abs(this.tilt);
       case "audioLevel":
         return this.audioLevel;
+      case "slosh":
+        return (this.slosh + 1) / 2;
+      case "sloshAmount":
+        return Math.abs(this.slosh);
       case "stompStrength":
         return this.lastStrength;
       case "stompFade": {

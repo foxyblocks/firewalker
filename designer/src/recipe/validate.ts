@@ -8,7 +8,9 @@ import {
   MAX_LABEL_LENGTH,
   MAX_LAYERS,
   MAX_PALETTE_STOPS,
+  MIN_RECIPE_VERSION,
   RECIPE_FORMAT,
+  RECIPE_VERSION,
   isRecipeVersion,
   SOURCES,
   type LayerType,
@@ -30,7 +32,7 @@ export function validateRecipe(value: unknown): Validation {
   if (!isObject(value)) return { ok: false, errors: ["A recipe must be a JSON object."] };
 
   if (value.format !== RECIPE_FORMAT) errors.push(`format must be "${RECIPE_FORMAT}".`);
-  if (!isRecipeVersion(value.version)) errors.push("version must be 1 or 2.");
+  if (!isRecipeVersion(value.version)) errors.push(`version must be a whole number from ${MIN_RECIPE_VERSION} to ${RECIPE_VERSION}.`);
 
   if (typeof value.name !== "string") {
     errors.push("name must be a string.");

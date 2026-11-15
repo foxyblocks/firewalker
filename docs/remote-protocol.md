@@ -298,7 +298,7 @@ selections resume as `rainbow-pool` and `fire-stomp`, including the remembered p
 The list is alphabetical, with uploaded and built-in names appearing once each.
 
 ```json
-{"t":"recipes","versions":[1,2],"slots":16,"free":15,"list":["comet"]}
+{"t":"recipes","versions":[1,2,3],"slots":16,"free":15,"list":["comet"]}
 {"t":"recipe","name":"comet","bytes":74,"crc":"cb75d224"}
 ```
 
