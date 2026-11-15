@@ -86,6 +86,13 @@ Saving one also updates `include/generated/recipe_builtins.h`, so commit the two
 one updates the list, and deleting one takes it off. To add or remove a built-in, edit that file and
 run `bun run build-recipes`.
 
+Merging a recipe to `main` is enough to get it onto the boots. The Publish pattern catalog workflow
+compiles every recipe in `patterns/` into one catalog file on the CDN, and the iPhone app syncs it
+to each boot as it connects ([ADR-0007](../docs/adr/0007-sync-patterns-from-main.md)).
+`bun run build-catalog <file>` writes the same file locally. A recipe you send from here is an
+experiment copy: the phone leaves it alone unless it reuses a pattern name from `main`, in which
+case it goes back to main's version the next time that boot connects to the phone.
+
 The dev server only listens on localhost. It only writes `.json` files with valid recipe
 names, inside the patterns folder, and checks each recipe before writing it. To try things
 without touching the repo, point it somewhere else:

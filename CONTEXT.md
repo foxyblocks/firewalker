@@ -93,6 +93,16 @@ code, issues, and docs rather than drifting to synonyms.
   so every boot ships with it.
 - **Uploaded recipe** — a recipe stored in one boot's flash, in one of its **slots**, sent over
   BLE or USB with no firmware build. One can hide a built-in of the same name on that boot.
+- **Pattern catalog** — every recipe in `patterns/` on main, compiled, in one JSON file the
+  Publish pattern catalog workflow puts on the CDN after each push to main. The iPhone app
+  downloads it; boots never see it directly (ADR-0007). _Avoid_: "manifest", "bundle".
+- **Canonical pattern** — a pattern from the catalog, so main's version. Main is canonical: a
+  boot gets main's version of any pattern main has, and main's pattern wins a name.
+- **Experiment copy** — a recipe sent to a boot from the designer, or later a person's own copy
+  on the phone. Pattern sync leaves one alone unless it reuses a canonical pattern's name.
+- **Pattern sync** — what the iPhone app does when a boot connects: upload the canonical patterns
+  it lacks or has a different version of, and delete only the uploads this phone synced earlier
+  that main has since dropped. It never selects a pattern.
 - **Layer** — one part of a recipe that paints the strip (fill, pool, trail, flash,
   sparkle, chase), combined with the layers below it by its blend.
 - **Knob** — a recipe number that is either fixed or a **binding**: it follows tilt, tilt

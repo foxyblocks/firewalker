@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "reference-frames": "UPDATE_REFERENCE_FRAMES=1 vitest run src/engine/referenceFrames.test.ts",
     "build-recipes": "bun run scripts/build-recipes.ts",
+    "build-catalog": "bun run scripts/build-catalog.ts",
     "budget-recipes": "bun run scripts/budget-recipes.ts"
   },
   "dependencies": {

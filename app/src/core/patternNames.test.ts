@@ -9,4 +9,9 @@ describe("patternDisplay", () => {
     expect(patternDisplay("pattern-4")).toEqual({ name: "Pattern 4" });
     expect(patternDisplay("ice_storm")).toEqual({ name: "Ice storm" });
   });
+
+  it("uses main's description for a pattern with no shorter one here", () => {
+    expect(patternDisplay("lava-pour", "Lava pours downhill.")).toEqual({ name: "Lava pour", description: "Lava pours downhill." });
+    expect(patternDisplay("fire-stomp", "A long catalog sentence.")).toEqual({ name: "Fire stomp", description: "Stomps launch fire" });
+  });
 });

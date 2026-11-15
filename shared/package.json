@@ -1,0 +1,5 @@
+{
+  "//": "Code shared by app/ and designer/. Marked as ES modules so Vite can load it from its config files.",
+  "private": true,
+  "type": "module"
+}

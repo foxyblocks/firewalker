@@ -7,7 +7,6 @@ import {
   MAX_DESCRIPTION_LENGTH,
   MAX_LABEL_LENGTH,
   MAX_LAYERS,
-  MAX_NAME_LENGTH,
   MAX_PALETTE_STOPS,
   RECIPE_FORMAT,
   isRecipeVersion,
@@ -16,23 +15,15 @@ import {
   type Recipe,
 } from "./types.ts";
 
+import { nameProblem, RESERVED_NAMES } from "../../../shared/recipeBinary.ts";
+
 export type Validation = { ok: true; recipe: Recipe } | { ok: false; errors: string[] };
 
-const NAME_PATTERN = /^[a-z][a-z0-9-]*$/;
 const COLOR_PATTERN = /^#[0-9a-f]{6}$/;
-// `off` is a remote command value, not a pattern. Every other legal name can be a recipe,
-// including the retired names `flow` and `fire-trail`. generateTables.ts carries this rule into
-// the firmware decoder, so uploading a tweaked built-in follows the same rules as saving it.
-export const RESERVED_NAMES: ReadonlySet<string> = new Set(["off"]);
 
-// Returns a reason the name can't be used, or null if it's fine.
-export function nameProblem(name: string): string | null {
-  if (name.length === 0) return "Name is empty.";
-  if (name.length > MAX_NAME_LENGTH) return `Name is longer than ${MAX_NAME_LENGTH} characters.`;
-  if (!NAME_PATTERN.test(name)) return "Name must start with a letter and use only a-z, 0-9, and hyphens.";
-  if (RESERVED_NAMES.has(name)) return `"${name}" is reserved.`;
-  return null;
-}
+// The name rule lives in shared/recipeBinary.ts, because the iPhone app checks names in the
+// pattern catalog without the designer.
+export { nameProblem, RESERVED_NAMES };
 
 export function validateRecipe(value: unknown): Validation {
   const errors: string[] = [];

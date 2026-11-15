@@ -7,7 +7,7 @@
 import { BootsStore, type Side } from "../core/boots";
 import type { BootClient } from "../core/boot";
 import type { PickMethod } from "../transport/transport";
-import { BootSession, BYTES_PER_BLUETOOTH_LINE, BYTES_PER_USB_LINE, RECIPE_PROTOCOL, type SendProgress } from "../../../designer/src/boot/bootSession";
+import { BootSession, bytesPerLineFor, RECIPE_PROTOCOL, type SendProgress } from "../../../shared/bootSession";
 import type { ConnectedBoot, ConnectionsState, DesignerBoots } from "../../../designer/src/boot/connections";
 import { devServerPorts, type BootPortsClient, type PortHolder } from "../../../designer/src/boot/portHolders";
 import { compileRecipe } from "../../../designer/src/recipe/compile";
@@ -141,8 +141,7 @@ export class SharedBootConnections implements DesignerBoots {
   private async exchange<T>(id: string, operation: (session: BootSession) => Promise<T>): Promise<T> {
     const client = this.client(id);
     if (!client) throw new Error("This boot is no longer labeled.");
-    return client.runExclusive((exchange) => operation(new BootSession(exchange,
-      id.startsWith("usb:") ? BYTES_PER_USB_LINE : BYTES_PER_BLUETOOTH_LINE)));
+    return client.runExclusive((exchange) => operation(new BootSession(exchange, bytesPerLineFor(id))));
   }
 
   private async refreshUploads(id: string): Promise<void> {

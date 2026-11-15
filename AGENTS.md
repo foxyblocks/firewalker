@@ -50,12 +50,20 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
 - `app/` — the Capacitor iPhone remote (React + TypeScript, Bun). Each boot has one
   Configuration/Diagnostics detail screen. Shared controls live in `app/src/ui/components/`,
   with their Storybook stories alongside them and config in `app/.storybook/`.
-  Reuse those controls when changing the remote. See `app/README.md`.
+  Reuse those controls when changing the remote. The iPhone build also runs **pattern sync**:
+  it downloads main's **pattern catalog** and uploads it to each boot as it connects
+  (`app/src/core/patternLibrary.ts`, `syncPlan.ts`, `patternSync.ts`; ADR-0007). See `app/README.md`.
 - `designer/` — the pattern designer: a web app that edits and simulates pattern recipes
   (React + TypeScript, Bun, port 5174). Its `src/engine/strip.ts` ports
   `firewalker_strip_map.h`, so a change to the strip map changes both. See `designer/README.md`.
 - `patterns/` — kept pattern recipes, one JSON file each. Format: `docs/recipe-format.md`.
-  `built-ins.txt` lists the ones compiled into the firmware.
+  `built-ins.txt` lists the ones compiled into the firmware. Each push to `main` publishes all of
+  them as the pattern catalog (`.github/workflows/publish-catalog.yml`, built by
+  `designer/server/catalog.ts`) to `https://cdn.foxyblocks.com/files/firewalker-catalog.json`.
+- `shared/` — code both `app/` and `designer/` import, with no designer compiler in it so the
+  phone's bundle can take it: the line protocol framing (`lineSession.ts`), the recipe upload
+  exchange (`bootSession.ts`), compiled-recipe checks and the CRC (`recipeBinary.ts`), the
+  catalog format (`patternCatalog.ts`), and the pretend boot's recipe slots (`fakeRecipeBoot.ts`).
 - `include/firewalker_recipe.h`, `firewalker_recipe_engine.h`, `firewalker_recipe_upload.h`,
   `firewalker_pattern_list.h` — pure recipe logic that `test/` exercises. The engine is a port of
   `designer/src/engine/engine.ts`, and `test/fixtures/recipe-frames/` keeps the two matching.
