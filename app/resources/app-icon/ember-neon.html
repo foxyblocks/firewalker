@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Firewalker app icon</title>
+<!--
+  Draws the iPhone app icon and launch screen ("Ember Neon"): the LED strip ring around
+  the foot, seen from above, white-hot at the heel and cooling to red at the toe.
+  Open this file in a browser, save each PNG, and replace the files listed in
+  app/README.md under "App icon and launch screen".
+-->
+<style>
+  body { margin: 0; padding: 24px; background: #0b0a09; color: #f4ede2; font: 14px/1.5 ui-monospace, Menlo, monospace; }
+  h1 { margin: 0 0 4px; font-size: 20px; }
+  p { margin: 0 0 24px; color: #a79d90; max-width: 70ch; }
+  .row { display: flex; flex-wrap: wrap; gap: 32px; align-items: flex-start; }
+  figure { margin: 0; display: grid; gap: 10px; justify-items: start; }
+  canvas { width: 256px; height: 256px; }
+  #icon { border-radius: 57px; }
+  #splash { border-radius: 8px; outline: 1px solid #2e2a25; }
+  figcaption { color: #a79d90; }
+  button { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid #ff6a1f; background: #1d1a17; color: #f4ede2; cursor: pointer; }
+</style>
+<h1>Ember Neon</h1>
+<p>The Firewalker app icon and launch screen, drawn in code so the colors and shape can be tuned here.</p>
+<div class="row">
+  <figure>
+    <canvas id="icon" width="1024" height="1024"></canvas>
+    <figcaption>App icon, 1024 px</figcaption>
+    <button type="button" data-canvas="icon" data-file="AppIcon-512@2x.png">Save AppIcon-512@2x.png</button>
+  </figure>
+  <figure>
+    <canvas id="splash" width="2732" height="2732"></canvas>
+    <figcaption>Launch screen, 2732 px (iOS crops it to fill the screen)</figcaption>
+    <button type="button" data-canvas="splash" data-file="splash-2732x2732.png">Save splash-2732x2732.png</button>
+  </figure>
+</div>
+<script>
+const NIGHT = '#0b0a09';
+
+// The strip ring around the foot in a 1024 x 1024 box, toe at the top, heel at the bottom.
+const SOLE =
+  'M 494 116 C 630 110 724 196 728 330 C 732 440 690 500 678 580 C 668 650 680 720 672 790 ' +
+  'C 662 870 598 908 518 908 C 438 908 374 870 364 790 C 356 722 366 650 356 582 ' +
+  'C 344 500 296 438 296 332 C 296 206 372 122 494 116 Z';
+
+// Fire ramp: 0 is a cold ember, 1 is white hot.
+const FIRE = [
+  [0.0, [70, 8, 4]],
+  [0.25, [170, 24, 8]],
+  [0.5, [255, 106, 31]],
+  [0.75, [255, 181, 46]],
+  [0.9, [255, 228, 140]],
+  [1.0, [255, 250, 232]],
+];
+function fire(t, alpha = 1) {
+  t = Math.max(0, Math.min(1, t));
+  for (let i = 1; i < FIRE.length; i++) {
+    if (t <= FIRE[i][0]) {
+      const [t0, c0] = FIRE[i - 1];
+      const [t1, c1] = FIRE[i];
+      const k = (t - t0) / (t1 - t0);
+      const [r, g, b] = c0.map((v, j) => Math.round(v + (c1[j] - v) * k));
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+  }
+}
+
+// Points evenly spaced along the ring.
+function ringPoints(count) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', SOLE);
+  svg.appendChild(path);
+  svg.style.position = 'absolute';
+  document.body.appendChild(svg);
+  const length = path.getTotalLength();
+  const points = [];
+  for (let i = 0; i <= count; i++) points.push(path.getPointAtLength(Math.min(length, (i / count) * length)));
+  svg.remove();
+  return points;
+}
+
+// 0 at the toe, 1 at the heel: the light pools toward the heel.
+const heat = (p) => Math.pow(Math.max(0, (p.y - 116) / 792), 1.6);
+
+// Draws the glowing ring on a transparent canvas: the 1024 box plus PAD on every side, so
+// the halo isn't cut off.
+//
+// The look comes from stroking the ring as hundreds of short, overlapping segments, each
+// blurred on its own and added on top of the others, so the overlaps pile up into a
+// bright halo. Blurring is slow on a big canvas, so each segment is blurred on a small
+// tile just big enough for its glow, then added to the layer.
+const PAD = 160;
+function ringLayer() {
+  const size = 1024 + PAD * 2;
+  const layer = document.createElement('canvas');
+  layer.width = layer.height = size;
+  const ctx = layer.getContext('2d');
+  const tile = document.createElement('canvas');
+  const tc = tile.getContext('2d');
+  const points = ringPoints(420);
+
+  ctx.translate(PAD, PAD);
+  const pool = ctx.createRadialGradient(518, 830, 0, 518, 800, 280);
+  pool.addColorStop(0, 'rgba(255,140,40,0.32)');
+  pool.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = pool;
+  ctx.fillRect(-PAD, -PAD, size, size);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.lineCap = 'round';
+
+  const pass = (width, blur, colorAt) => {
+    const margin = Math.ceil(width / 2 + blur * 3) + 2;
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1];
+      if (!blur) {
+        ctx.lineWidth = width;
+        ctx.strokeStyle = colorAt(a);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        continue;
+      }
+      const x0 = Math.floor(Math.min(a.x, b.x)) - margin;
+      const y0 = Math.floor(Math.min(a.y, b.y)) - margin;
+      const w = Math.ceil(Math.max(a.x, b.x)) + margin - x0;
+      const h = Math.ceil(Math.max(a.y, b.y)) + margin - y0;
+      if (tile.width < w || tile.height < h) {
+        tile.width = Math.max(tile.width, w);
+        tile.height = Math.max(tile.height, h);
+      }
+      tc.setTransform(1, 0, 0, 1, 0, 0);
+      tc.clearRect(0, 0, tile.width, tile.height);
+      tc.filter = `blur(${blur}px)`;
+      tc.lineCap = 'round';
+      tc.lineWidth = width;
+      tc.strokeStyle = colorAt(a);
+      tc.beginPath();
+      tc.moveTo(a.x - x0, a.y - y0);
+      tc.lineTo(b.x - x0, b.y - y0);
+      tc.stroke();
+      ctx.drawImage(tile, x0, y0);
+    }
+  };
+  pass(96, 40, (p) => fire(0.3 + heat(p) * 0.4, 0.06 + heat(p) * 0.16)); // wide halo
+  pass(56, 12, (p) => fire(0.25 + heat(p) * 0.5, 0.14 + heat(p) * 0.3)); // near glow
+  pass(38, 0, (p) => fire(0.2 + heat(p) * 0.72)); // the strip
+  pass(12, 1, (p) => fire(0.55 + heat(p) * 0.45, 0.15 + heat(p) * 0.7)); // hot core
+  return layer;
+}
+
+function drawIcon(canvas, ring) {
+  const ctx = canvas.getContext('2d');
+  const size = canvas.width;
+  ctx.fillStyle = NIGHT;
+  ctx.fillRect(0, 0, size, size);
+  const glow = ctx.createRadialGradient(size / 2, size * 1.12, 0, size / 2, size * 1.12, size * 0.85);
+  glow.addColorStop(0, 'rgba(255,106,31,0.20)');
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, size, size);
+  ctx.globalCompositeOperation = 'lighter';
+  const k = size / 1024;
+  ctx.drawImage(ring, -PAD * k, -PAD * k, ring.width * k, ring.height * k);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+// The launch screen: the same ring, smaller, centered on the app's night background.
+function drawSplash(canvas, ring) {
+  const ctx = canvas.getContext('2d');
+  const size = canvas.width;
+  const k = (size * 0.3) / 1024; // the 1024 box fills 30% of the width
+  const drawn = ring.width * k;
+  ctx.fillStyle = NIGHT;
+  ctx.fillRect(0, 0, size, size);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.drawImage(ring, (size - drawn) / 2, (size - drawn) / 2, drawn, drawn);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+const ring = ringLayer();
+drawIcon(document.getElementById('icon'), ring);
+drawSplash(document.getElementById('splash'), ring);
+
+for (const button of document.querySelectorAll('button[data-canvas]')) {
+  button.addEventListener('click', () => {
+    document.getElementById(button.dataset.canvas).toBlob((blob) => {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = button.dataset.file;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }, 'image/png');
+  });
+}
+</script>
+</html>

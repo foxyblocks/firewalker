@@ -51,6 +51,24 @@ alone in a browser; use `--port 5174` if the combined app is already running.
 It talks to each boot through the text protocol in
 [`docs/remote-protocol.md`](../docs/remote-protocol.md).
 
+### App icon and launch screen
+
+Capacitor doesn't manage the icon. iOS reads it and the launch screen from the Xcode
+asset catalog in `ios/App/App/Assets.xcassets`, and `bun run sync` only copies the web
+build, so it leaves both alone.
+
+| File | What it is |
+| --- | --- |
+| `AppIcon.appiconset/AppIcon-512@2x.png` | The app icon, 1024 px. iOS shrinks it for every other size. |
+| `Splash.imageset/splash-2732x2732*.png` | The launch screen, three identical copies. iOS crops it to fill the screen. |
+
+Both are drawn by `resources/app-icon/ember-neon.html`: the LED strip ring around the
+foot, white-hot at the heel and cooling to red at the toe. To change them, edit that
+file, open it in a browser, and save both PNGs. Browsers save PNGs with an alpha
+channel, which App Store uploads reject, so remove it first (in Preview: File, Export,
+untick Alpha). Copy the launch screen over all three splash files. If the old icon still
+shows after a rebuild, delete the app and run it again, since iOS caches icons.
+
 ## Microphone calibration
 
 Open **Audio**, just above brightness on the Remote screen. With Both chosen, pick which
@@ -222,6 +240,7 @@ home.
 | `src/transport/setup.ts` | Chooses real or pretend boots at startup |
 | `src/ui/` | The screens: Remote, Boots, and one boot's detail screen |
 | `src/ui/components/` | The small component library the screens share, with Storybook stories |
+| `resources/app-icon/` | Draws the iPhone app icon and launch screen |
 
 Adding a pattern takes no app change: the boot reports it and a tile appears. Add it to
 `patternNames.ts` when you want a nicer name and a description.
