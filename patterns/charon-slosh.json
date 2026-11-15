@@ -1,0 +1,73 @@
+{
+  "format": "firewalker-recipe",
+  "version": 3,
+  "name": "charon-slosh",
+  "description": "Slow river fog that sloshes like water in the boot. Moving off leaves it behind at the heel, stopping piles it up at the toe, and it glows where it gathers.",
+  "layers": [
+    {
+      "type": "fill",
+      "label": "Fog",
+      "enabled": true,
+      "palette": ["#7018ff", "#12043c", "#0c2ad0", "#030210", "#5010c0", "#06104a"],
+      "spread": "foot",
+      "repeat": 1,
+      "offset": { "source": "slosh", "min": 0.55, "max": 0.05 },
+      "scroll": 0.012,
+      "brightness": { "source": "sloshAmount", "min": 0.55, "max": 1 },
+      "blend": "over",
+      "opacity": 1
+    },
+    {
+      "type": "fill",
+      "label": "Pale wisps",
+      "enabled": true,
+      "palette": ["#000000", "#3a3478", "#000000", "#000000", "#1c2460", "#000000"],
+      "spread": "foot",
+      "repeat": 1.5,
+      "offset": { "source": "slosh", "min": 0.7, "max": 0.1 },
+      "scroll": -0.02,
+      "brightness": { "source": "audioLevel", "min": 0.6, "max": 1 },
+      "blend": "add",
+      "opacity": 1
+    },
+    {
+      "type": "fill",
+      "label": "Veil",
+      "enabled": true,
+      "palette": ["#ffffff", "#5a5a5a", "#c8c8c8", "#3a3a3a", "#e8e8e8", "#707070"],
+      "spread": "ring",
+      "repeat": 3,
+      "offset": 0,
+      "scroll": 0.02,
+      "brightness": 1,
+      "blend": "multiply",
+      "opacity": 0.8
+    },
+    {
+      "type": "fill",
+      "label": "Tide",
+      "enabled": true,
+      "palette": ["#000000", "#000000", "#ffffff", "#ffffff"],
+      "spread": "foot",
+      "repeat": 0.5,
+      "offset": { "source": "slosh", "min": 0.625, "max": 0.125 },
+      "scroll": 0,
+      "brightness": 1,
+      "blend": "multiply",
+      "opacity": { "source": "sloshAmount", "min": 0, "max": 1 }
+    },
+    {
+      "type": "fill",
+      "label": "Step breath",
+      "enabled": true,
+      "palette": ["#ffffff"],
+      "spread": "solid",
+      "repeat": 1,
+      "offset": 0,
+      "scroll": 0,
+      "brightness": { "source": "stompFade", "min": 0.8, "max": 1, "fadeMs": 900 },
+      "blend": "multiply",
+      "opacity": 1
+    }
+  ]
+}

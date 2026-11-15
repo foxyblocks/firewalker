@@ -1,7 +1,7 @@
 #pragma once
 
-// Runs a decoded recipe: each frame it takes the fused tilt, whether a stomp fired, the audio level, and elapsed
-// time, and draws every layer into one frame of colors. This is a port of the designer's
+// Runs a decoded recipe: each frame it takes the fused tilt, whether a stomp fired, the audio level, the
+// slosh signal, and elapsed time, and draws every layer into one frame of colors. This is a port of the designer's
 // designer/src/engine/engine.ts, which is the reference. test/test_recipe_engine checks that this
 // draws the same pixels, using frames saved from that engine. A change to what either one draws
 // goes into both, with new frames from `bun run reference-frames`.
@@ -72,6 +72,7 @@ class RecipeEngine {
     timeMs_ = 0;
     tilt_ = 0.0;
     audioLevel_ = 0.0;
+    slosh_ = 0.0;
     lastStrength_ = 0.0;
     sinceStompMs_ = 0;
     stompSeen_ = false;
@@ -85,8 +86,10 @@ class RecipeEngine {
 
   // Advances one frame. `dtMs` is the time since the previous one, and `stompStrength` only counts
   // when `stomp` is true. Audio is a live 0..1 level, defaulting to silence for
-  // callers without capture. Read the result with frameByte().
-  void update(float tiltFwd, bool stomp, float stompStrength, uint32_t dtMs, float audioLevel = 0.0f) {
+  // callers without capture. Slosh is where the imaginary water sits, from -1 at the heel to
+  // +1 at the toe (firewalker_slosh.h), defaulting to level. Read the result with frameByte().
+  void update(float tiltFwd, bool stomp, float stompStrength, uint32_t dtMs, float audioLevel = 0.0f,
+              float slosh = 0.0f) {
     if (!recipe_) return;
     const uint32_t dt = dtMs > RECIPE_MAX_DT_MS ? RECIPE_MAX_DT_MS : dtMs;
     timeMs_ += dt;
@@ -95,6 +98,7 @@ class RecipeEngine {
     // A live reading belongs to this frame. Missing or invalid input is silence,
     // so switching away from capture cannot leave a bar stuck at its last width.
     audioLevel_ = isfinite(audioLevel) ? recipeClamp01((double)audioLevel) : 0.0;
+    slosh_ = isfinite(slosh) ? fmax(-1.0, fmin(1.0, (double)slosh)) : 0.0;
     if (stomp) {
       lastStrength_ = recipeClamp01((double)stompStrength);
       sinceStompMs_ = 0;
@@ -183,6 +187,10 @@ class RecipeEngine {
         return (tilt_ + 1.0) / 2.0;
       case RecipeSource::AudioLevel:
         return audioLevel_;
+      case RecipeSource::Slosh:
+        return (slosh_ + 1.0) / 2.0;
+      case RecipeSource::SloshAmount:
+        return fabs(slosh_);
       case RecipeSource::TiltAmount:
         return fabs(tilt_);
       case RecipeSource::StompStrength:
@@ -569,6 +577,7 @@ class RecipeEngine {
   uint32_t sinceStompMs_ = 0;
   bool stompSeen_ = false;
   double audioLevel_ = 0.0;
+  double slosh_ = 0.0;
   double tilt_ = 0.0;
   double lastStrength_ = 0.0;
   uint32_t rng_ = RECIPE_RNG_SEED;

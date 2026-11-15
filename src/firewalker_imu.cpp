@@ -12,6 +12,7 @@
 #include "firewalker_fusion.h"
 #include "firewalker_orientation.h"
 #include "firewalker_settings_store.h"
+#include "firewalker_slosh.h"
 
 namespace Firewalker {
 
@@ -28,6 +29,10 @@ static bool firstSample = true;
 static OrientationCalibration tiltCalibration;
 
 static StompState stomp;
+
+// The imaginary water, stepped once per sample. `sloshValue` is its latest reading.
+static SloshState slosh;
+static float sloshValue = 0.0f;
 
 static unsigned long lastSampleMs = 0;
 static unsigned long lastLogMs = 0;
@@ -90,6 +95,12 @@ bool imuUpdate() {
             {IMU_STOMP_ACCEL_THRESHOLD, IMU_RELEASE_ACCEL_THRESHOLD,
              IMU_REFRACTORY_MS});
 
+  // Slosh reads the same sample: the fused gravity says which way is down along the foot,
+  // and whatever acceleration is left over is the boot speeding up or stopping.
+  const SloshPull pull = sloshPull({latest.ax, latest.ay, latest.az}, fusion.gravity(),
+                                   tiltCalibration, IMU_GRAVITY);
+  sloshValue = sloshStep(slosh, pull.pushG, pull.pourG, dt, SLOSH_PARAMS);
+
   return true;
 }
 
@@ -104,6 +115,8 @@ float imuTiltDeg() {
   if (!ready) return 0.0f;
   return orientationDegrees(fusion.gravity(), tiltCalibration);
 }
+
+float imuSlosh() { return ready ? sloshValue : 0.0f; }
 
 Vec3 imuGravity() { return fusion.gravity(); }
 
@@ -161,6 +174,8 @@ void imuLog() {
   Serial.print(imuTiltDeg(), 2);
   Serial.print(F(" tilt="));
   Serial.print(imuTiltFwd(), 2);
+  Serial.print(F(" slosh="));
+  Serial.print(imuSlosh(), 2);
   Serial.print(F(" armed="));
   Serial.println(stomp.armed ? F("true") : F("false"));
 }

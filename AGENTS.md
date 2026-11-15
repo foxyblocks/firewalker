@@ -22,7 +22,7 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
 ## Project map
 
 - `include/config.h` — all hardware/behavior knobs, named by owning module (`STRIP_*`, `IMU_*`,
-  `CALIBRATION_*`, `ORIENTATION_LIMITS`, `SETTINGS_*`, `REMOTE_*`). Never hard-code these in source files.
+  `SLOSH_*`, `CALIBRATION_*`, `ORIENTATION_LIMITS`, `SETTINGS_*`, `REMOTE_*`). Never hard-code these in source files.
   Visual knobs live in the recipe files in `patterns/`.
 - `src/main.cpp` — tiny Arduino dispatcher into the selected mode.
 - `src/modes/` — compile-time builds (`final_app`, `imu_debug`, `bench`), chosen by
@@ -32,14 +32,16 @@ battery and enclosure. Don't over-engineer ahead of working hardware.
   uploaded recipe; both the app and bench builds use it.
 - `src/firewalker_strip.cpp` — the strip driver behind `LedStrip`: hardware-timed, SPI + DMA on D10.
 - `src/firewalker_imu.cpp` — shared IMU service: read, complementary-filter tilt, calibrated
-  poses, stomp detect.
+  poses, stomp detect, and the slosh signal.
 - `src/firewalker_remote.cpp` — the USB console and BLE service behind one line-based
   interface. The commands and replies are in `docs/remote-protocol.md`.
 - `src/firewalker_settings_store.cpp` — saves settings to flash (NVM3).
 - `src/firewalker_core.cpp` — shared hardware services: strip, status light, idle fill.
-- `include/firewalker_fusion.h`, `firewalker_orientation.h`, `firewalker_strip_map.h`,
-  `firewalker_calibration.h`, `firewalker_settings.h`, `firewalker_remote_protocol.h` — pure,
-  Arduino-free logic that `test/` exercises off-hardware.
+- `include/firewalker_fusion.h`, `firewalker_orientation.h`, `firewalker_slosh.h`,
+  `firewalker_strip_map.h`, `firewalker_calibration.h`, `firewalker_settings.h`,
+  `firewalker_remote_protocol.h` — pure, Arduino-free logic that `test/` exercises off-hardware.
+  `firewalker_slosh.h` is the water behind the slosh recipe sources, and
+  `designer/src/sim/slosh.ts` is the simulator's copy, so a change to one changes both.
 - `tools/pio/mg24_stack.py` — PlatformIO build step: picks the core's radio stack, pins
   Arm's compiler, and makes uploads target exactly one board.
 - `tools/cli/` and `./cli` — the bench tool. With no arguments it opens the TUI

@@ -28,7 +28,7 @@ and `designer/src/engine/engine.ts` shows what each layer draws.
 | Field | Rule |
 | --- | --- |
 | `format` | Always `firewalker-recipe` |
-| `version` | `1` for the original layers and sources, `2` for Band or audio. New firmware reads both |
+| `version` | `1` for the original layers and sources, `2` for Band or audio, `3` for slosh. New firmware reads all three |
 | `name` | 1 to 12 characters: a lowercase letter, then `a-z`, `0-9`, or `-`. Only `off` is reserved for turning the strip off. The boot lists patterns by this name, and the file is `patterns/<name>.json` |
 | `description` | Up to 200 characters, for people. The boot never sees it |
 | `layers` | 1 to 8 layers, drawn first to last, so the last one is on top |
@@ -68,6 +68,8 @@ between `min` and `max`.
 | `stompFade` | `fadeMs` (50 to 10000, default 1000) after a stomp | At the stomp |
 | `wave` | Low point of a smooth loop | High point, every `periodMs` (100 to 60000, default 2000) |
 | `audioLevel` | Silence, or audio capture stopped | Full level on the simulator's audio meter |
+| `slosh` | Water thrown to the heel (halfway when level) | Water thrown to the toe |
+| `sloshAmount` | Water level | Water thrown to either end |
 
 In the simulator, choose Microphone or Computer audio above the boot and click Listen.
 Every audio-bound knob follows the same live level shown by the meter. Its `min` and `max`
@@ -77,6 +79,22 @@ resting voltage, measures RMS, applies a noise floor and logarithmic level mappi
 fast attack and slower release. A short noise gate rejects isolated clicks. `PatternInput.audioLevel` carries that 0..1 level to the engine.
 A stalled capture reads silence. Hardware sensitivity lives in `config.h` under `AUDIO_*`,
 independent of the browser's input gain.
+
+**Slosh** is imaginary water in a tray along the boot. Moving off leaves it behind at the heel,
+stopping throws it forward to the toe, and a tilt pours it toward the low end, more gently. It
+overshoots and rocks before it settles, which is what makes it read as water. In the simulator,
+hold **Push** to slide the boot and let go to stop it, or press **Walk**. The number beside the
+tilt readout is the signal, from -1 at the heel to +1 at the toe. On a boot it comes from the motion
+sensor (`include/firewalker_slosh.h`, fed by `src/firewalker_imu.cpp`), and stays level until the
+boot's poses are calibrated, since the boot can't tell which way its foot points before that. The
+water's feel is set by `SLOSH_*` in `config.h`, mirrored for the simulator in
+`designer/src/sim/slosh.ts`.
+
+`charon-slosh` is built from it. Its fog and wisps bind `offset` to `slosh`, so the colors slide
+toward the end the water is thrown to. Above them a gray heel-to-toe fill in `multiply` binds
+`offset` to `slosh` and `opacity` to `sloshAmount`: it does nothing while the water is level, and
+darkens the far end as the water piles up at the near one. The fog's `brightness` follows
+`sloshAmount`, so it glows where it gathers.
 
 `min` and `max` stay inside the knob's own range. `min` can be larger than `max`, which runs
 the binding backward. `periodMs` is only allowed on `wave`, and `fadeMs` only on `stompFade`.
@@ -221,12 +239,13 @@ least one enabled layer.
 
 Numbers are little-endian. The compiler uses the earliest version needed by the enabled layers.
 Version 1 recipes keep their existing bytes. Version 2 appends Band (type 6) and audioLevel
-(source 5), preserving every version 1 field and code. New firmware decodes and lists both versions.
-An older boot that only lists version 1 gets a firmware-update message before an audio recipe is sent.
+(source 5), and version 3 appends slosh (source 6) and sloshAmount (source 7). Each one preserves
+every earlier field and code. New firmware decodes and lists all three versions. A boot that doesn't
+list a recipe's version gets a firmware-update message before the recipe is sent.
 
 Saving JSON upgrades earlier audio drafts to version 2. If an audio layer is disabled, it is
 omitted from the compiled recipe, so an otherwise version 1 effect can still go to an older boot.
-Both decoders reject a version 1 binary that tries to use a version 2 layer or source.
+Both decoders reject a binary that uses a layer or source newer than the version it claims.
 
 | Bytes | Recipe |
 |---|---|
@@ -260,7 +279,7 @@ Both decoders reject a version 1 binary that tries to use a version 2 layer or s
 | `flatZone` | 2 | Scaled |
 | Palette | 1 + 3n | Color count, then R, G, B per color |
 | Fixed knob | 2 | Scaled |
-| Bound knob | 5 or 7 | Source (tilt 0, tiltAmount 1, stompStrength 2, stompFade 3, wave 4, audioLevel 5 in version 2), scaled `min`, scaled `max`, and for `wave` or `stompFade`, a `uint16` for `periodMs` or `fadeMs` |
+| Bound knob | 5 or 7 | Source (tilt 0, tiltAmount 1, stompStrength 2, stompFade 3, wave 4, audioLevel 5 in version 2, slosh 6 and sloshAmount 7 in version 3), scaled `min`, scaled `max`, and for `wave` or `stompFade`, a `uint16` for `periodMs` or `fadeMs` |
 
 A **scaled** number is an `int16` across the field's range. With `range` as the larger of the field's `|min|`
 and `|max|`, it's stored as `round(value / range × 32767)` and read as `raw / 32767 × range` in single

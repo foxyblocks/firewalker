@@ -4,9 +4,10 @@
 // This is the firmware's end of the designer's compile.ts, and both read the layout in
 // specs/recipe-engine-spec.md. The field order and ranges come from generated/recipe_tables.h, so
 // there's no second copy of them here.
-// Version 2 appends Band and AudioLevel. decodeRecipe passes the stored version
-// through the layer and binding readers, so version 1 bytes keep their meaning
-// and a mislabeled file cannot use version 2 fields.
+// Each version only appends: version 2 adds Band and AudioLevel, and version 3 adds the
+// Slosh and SloshAmount sources. decodeRecipe passes the stored version through the layer
+// and binding readers, so older bytes keep their meaning and a mislabeled file cannot use
+// something newer than the version it claims.
 //
 // Pure and Arduino-free, so test/test_recipe_decode can run it off-hardware.
 //
@@ -61,7 +62,8 @@ enum class RecipeDecodeResult : uint8_t {
 
 static_assert(RECIPE_MAX_NAME_LENGTH == PATTERN_NAME_MAX_LENGTH, "A recipe's name has to fit a pattern name");
 
-// New firmware reads stored version 1 recipes as well as version 2 audio recipes.
+// This firmware reads every version from the first up to its own, so recipes saved on a
+// boot before an update keep working.
 inline bool recipeVersionSupported(uint8_t version) {
   return version >= RECIPE_MIN_VERSION && version <= RECIPE_VERSION;
 }
@@ -118,7 +120,8 @@ inline uint16_t recipeClampMs(uint16_t value, uint16_t low, uint16_t high) {
 // Reads a bound knob: its source, its two ends, and for a wave or stomp fade, its time.
 inline bool readRecipeBinding(RecipeReader& reader, const RecipeFieldInfo& field, RecipeKnob& knob, uint8_t version) {
   const uint8_t source = reader.u8();
-  if (source > (uint8_t)RecipeSource::AudioLevel || (version == 1 && source == (uint8_t)RecipeSource::AudioLevel)) return false;
+  // A source this firmware doesn't know, or one newer than the recipe's own version.
+  if (source >= sizeof(RECIPE_SOURCE_VERSIONS) || version < RECIPE_SOURCE_VERSIONS[source]) return false;
   knob.bound = true;
   knob.source = (RecipeSource)source;
   knob.min = reader.scaled(field);

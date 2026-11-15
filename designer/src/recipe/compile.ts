@@ -12,7 +12,7 @@
 // tables that generateTables.ts writes out of spec.ts.
 
 import { fieldsFor, STOMP_FADE, WAVE_PERIOD, type Field, type KnobField } from "./spec.ts";
-import { isBinding, isRecipeVersion, requiredRecipeVersion, MAX_LAYERS, MAX_NAME_LENGTH, MAX_PALETTE_STOPS, RECIPE_FORMAT, SOURCES, type Binding, type Layer, type LayerType, type Recipe, type RecipeVersion } from "./types.ts";
+import { isBinding, isRecipeVersion, requiredRecipeVersion, MAX_LAYERS, MAX_NAME_LENGTH, MAX_PALETTE_STOPS, RECIPE_FORMAT, SOURCE_VERSION, SOURCES, type Binding, type Layer, type LayerType, type Recipe, type RecipeVersion } from "./types.ts";
 import { nameProblem, validateRecipe } from "./validate.ts";
 
 // NVM3's largest entry, so one recipe saves all at once and a power cut can't leave half of it.
@@ -104,7 +104,7 @@ function pushLayer(out: number[], layer: Layer): void {
 // Compiles a recipe for a boot, or says in plain language why it can't. This drops what a boot has
 // no use for: the description, layer labels, and disabled layers, since a boot can't turn one on.
 // The enabled layers choose the earliest readable version, so editing an old effect
-// still produces version 1 bytes until it actually uses Band or an audio binding.
+// still produces version 1 bytes until it actually uses Band, audio, or slosh.
 export function compileRecipe(recipe: Recipe): CompileResult {
   const validation = validateRecipe(recipe);
   if (!validation.ok) return { ok: false, errors: validation.errors, size: null };
@@ -174,7 +174,7 @@ function readPalette(reader: Reader): string[] {
 
 function readBinding(reader: Reader, field: KnobField, version: RecipeVersion): Binding {
   const source = SOURCES[reader.uint8()];
-  if (!source || (version === 1 && source === "audioLevel")) throw new Error(`${field.key} has an unknown source for version ${version}.`);
+  if (!source || SOURCE_VERSION[source] > version) throw new Error(`${field.key} has an unknown source for version ${version}.`);
   const binding: Binding = { source, min: reader.scaled(field), max: reader.scaled(field) };
   if (source === "wave") binding.periodMs = Math.min(WAVE_PERIOD.max, Math.max(WAVE_PERIOD.min, reader.uint16()));
   if (source === "stompFade") binding.fadeMs = Math.min(STOMP_FADE.max, Math.max(STOMP_FADE.min, reader.uint16()));

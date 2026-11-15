@@ -1,4 +1,4 @@
-// Reference frames: what this TypeScript engine draws for a fixed script of motion and audio, saved so the
+// Reference frames: what this TypeScript engine draws for a fixed script of motion, audio, and slosh, saved so the
 // firmware's C++ engine can be checked against it without a boot. A native test can run the
 // same inputs through C++ and compare the pixels.
 //
@@ -20,7 +20,7 @@ import { compileRecipe, decodeRecipe } from "../recipe/compile";
 import type { Recipe } from "../recipe/types";
 
 const FILE_FORMAT = 1;
-const INPUT_FORMAT = 2;
+const INPUT_FORMAT = 3;
 export const REFERENCE_FRAMES = 400;
 // Frames saved, as "after every this many". The engine still runs every frame in between, so
 // a difference in how state builds up shows at the next saved frame.
@@ -63,6 +63,13 @@ function scriptTilt(frame: number): number {
   return Math.abs(tilt) < DEAD_ZONE ? 0 : tilt;
 }
 
+// Slosh over the script: level at first, then a sway that reaches both ends and passes through
+// level, at a different pace from the tilt and audio above so the three don't move together.
+function scriptSlosh(frame: number): number {
+  if (frame < 20) return 0;
+  return Math.max(-1, Math.min(1, 1.2 * Math.sin((2 * Math.PI * (frame - 20)) / 70)));
+}
+
 // The same inputs for every case. Tilt and strength are single-precision values, since that's
 // what the C++ test reads from the file and what the firmware's sensor code produces.
 export function referenceInputs(): EngineInput[] {
@@ -75,6 +82,9 @@ export function referenceInputs(): EngineInput[] {
       // Silence, a rise to full volume, a hold, then a fall to silence. The last
       // input byte stores 0..255, so round before rendering to match its replay.
       audioLevel: Math.fround(Math.round(Math.max(0, Math.min(1, (frame - 40) / 100, (320 - frame) / 100)) * 255) / 255),
+      // Stored as a signed byte, -127..127, so round the same way here as its replay does.
+      // Adding 0 turns a rounded "minus zero" into plain zero, which is what a byte reads back.
+      slosh: Math.fround((Math.round(scriptSlosh(frame) * 127) + 0) / 127),
       dt: frame === STALL_FRAME ? STALL_MS : FRAME_TIMES[frame % FRAME_TIMES.length]!,
     };
   });
@@ -134,7 +144,7 @@ export function renderCase(recipe: Recipe, layout: StripLayout, inputs: EngineIn
 
 function encodeInputs(inputs: EngineInput[]): Uint8Array {
   const headerSize = 8;
-  const recordSize = 12;
+  const recordSize = 13;
   const out = new Uint8Array(headerSize + inputs.length * recordSize);
   const view = new DataView(out.buffer);
   out.set(new TextEncoder().encode("FWRI"));
@@ -147,6 +157,7 @@ function encodeInputs(inputs: EngineInput[]): Uint8Array {
     view.setUint16(at + 8, input.dt, true);
     view.setUint8(at + 10, input.stomp ? 1 : 0);
     view.setUint8(at + 11, Math.round((input.audioLevel ?? 0) * 255));
+    view.setInt8(at + 12, Math.round((input.slosh ?? 0) * 127));
   });
   return out;
 }

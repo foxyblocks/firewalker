@@ -110,6 +110,7 @@ void loop() {
   input.tiltFwd = imuTiltFwd();
   input.stomp = imuTakeStomp();
   input.stompStrength = imuStompStrength();
+  input.slosh = imuSlosh();
 #if BENCH_LOG_MOTION
   imuLog();
 #endif

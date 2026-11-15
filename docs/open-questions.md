@@ -35,6 +35,14 @@ Each controller learns its own 3D mounting reference from neutral and a heel/toe
   capture neutral, heel, and toe while wearing the boot, and still reject a foot rocking back
   and forth?
 - **Filter feel:** do `IMU_FILTER_ALPHA` and `IMU_TILT_FULL_DEG` still feel right?
+- **Slosh feel:** does `charon-slosh` read as water on a worn boot? Slide the boot forward and
+  stop: the fog should hang back at the heel, then pile up at the toe and rock before it
+  settles. If it runs the wrong way, the heel and toe poses were captured swapped. The
+  `SLOSH_*` numbers in `include/config.h` are guesses from the simulator: raise
+  `SLOSH_PUSH_GAIN` if a shuffle barely moves it, and lower it if every step pins it at an
+  end. To watch the number, `./cli install rainbow-pool --motion --log-motion` prints `slosh=`
+  beside the tilt in each `[imu]` line. Change `designer/src/sim/slosh.ts` to match, so the
+  simulator stays a fair preview.
 
 ## Power
 

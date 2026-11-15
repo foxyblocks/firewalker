@@ -9,10 +9,12 @@
 //   * the raw accel/gyro sample,
 //   * a fused fore-aft tilt (complementary filter of accel "down" + gyro rate),
 //   * this controller's calibrated poses, which set where tilt reads -1, 0, and +1,
-//   * stomp detection (acceleration-magnitude spike with hysteresis).
+//   * stomp detection (acceleration-magnitude spike with hysteresis),
+//   * the slosh signal: imaginary water thrown back and forth by the boot's motion.
 // Thresholds and filter settings live in config.h. firewalker_orientation.h learns
 // the mount from held gravity vectors and tracks all three gyro axes. Stomp
-// hysteresis lives in firewalker_fusion.h. Both are tested natively; see ADR-0006.
+// hysteresis lives in firewalker_fusion.h, and the water in firewalker_slosh.h. All
+// three are tested natively; see ADR-0006.
 
 namespace Firewalker {
 
@@ -28,8 +30,8 @@ struct ImuSample {
 bool imuBegin();
 bool imuReady();
 
-// Poll the IMU at IMU_SAMPLE_MS. On a fresh sample it updates the fused tilt and
-// the stomp state. Returns true iff a new sample was processed this call.
+// Poll the IMU at IMU_SAMPLE_MS. On a fresh sample it updates the fused tilt, the
+// stomp state, and the slosh signal. Returns true iff a new sample was processed this call.
 bool imuUpdate();
 
 const ImuSample& imuLatest();
@@ -42,6 +44,13 @@ float imuTiltFwd();
 // dead zone and doesn't stop at the poses, so a tolerance in degrees means the same on any
 // boot. Reads 0 with no sensor.
 float imuTiltDeg();
+
+// Where the imaginary water sits along the boot: -1 thrown to the heel, 0 level, +1 thrown
+// to the toe. Moving off throws it back, stopping throws it forward, and a tilt pours it
+// toward the low end, with the overshoot and settling of real water. It feeds the recipe
+// slosh sources. Reads 0 with no sensor, and stays level until the poses are calibrated,
+// since the boot can't tell which way its foot points before that.
+float imuSlosh();
 
 // Fused gravity in chip coordinates, for capturing full 3D poses. Zero until the
 // first usable sensor sample arrives; it never assumes a particular mounting axis.
@@ -66,7 +75,7 @@ bool imuTakeStomp();
 // how hard the step landed. Persists until the next stomp fires.
 float imuStompStrength();
 
-// Throttled (IMU_LOG_MS) verbose serial line: raw accel/gyro, |a|, tilt, armed.
+// Throttled (IMU_LOG_MS) verbose serial line: raw accel/gyro, |a|, tilt, slosh, armed.
 // For imu_debug / bench calibration.
 void imuLog();
 

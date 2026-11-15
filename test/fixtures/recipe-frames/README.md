@@ -1,6 +1,6 @@
 # Recipe reference frames
 
-What the designer's TypeScript engine draws for a fixed script of motion and audio. A test of the firmware's
+What the designer's TypeScript engine draws for a fixed script of motion, audio, and slosh. A test of the firmware's
 C++ engine can run the same inputs and compare pixels, with no boot needed.
 
 The frames come only from the test recipes in `recipes/`. Recipes in `patterns/` aren't involved,
@@ -23,7 +23,7 @@ knob source has no test recipe.
 | `recipes/*.json` | Small test recipes that exercise every layer type, blend, choice, and knob source. Edited by hand |
 | `compiled/*.bin` | Generated. Each test recipe compiled, as a boot would receive it. A change here means the binary format changed |
 | `manifest.json` | Generated. Every case: its frames file, recipe, and strip layout |
-| `inputs.bin` | Generated. The motion and audio script, shared by every case |
+| `inputs.bin` | Generated. The motion, audio, and slosh script, shared by every case |
 | `<recipe>--<layout>.bin` | Generated. One recipe's expected frames on one strip layout |
 
 Each frames file comes from the compiled recipe, decoded and run, not the JSON directly. Every test
@@ -35,12 +35,12 @@ catch different bugs. They're fixed here on purpose, so re-cutting a boot never 
 
 Numbers are little-endian.
 
-**`inputs.bin`** is an 8-byte header, then one 12-byte record per frame.
+**`inputs.bin`** is an 8-byte header, then one 13-byte record per frame.
 
 | Offset | Type | Field |
 |---|---|---|
 | 0 | 4 bytes | `FWRI` |
-| 4 | `uint16` | Input format, 2 |
+| 4 | `uint16` | Input format, 3 |
 | 6 | `uint16` | Frame count |
 
 | Record offset | Type | Field |
@@ -50,10 +50,12 @@ Numbers are little-endian.
 | 8 | `uint16` | Time since the previous frame, in ms |
 | 10 | `uint8` | 1 if a stomp fired on this frame |
 | 11 | `uint8` | Audio level, 0 to 255. Replay as `float32(byte / 255)` |
+| 12 | `int8` | Slosh, -127 to 127. Replay as `float32(byte / 127)` |
 
-Input format 1 uses the same record size and treats byte 11 as silence. The native test reads
-both formats. The audio script rises from silence to full, holds, then falls to silence.
-The Band fixture combines it with tilt and stomp brightness on both strip layouts.
+The native test reads only this format, and says to regenerate when it finds another. The audio
+script rises from silence to full, holds, then falls to silence, and the Band fixture combines it
+with tilt and stomp brightness on both strip layouts. The slosh script starts level, then sways
+between both ends at its own pace, and the Slosh fixture binds both slosh sources to it.
 
 **`<recipe>--<layout>.bin`** is a 16-byte header, then the saved frames.
 

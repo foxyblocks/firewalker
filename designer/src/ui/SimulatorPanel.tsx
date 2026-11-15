@@ -58,7 +58,8 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
   const [speed, setSpeed] = useState("1");
   const [strip, setStrip] = useState(STRIP_PRESETS[0]!.key);
   const [brightness, setBrightness] = useState(readStoredBrightness);
-  const [readout, setReadout] = useState<Readout>({ tilt: 0, lastStomp: null, stomps: 0, timeMs: 0 });
+  const [readout, setReadout] = useState<Readout>({ tilt: 0, slosh: 0, lastStomp: null, stomps: 0, timeMs: 0 });
+  const [pushing, setPushing] = useState(false);
   const [flash, setFlash] = useState(false);
 
   useEffect(() => {
@@ -71,6 +72,7 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
   useEffect(() => simRef.current?.setRecipe(recipe), [recipe]);
   useEffect(() => simRef.current?.setTilt(tilt), [tilt]);
   useEffect(() => simRef.current?.setWalking(walking), [walking]);
+  useEffect(() => simRef.current?.setPushing(pushing), [pushing]);
   useEffect(() => simRef.current?.setBeat(beating ? bpm : null, strength), [beating, bpm, strength]);
   useEffect(() => simRef.current?.setPaused(paused), [paused]);
   useEffect(() => simRef.current?.setSpeed(Number(speed)), [speed]);
@@ -124,7 +126,9 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
         <div className="control tilt">
           <div className="field-head">
             <span className="field-label">Tilt</span>
-            <span className="readout">{describeTilt(shownTilt)}</span>
+            <span className="readout" title="Tilt, then where the slosh water sits: Walk and Push move it">
+              {describeTilt(shownTilt)} · {describeSlosh(readout.slosh)}
+            </span>
           </div>
           <input
             type="range"
@@ -197,6 +201,30 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
           >
             {walking ? "Stop walking" : "Walk"}
           </button>
+          {/* Held, not toggled: the boot slides while the button is down and stops when it is
+              let go, and that stop is the part worth watching. Pointer capture keeps the hold
+              alive if the pointer drifts off the button, and blur ends a hold from the keyboard. */}
+          <button
+            type="button"
+            className={pushing ? "button on" : "button"}
+            aria-pressed={pushing}
+            title="Hold to slide the boot forward, and let go to stop it. Slosh throws the water back while it speeds up, and forward when it stops."
+            onPointerDown={(event) => {
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setPushing(true);
+            }}
+            onPointerUp={() => setPushing(false)}
+            onPointerCancel={() => setPushing(false)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") setPushing(true);
+            }}
+            onKeyUp={(event) => {
+              if (event.key === "Enter") setPushing(false);
+            }}
+            onBlur={() => setPushing(false)}
+          >
+            Push
+          </button>
           <div className="beat">
             <button
               type="button"
@@ -253,6 +281,12 @@ export function SimulatorPanel({ recipe }: { recipe: Recipe }) {
       </div>
     </section>
   );
+}
+
+// The slosh readout beside the tilt: the signal's value and which end the water is at.
+function describeSlosh(slosh: number): string {
+  const where = slosh < -0.02 ? "heel" : slosh > 0.02 ? "toe" : "level";
+  return `slosh ${slosh.toFixed(2)} ${where}`;
 }
 
 function describeTilt(tilt: number): string {

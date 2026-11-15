@@ -600,6 +600,7 @@ static void renderIfDue(unsigned long now) {
   input.stompStrength = imuStompStrength();
   input.dt = patternStarting ? 0 : elapsed;
   input.audioLevel = audioLevel();
+  input.slosh = imuSlosh();
   patternStarting = false;
   stompPending = false;
   const uint32_t updateStart = micros();

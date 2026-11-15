@@ -17,7 +17,7 @@ import "@fontsource-variable/spline-sans-mono";
 import { DEFAULT_STRIP } from "../../src/engine/strip.ts";
 import type { Recipe } from "../../src/recipe/types.ts";
 import { Simulation, type Canvases } from "../../src/sim/simulation.ts";
-import { buildClipScript, SCENES } from "./script.ts";
+import { buildClipScript, clipScenes, SCENES, type ClipFrame, type Scene } from "./script.ts";
 
 export interface ClipStage {
   /** Resolves once the stage's fonts have loaded, so the first frame has the right type. */
@@ -28,7 +28,10 @@ export interface ClipStage {
   step(index: number): void;
 }
 
-const SCRIPT = buildClipScript();
+// The scenes and script of the recipe on stage. load() swaps them, since a slosh pattern
+// plays one more scene than the rest.
+let scenes: Scene[] = SCENES;
+let script: ClipFrame[] = buildClipScript();
 
 function element<T extends HTMLElement>(id: string): T {
   const found = document.getElementById(id);
@@ -56,11 +59,16 @@ const stage: ClipStage = {
   load(recipe) {
     simulation = new Simulation(recipe, DEFAULT_STRIP);
     walking = false;
+    scenes = clipScenes(recipe);
+    script = buildClipScript(scenes);
     element("name").textContent = recipe.name;
+    // The slosh meter only appears for a pattern that follows slosh, so every other
+    // pattern's clip keeps the picture it has always had.
+    element("hud").dataset.slosh = String(scenes !== SCENES);
   },
 
   step(index) {
-    const frame = SCRIPT[index];
+    const frame = script[index];
     if (!simulation || !frame) throw new Error(`No recipe loaded, or no frame ${index} in the clip script`);
 
     // Only tell the simulation when walking starts or stops. setWalking restarts the step
@@ -69,14 +77,16 @@ const stage: ClipStage = {
       simulation.setWalking(frame.walking);
       walking = frame.walking;
     }
+    simulation.setPushing(frame.pushing);
     simulation.setAudioLevel(frame.audioLevel);
     const readout = simulation.stepOnce(canvases);
 
-    const scene = SCENES[frame.scene]!;
+    const scene = scenes[frame.scene]!;
     element("scene").textContent = scene.label;
     element("tilt-meter").dataset.on = String(scene.walking);
     element("sound-meter").dataset.on = String(scene.music);
     element("tilt-dot").style.left = `${50 + readout.tilt * 50}%`;
+    element("slosh-dot").style.left = `${50 + readout.slosh * 50}%`;
     element("level").style.width = `${Math.round(frame.audioLevel * 100)}%`;
   },
 };

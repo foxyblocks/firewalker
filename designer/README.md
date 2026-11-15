@@ -42,12 +42,15 @@ combined app on 5173 for shared Remote/Designer connections.
   import, or delete.
 - **Design** has the layer stack on the left, the boot in the middle, and the selected
   layer's settings on the right. Drag a layer by its grip, or use its arrows, to restack it.
-  Any knob can be **Fixed**, or **Follows** tilt, a stomp, a wave, or **Audio level**. The JSON tab shows
+  Any knob can be **Fixed**, or **Follows** tilt, a stomp, a wave, **Audio level**, or **Slosh**. The JSON tab shows
   the file as it will be saved.
 - **The boot** shows from above and from its outer side, with the strip in index order
   below. Drag **Tilt**, or press **Stomp** or the space bar. A stomp lifts the boot and drops
   it, and the pattern gets the stomp the moment it lands, at the **Strength** you set.
-  **Beat** stomps on every beat at the BPM beside it, and **Walk** plays a steady gait. The
+  **Beat** stomps on every beat at the BPM beside it, and **Walk** plays a steady gait. Hold
+  **Push** to slide the boot forward, and let go to stop it. Only knobs that follow **Slosh**
+  react to a push: the water is thrown back as the boot moves off and forward when it stops.
+  The number beside the tilt readout shows where the water is. The
   strip menu switches between each boot's saved layout and the uncut bench strip.
 - **Audio source** above the boot selects Microphone or Computer audio. Click **Listen**
   to start capture and see its level and spectrum. Set a knob to **Follows → Audio level**
@@ -113,6 +116,10 @@ Each pattern becomes a 26 second, 1280 x 720 `.mp4` and a `.jpg` poster. Every c
 same four scenes, so clips of different patterns can be compared side by side: standing still
 (from 0 s), walking (3.008 s), walking to music (12.016 s), and standing to music (21.024 s).
 The music is a made-up 120 BPM level, not a recording, so a run always gives the same clip.
+
+A pattern that follows slosh gets a fifth scene on the end, push + stop (26.032 s), where the
+boot is slid forward and stopped twice, and a slosh meter beside the tilt meter. Its clip is 33
+seconds. The first four scenes are the same as every other pattern's.
 
 The clip is the designer's own simulator, stepped one frame at a time with a screenshot after
 each, so it never drops a frame. It takes about a minute per pattern. It needs `ffmpeg` on the

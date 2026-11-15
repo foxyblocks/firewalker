@@ -5,7 +5,8 @@
  * poster in designer/clips/, or in the folder given with --out.
  *
  * How it fits together:
- *   - record-clip/script.ts is the motion and sound every clip plays: four scenes, 26 s.
+ *   - record-clip/script.ts is the motion and sound every clip plays: four scenes, 26 s,
+ *     plus a 7 s push-and-stop scene for a pattern that follows slosh.
  *   - record-clip/stage.html and stage.ts are the picture: the designer's Simulation and
  *     boot views on a 1280 x 720 page, advanced one frame per call.
  *   - This file drives them. It serves the stage with Vite, opens it in headless Chromium
@@ -32,7 +33,7 @@ import { createServer } from "vite";
 import type { Recipe } from "../src/recipe/types.ts";
 import { validateRecipe } from "../src/recipe/validate.ts";
 import { FRAME_MS } from "../src/sim/simulation.ts";
-import { buildClipScript, posterFrame, sceneStarts } from "./record-clip/script.ts";
+import { buildClipScript, clipScenes, posterFrame, sceneStarts, SCENES } from "./record-clip/script.ts";
 import type { ClipStage } from "./record-clip/stage.ts";
 
 const DESIGNER_DIR = fileURLToPath(new URL("..", import.meta.url));
@@ -94,7 +95,8 @@ const stageStep = (index: number) => (window as unknown as { clipStage: ClipStag
 async function recordClip(page: Page, recipe: Recipe, outDir: string): Promise<void> {
   const video = join(outDir, `${recipe.name}.mp4`);
   const poster = join(outDir, `${recipe.name}.jpg`);
-  const frames = buildClipScript().length;
+  const scenes = clipScenes(recipe);
+  const frames = buildClipScript(scenes).length;
   const posterAt = posterFrame();
 
   // PNG frames in on stdin, H.264 out. yuv420p and faststart are what make the file play
@@ -126,6 +128,8 @@ async function recordClip(page: Page, recipe: Recipe, outDir: string): Promise<v
   // Paths under the current folder print short, anything else in full.
   const shown = (path: string) => (relative(process.cwd(), path).startsWith("..") ? path : relative(process.cwd(), path));
   console.log(`${recipe.name}: ${frames} frames, ${((frames * FRAME_MS) / 1000).toFixed(1)} s, ${megabytes} MB → ${shown(video)}, ${shown(poster)}`);
+  // A slosh pattern's extra scene comes after the shared ones, so say where it starts.
+  for (const scene of sceneStarts(scenes).slice(SCENES.length)) console.log(`  also: ${scene.seconds.toFixed(3)} s  ${scene.label}`);
 }
 
 const { values, positionals } = parseArgs({
@@ -168,6 +172,6 @@ try {
   await server.close();
 }
 
-// Every clip has the same scenes, so an audition page can offer one set of jump buttons.
+// Every clip starts with the same scenes, so an audition page can offer one set of jump buttons.
 console.log("Scenes start at:");
 for (const scene of sceneStarts()) console.log(`  ${scene.seconds.toFixed(3)} s  ${scene.label}`);

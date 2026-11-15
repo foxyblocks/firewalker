@@ -22,6 +22,9 @@ using namespace Firewalker;
 // PlatformIO runs tests from the project root.
 static const std::string FIXTURE_DIR = "test/fixtures/recipe-frames/";
 static const int MAX_DIFFERENCE = 1;
+// inputs.bin's format number and the size of one frame's record in it. See the fixtures' README.
+static const uint16_t INPUT_FORMAT = 3;
+static const size_t INPUT_RECORD_BYTES = 13;
 
 static std::vector<uint8_t> readFile(const std::string& path) {
   std::vector<uint8_t> bytes;
@@ -79,9 +82,10 @@ static void checkCase(const std::string& file, const std::vector<uint8_t>& input
   const uint16_t frameCount = readU16(inputs, 6);
   size_t at = 16;
   for (uint16_t f = 0; f < frameCount; f++) {
-    const size_t record = 8 + (size_t)f * 12;
+    const size_t record = 8 + (size_t)f * INPUT_RECORD_BYTES;
+    // Audio is saved as 0..255 and slosh as a signed -127..127.
     engine.update(readF32(inputs, record), inputs[record + 10] != 0, readF32(inputs, record + 4), readU16(inputs, record + 8),
-                  readU16(inputs, 4) >= 2 ? (float)inputs[record + 11] / 255.0f : 0.0f);
+                  (float)inputs[record + 11] / 255.0f, (float)(int8_t)inputs[record + 12] / 127.0f);
     if ((f + 1) % checkEvery != 0) continue;
 
     for (uint16_t pixel = 0; pixel < layout.count; pixel++) {
@@ -104,10 +108,12 @@ static void test_matches_every_reference_frame() {
   const std::vector<uint8_t> inputs = readFile(FIXTURE_DIR + "inputs.bin");
   TEST_ASSERT_TRUE_MESSAGE(inputs.size() > 8, "inputs.bin is missing. Tests run from the project root.");
   TEST_ASSERT_EQUAL_MEMORY("FWRI", inputs.data(), 4);
+  TEST_ASSERT_EQUAL_MESSAGE(INPUT_FORMAT, readU16(inputs, 4), "inputs.bin is another format. Run `bun run reference-frames` in designer/.");
+  TEST_ASSERT_EQUAL_MESSAGE(8 + (size_t)readU16(inputs, 6) * INPUT_RECORD_BYTES, inputs.size(), "inputs.bin is the wrong size");
 
   const std::vector<std::string> files = caseFiles();
-  // 11 test recipes on 2 layouts, so a broken path can't pass by finding nothing.
-  TEST_ASSERT_GREATER_OR_EQUAL_MESSAGE(22, files.size(), "Too few reference frame files");
+  // 12 test recipes on 2 layouts, so a broken path can't pass by finding nothing.
+  TEST_ASSERT_GREATER_OR_EQUAL_MESSAGE(24, files.size(), "Too few reference frame files");
   for (const std::string& file : files) checkCase(file, inputs);
 }
 
