@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BootSession, BYTES_PER_USB_LINE, NEEDS_FIRMWARE, type SendProgress } from "./bootSession";
 import { BootConnections } from "./connections";
@@ -414,84 +414,5 @@ describe("connections", () => {
     });
     await connections.prepare();
     expect(connections.getSnapshot().error).toMatch(/no Bluetooth/);
-  });
-});
-
-describe("idle designer connections", () => {
-  let page: EventTarget & { visibilityState: string };
-  let stopObserving: () => void;
-
-  beforeEach(() => {
-    vi.useFakeTimers();
-    page = Object.assign(new EventTarget(), { visibilityState: "visible" });
-    vi.stubGlobal("document", page);
-    stopObserving = () => undefined;
-  });
-
-  afterEach(() => {
-    stopObserving();
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
-  });
-
-  it("keeps boot rows while releasing links, then reconnects without a new picker", async () => {
-    const transport = new FakeBootTransport([new FakeBoot()]);
-    const open = vi.spyOn(transport, "open");
-    const pick = vi.spyOn(transport, "pick");
-    const connections = new BootConnections(async () => transport, new FakeBootPorts());
-    await connections.prepare();
-    await connections.connect("usb");
-    stopObserving = connections.observeActivity();
-    await vi.advanceTimersByTimeAsync(120000);
-    expect(connections.getSnapshot().boots).toHaveLength(1);
-    expect(connections.getSnapshot().boots[0]?.paused).toBe(true);
-    page.dispatchEvent(new Event("visibilitychange"));
-    await vi.advanceTimersByTimeAsync(120000);
-    expect(open).toHaveBeenCalledOnce();
-    page.dispatchEvent(new Event("keydown"));
-    await vi.advanceTimersByTimeAsync(0);
-    expect(connections.getSnapshot().boots[0]?.paused).toBe(false);
-    expect(open).toHaveBeenCalledTimes(2);
-    expect(pick).toHaveBeenCalledOnce();
-    await connections.disconnect(connections.getSnapshot().boots[0]!.deviceId);
-  });
-
-  it("reconnects before Send and refreshes recipes changed by another client", async () => {
-    const boot = new FakeBoot();
-    const transport = new FakeBootTransport([boot]);
-    const connections = new BootConnections(async () => transport, new FakeBootPorts());
-    await connections.prepare();
-    await connections.connect("usb");
-    stopObserving = connections.observeActivity();
-    await vi.advanceTimersByTimeAsync(120000);
-    boot.stored.set("other", compiled({ ...RECIPE, name: "other" }));
-    const deviceId = connections.getSnapshot().boots[0]!.deviceId;
-    await connections.send(deviceId, RECIPE);
-    expect(boot.pattern).toBe(RECIPE.name);
-    expect(connections.getSnapshot().boots[0]?.uploads).toEqual(["other", RECIPE.name]);
-    await connections.disconnect(deviceId);
-  });
-
-  it("waits for a port to finish closing before a quick wake opens it again", async () => {
-    const transport = new FakeBootTransport([new FakeBoot()]);
-    const originalOpen = transport.open.bind(transport);
-    let release: () => void = () => undefined;
-    const closing = new Promise<void>((resolve) => { release = resolve; });
-    const open = vi.spyOn(transport, "open").mockImplementationOnce(async (deviceId, events) => {
-      const link = await originalOpen(deviceId, events);
-      return { ...link, close: async () => { await closing; await link.close(); } };
-    });
-    const connections = new BootConnections(async () => transport, new FakeBootPorts());
-    await connections.prepare();
-    await connections.connect("usb");
-    stopObserving = connections.observeActivity();
-    await vi.advanceTimersByTimeAsync(120000);
-    page.dispatchEvent(new Event("keydown"));
-    await vi.advanceTimersByTimeAsync(0);
-    expect(open).toHaveBeenCalledOnce();
-    release();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(open).toHaveBeenCalledTimes(2);
-    await connections.disconnect(connections.getSnapshot().boots[0]!.deviceId);
   });
 });

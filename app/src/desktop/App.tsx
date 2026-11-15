@@ -19,7 +19,6 @@ export function DesktopApp({ store, connections }: { store: BootsStore; connecti
   useSyncExternalStore(store.subscribe, store.getVersion);
   const designing = hash === "#/" || hash.startsWith("#/patterns") || hash.startsWith("#/design/");
 
-  useEffect(() => store.observeActivity(), [store]);
   useEffect(() => {
     const update = () => {
       const next = readHash();
@@ -55,7 +54,7 @@ export function DesktopApp({ store, connections }: { store: BootsStore; connecti
           </Suspense>
         ) : (
           <div className="remote-surface">
-            <Remote key={hash} store={store} manageActivity={false} initialTab={hash === "#/remote/boots" ? "boots" : undefined} />
+            <Remote key={hash} store={store} initialTab={hash === "#/remote/boots" ? "boots" : undefined} />
           </div>
         )}
       </div>

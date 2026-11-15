@@ -17,7 +17,6 @@ import (
 
 	"firewalker/cli/internal/bench"
 	"firewalker/cli/internal/boots"
-	"firewalker/cli/internal/controlconfig"
 	"firewalker/cli/internal/diagnostics"
 	"firewalker/cli/internal/diagnosticui"
 	"firewalker/cli/internal/pickboot"
@@ -83,11 +82,7 @@ func runDebug(cmd *cobra.Command, build *bench.Options, options diagnostics.Opti
 				return err
 			}
 		}
-		timeout, err := controlconfig.Read(build.RepoRoot)
-		if err != nil {
-			return err
-		}
-		return diagnosticui.Run(cmd.Context(), selected, timeout, cmd.InOrStdin(), cmd.OutOrStdout())
+		return diagnosticui.Run(cmd.Context(), selected, cmd.InOrStdin(), cmd.OutOrStdout())
 	}
 	if selection.Menu {
 		return pickboot.RunAction(cmd.Context(), cmd.CommandPath(), selection.Boots, cmd.InOrStdin(), cmd.OutOrStdout(), func(ctx context.Context, selected []boots.Boot, progress func(string)) (string, error) {

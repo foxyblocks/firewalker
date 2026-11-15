@@ -9,8 +9,6 @@
 //   - Link: the picked boot's serial port stays open through link.Follow. Every line
 //     goes through handleLine, which logs it and updates the Boot screen and the bench
 //     form from any status reply. Screens trust the latest status, not what was sent.
-//     Human inactivity pauses Follow and releases the port; discovery and incoming
-//     lines don't renew it. The next key reconnects without replaying an old command.
 //   - Flashing (flashing.go): a confirm names the boot, the port closes, PlatformIO runs
 //     with its output in the log, and then the port reopens and asks for status.
 //
@@ -30,7 +28,6 @@ import (
 
 	"firewalker/cli/internal/bench"
 	"firewalker/cli/internal/boards"
-	"firewalker/cli/internal/controlconfig"
 	"firewalker/cli/internal/flash"
 	"firewalker/cli/internal/link"
 	"firewalker/cli/internal/protocol"
@@ -49,23 +46,18 @@ const (
 // Deps is how the TUI reaches outside itself. Run fills these in for real; tests hand in
 // fake boards and a fake PlatformIO.
 type Deps struct {
-	RepoRoot          string
-	Config            bench.StripLayout // include/config.h, the last-resort strip layout
-	Discover          func() ([]boards.Board, error)
-	Open              func(serial string) link.Opener
-	RunJob            func(ctx context.Context, job flash.Job, onLine func(string)) error
-	Cache             *boards.Cache
-	Now               func() time.Time
-	InactivityTimeout time.Duration
-	Theme             *theme.Theme
+	RepoRoot string
+	Config   bench.StripLayout // include/config.h, the last-resort strip layout
+	Discover func() ([]boards.Board, error)
+	Open     func(serial string) link.Opener
+	RunJob   func(ctx context.Context, job flash.Job, onLine func(string)) error
+	Cache    *boards.Cache
+	Now      func() time.Time
+	Theme    *theme.Theme
 }
 
 // Run opens the TUI and blocks until it quits, which leaves the board running.
 func Run(repoRoot string) error {
-	idleTimeout, err := controlconfig.Read(repoRoot)
-	if err != nil {
-		return err
-	}
 	config, err := bench.ReadStripLayout(repoRoot)
 	if err != nil {
 		return err
@@ -84,10 +76,9 @@ func Run(repoRoot string) error {
 			defer output.Flush()
 			return job.Run(ctx, os.Environ(), output, output)
 		},
-		Cache:             boards.OpenCache(cachePath),
-		Now:               time.Now,
-		InactivityTimeout: idleTimeout,
-		Theme:             theme.New(os.Stdout),
+		Cache: boards.OpenCache(cachePath),
+		Now:   time.Now,
+		Theme: theme.New(os.Stdout),
 	})
 	_, err = tea.NewProgram(model, tea.WithAltScreen()).Run()
 	model.Shutdown()
@@ -158,8 +149,6 @@ type Model struct {
 	conn         link.Transport
 	status       *protocol.Status // the latest status from the picked boot, if any
 	lastOpenErr  string
-	lastActivity time.Time
-	paused       bool
 
 	form        *benchForm
 	formEditing bool
@@ -189,8 +178,7 @@ func New(deps Deps) *Model {
 	searchInput.Prompt = "/ "
 	m := &Model{
 		deps: deps, th: deps.Theme, ctx: ctx, cancel: cancel,
-		lastActivity: deps.Now(),
-		width:        80, height: 24,
+		width: 80, height: 24,
 		form:        newBenchForm(deps.Config),
 		formInput:   formInput,
 		searchInput: searchInput,
@@ -259,12 +247,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // so polls never pile up.
 func (m *Model) handleBoards(msg boardsMsg) tea.Cmd {
 	next := tea.Tick(discoverEvery, func(time.Time) tea.Msg { return tickMsg{} })
-	// Check even when discovery fails, so a broken USB scan can't leave an abandoned
-	// port held. Build/upload jobs finish first; their output isn't human activity.
-	if !m.paused && m.deps.InactivityTimeout > 0 && !m.flashing() && m.deps.Now().Sub(m.lastActivity) >= m.deps.InactivityTimeout {
-		m.paused = true
-		m.stopFollow()
-	}
 	if msg.err != nil {
 		// This repeats on every poll until it clears, so one line per reason.
 		if text := msg.err.Error(); text != m.lastDiscoverErr {
@@ -280,7 +262,7 @@ func (m *Model) handleBoards(msg boardsMsg) tea.Cmd {
 	if pick := autoSelect(m.selected, m.connected); pick != m.selected {
 		return tea.Batch(next, m.selectBoard(pick))
 	}
-	if row, ok := m.selectedRow(); ok && row.OnUSB && m.followCancel == nil && !m.uploading() && !m.paused {
+	if row, ok := m.selectedRow(); ok && row.OnUSB && m.followCancel == nil && !m.uploading() {
 		return tea.Batch(next, m.startFollow())
 	}
 	return next
@@ -352,9 +334,6 @@ func (m *Model) layoutForForm() (bench.StripLayout, string) {
 
 // startFollow opens the picked boot's port and keeps it open through resets and replugs.
 func (m *Model) startFollow() tea.Cmd {
-	if m.paused {
-		return nil
-	}
 	m.stopFollow()
 	m.gen++
 	gen := m.gen

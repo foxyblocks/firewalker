@@ -448,8 +448,6 @@ func (m *Model) viewPrompt() string {
 		return " " + m.th.Warn.Render(m.confirm.Text)
 	case m.console.open:
 		return " " + m.console.input.View()
-	case m.paused:
-		return " " + m.th.Dim.Render("Connection paused while idle. Press a key to reconnect; q quits.")
 	case m.notice != "":
 		return " " + m.th.Warn.Render(m.notice)
 	case len(m.connected) == 0:

@@ -260,36 +260,6 @@ func appRunning(t *testing.T) *harness {
 	return h
 }
 
-func TestInactivityReleasesThePortUntilAKeyWakesIt(t *testing.T) {
-	h := appRunning(t)
-	now := time.Now()
-	h.m.deps.Now = func() time.Time { return now }
-	h.m.deps.InactivityTimeout = 2 * time.Minute
-	h.key("3")
-	first := h.current(right.Serial)
-	now = now.Add(119 * time.Second)
-	h.plugIn(right)
-	if first.Closed() {
-		t.Fatal("released before two minutes")
-	}
-	// Received output and USB discovery must not extend human inactivity.
-	first.Push(rightStatus)
-	h.settle()
-	now = now.Add(time.Second)
-	h.plugIn(right)
-	if !first.Closed() {
-		t.Fatal("idle client still holds the port")
-	}
-	h.wantView("Connection paused while idle")
-	h.plugIn(right)
-	if h.opened(right.Serial) != 1 {
-		t.Fatal("discovery reclaimed a paused port")
-	}
-	h.key("enter")
-	h.until("wake to attach", func() bool { return h.opened(right.Serial) == 2 && h.m.conn != nil })
-	h.noJob() // The wake key must not also confirm a build or flash.
-}
-
 func TestALoneBootIsPickedAndAskedForStatus(t *testing.T) {
 	h := appRunning(t)
 	h.wantView("● 3ED8 · app · 94 LEDs")

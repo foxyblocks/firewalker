@@ -1,8 +1,8 @@
-// Post-flash streaming has the same human inactivity policy as the TUI. Incoming
-// lines never renew it: an unattended log must release its USB port too. A terminal
-// stays open while paused, and Enter reconnects; a noninteractive stream exits once
-// idle because it has no user input that could wake it. The configured zero timeout
-// keeps a deliberate long-running recording attached.
+// Post-flash streaming: after `./cli app --debug` and friends, stay attached to the
+// board and print what it says until Ctrl-C, which closes the port and leaves the
+// board running. People get the log's colors and times; anything else, such as a
+// pipe into a script, gets the board's raw lines. In a terminal a typed line goes
+// to the board, so commands like `debug on` still work here.
 package main
 
 import (
@@ -20,15 +20,14 @@ import (
 	"firewalker/cli/internal/theme"
 )
 
-// streamBoard closes the port on pause or exit. Only the event loop writes output
-// and sends commands, so input and connection callbacks can't race each other.
-func streamBoard(ctx context.Context, out io.Writer, th *theme.Theme, serial string, timeout time.Duration) {
+// streamBoard blocks until ctx ends. Only the event loop below writes output and
+// sends commands, so typed input and connection callbacks can't race each other.
+func streamBoard(ctx context.Context, out io.Writer, th *theme.Theme, serial string) {
 	fmt.Fprintf(out, "Streaming from %s. Ctrl-C stops the stream and leaves the board running.\n", serial)
 	input := make(chan string)
-	interactive := term.IsTerminal(int(os.Stdin.Fd()))
 	inputCtx, stopInput := context.WithCancel(ctx)
 	defer stopInput()
-	if interactive {
+	if term.IsTerminal(int(os.Stdin.Fd())) {
 		go func() {
 			defer close(input)
 			scanner := bufio.NewScanner(os.Stdin)
@@ -49,85 +48,39 @@ func streamBoard(ctx context.Context, out io.Writer, th *theme.Theme, serial str
 			fmt.Fprintln(out, text)
 		}
 	}
-	var current link.Transport
-	var events <-chan link.Event
-	var cancel context.CancelFunc
-	var done <-chan struct{}
-	stop := func() {
-		if cancel != nil {
-			cancel()
-		}
-		events, current = nil, nil
-	}
-	defer func() {
-		stop()
-		if done != nil {
-			<-done
-		}
-	}()
-	start := func() {
-		followCtx, stopFollow := context.WithCancel(ctx)
-		cancel = stopFollow
-		next := make(chan link.Event, 64)
-		finished := make(chan struct{})
-		previous := done
-		events, done = next, finished
-		go func() {
-			defer close(finished)
-			defer close(next)
-			// Closing is asynchronous. Wait before opening the same port again so a
-			// quick wake can't collide with the connection being released.
-			if previous != nil {
-				select {
-				case <-previous:
-				case <-followCtx.Done():
-					return
-				}
+
+	// link.Follow reopens the port through resets and replugs. Wait for it to
+	// finish on the way out so the port is closed before the command returns.
+	events := make(chan link.Event, 64)
+	followCtx, stopFollow := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer close(events)
+		link.Follow(followCtx, link.ForBoard(serial), 500*time.Millisecond, func(event link.Event) {
+			select {
+			case events <- event:
+			case <-followCtx.Done():
 			}
-			link.Follow(followCtx, link.ForBoard(serial), 500*time.Millisecond, func(event link.Event) {
-				select {
-				case next <- event:
-				case <-followCtx.Done():
-				}
-			})
-		}()
-	}
-	start()
-	var timer *time.Timer
-	var deadline <-chan time.Time
-	if timeout > 0 {
-		timer = time.NewTimer(timeout)
-		deadline = timer.C
-		defer timer.Stop()
-	}
-	paused, lastProblem := false, ""
+		})
+	}()
+	defer func() {
+		stopFollow()
+		<-done
+	}()
+
+	var current link.Transport
+	lastProblem := ""
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-deadline:
-			stop()
-			paused = true
-			lastProblem = "paused"
-			deadline = nil
-			if !interactive {
-				return
-			}
-			note("Connection paused while idle. Press Enter to reconnect.")
 		case line, ok := <-input:
 			if !ok {
 				input = nil
 				continue
 			}
-			if timer != nil {
-				timer.Reset(timeout)
-				deadline = timer.C
-			}
-			if paused {
-				paused = false
-				start()
-				note("Reconnecting. Repeat your command once attached.")
-			} else if current != nil && line != "" {
+			if current != nil && line != "" {
 				_ = current.Send(line)
 			}
 		case event, ok := <-events:
@@ -154,6 +107,8 @@ func streamBoard(ctx context.Context, out io.Writer, th *theme.Theme, serial str
 				lastProblem = "disconnected"
 				note("Lost " + serial + ". Waiting for it to come back.")
 			case link.EventOpenFailed:
+				// The board is usually gone for a moment after an upload, so this repeats
+				// until it returns. One line per distinct reason is enough.
 				if message := event.Err.Error(); message != lastProblem && ctx.Err() == nil {
 					lastProblem = message
 					note("Waiting for " + serial + ": " + message)

@@ -52,16 +52,13 @@ function readRoute(): Route {
   return match?.[1] ? { screen: "design", name: decodeURIComponent(match[1]) } : { screen: "patterns" };
 }
 
-export function App({ connections, library: providedLibrary, manageActivity = true }: {
+export function App({ connections, library: providedLibrary }: {
   connections?: DesignerBoots;
   library?: PatternLibrary;
-  manageActivity?: boolean;
 } = {}) {
   const library = useMemo(() => providedLibrary ?? new PatternLibrary(), [providedLibrary]);
   const boots = useMemo(() => connections ?? createBootConnections(), [connections]);
   const [route, setRoute] = useState(readRoute);
-
-  useEffect(() => manageActivity ? boots.observeActivity() : undefined, [boots, manageActivity]);
 
   useEffect(() => {
     void library.load();

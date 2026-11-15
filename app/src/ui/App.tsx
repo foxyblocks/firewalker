@@ -19,7 +19,7 @@ import { AppNavigation } from "./components/AppNavigation";
 
 type Screen = { kind: "remote" } | { kind: "find" } | { kind: "boot"; deviceId: string };
 
-export function App({ store, manageActivity = true, initialTab }: { store: BootsStore; manageActivity?: boolean; initialTab?: "remote" | "boots" }) {
+export function App({ store, initialTab }: { store: BootsStore; initialTab?: "remote" | "boots" }) {
   useSyncExternalStore(store.subscribe, store.getVersion);
   const [screen, setScreen] = useState<Screen>(() => ({
     kind: (initialTab ?? (store.sides().length > 0 ? "remote" : "boots")) === "remote" ? "remote" : "find",
@@ -45,8 +45,6 @@ export function App({ store, manageActivity = true, initialTab }: { store: Boots
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [store, checkRadio]);
 
-  useEffect(() => manageActivity ? store.observeActivity() : undefined, [store, manageActivity]);
-
   if (radio !== "on") {
     return <RadioPrompt radio={radio} onRetry={checkRadio} onOpenSettings={() => void store.transport.openSettings()} />;
   }
@@ -65,8 +63,8 @@ export function App({ store, manageActivity = true, initialTab }: { store: Boots
       />
       {store.paused() && (
         <div className="banner banner-warn banner-action" role="status">
-          <span>Connections paused while idle. Your boots keep running.</span>
-          <button type="button" className="button" onClick={() => store.activity()}>Reconnect</button>
+          <span>Boots disconnected. They keep running.</span>
+          <button type="button" className="button" onClick={() => store.reconnectPaused()}>Reconnect</button>
         </div>
       )}
       <section className="app-content" id={`main-panel-${mainTab}`} role="tabpanel" aria-labelledby={`main-tab-${mainTab}`}>

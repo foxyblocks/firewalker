@@ -7,6 +7,7 @@ Pattern recipes worth keeping, one `<name>.json` each. The designer in
 | Recipe | Built in | What it does |
 | --- | --- | --- |
 | `rainbow-pool` | Yes | A cycling spectrum that pools toward the low end, a white flash on a flat stomp, and trails on a tilted one |
+| `rainbow-spin` | Yes | A full rainbow rotating around the ring about once a second, with every pixel lit |
 | `fire-stomp` | Yes | Stomp-launched fire from whichever end is down to the other |
 | `comet` | Yes | Two neon comets circling faster the more you tilt |
 | `lava-pour` | No | Lava colors crawling around the ring, pooled hard toward the low end, with sparks |

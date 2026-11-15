@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => ({
   }] : desktopPlugins())],
   build: { outDir: mode === "native" ? "dist-native" : "dist" },
   resolve: { dedupe: ["react", "react-dom"] },
-  // Both web tools import repo-wide control defaults and inactivity logic.
+  // The desktop app imports the designer and shared/ from outside app/.
   server: { host: "localhost", port: 5173, strictPort: true, fs: { allow: [".."] } },
   test: { environment: "node", globals: true },
 }));
