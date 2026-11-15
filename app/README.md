@@ -274,8 +274,9 @@ home.
 | `src/ui/components/` | The small component library the screens share, with Storybook stories |
 | `resources/app-icon/` | Draws the iPhone app icon and launch screen |
 
-Adding a pattern takes no app change: the boot reports it and a tile appears. Add it to
-`patternNames.ts` when you want a nicer name and a description.
+Adding a pattern takes no app change: merge it into `patterns/` on `main`, pattern sync puts it
+on the boots, and a tile appears with main's description. Add it to `patternNames.ts` when you
+want a nicer name or a shorter description.
 
 The desktop frame is `src/desktop/App.tsx`. `SharedBootConnections` adapts the shared
 `BootsStore` for the designer, and `BootClient.runExclusive` holds its command queue
